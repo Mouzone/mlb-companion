@@ -1,21 +1,6 @@
 import { useRef, useEffect } from 'react'
 import type { PitchArsenalItem } from '../../api/types'
-
-const PITCH_COLORS: Record<string, string> = {
-  FF: '#ff4444',
-  SI: '#ff6644',
-  FC: '#ff8844',
-  SL: '#4488ff',
-  ST: '#44aaff',
-  CU: '#44ff88',
-  KC: '#44ffaa',
-  CH: '#88ff44',
-  FS: '#aaff44',
-  KN: '#dddddd',
-  FO: '#ffff44',
-  SC: '#ff44ff',
-  EP: '#44ffff',
-}
+import { getPitchColor } from '../../utils/pitchConstants'
 
 interface ArsenalBarsProps {
   arsenal: PitchArsenalItem[]
@@ -51,7 +36,7 @@ export function ArsenalBars({ arsenal, width = 280 }: ArsenalBarsProps) {
     sorted.forEach((pitch, i) => {
       const y = padding + i * (barHeight + gap)
       const code = pitch.type.code
-      const color = PITCH_COLORS[code] ?? '#888888'
+      const color = getPitchColor(code)
       const barW = (pitch.percentage / 100) * barAreaWidth
 
       ctx.fillStyle = '#aaaaaa'

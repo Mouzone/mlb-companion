@@ -1,5 +1,5 @@
 import { useRef, useEffect } from 'react'
-import { PITCH_COLORS, getPitchColor } from '../../utils/pitchConstants'
+import { PITCH_COLORS } from '../../utils/pitchConstants'
 
 interface ZonePlotProps {
   zone: number | null
