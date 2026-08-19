@@ -1,3 +1,18 @@
+import type {
+  DiffPatchResponse,
+  GameLogEntry,
+  HotColdZone,
+  LiveFeed,
+  PitchArsenalItem,
+  PitcherSeasonStat,
+  PlayerInfo,
+  ScheduleResponse,
+  ScheduledGame,
+  SeasonStat,
+  StatSplit,
+  VsPlayerStat,
+} from './types'
+
 const BASE = 'https://statsapi.mlb.com/api'
 
 export async function fetchSchedule(date: string): Promise<ScheduledGame[]> {

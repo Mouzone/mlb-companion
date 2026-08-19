@@ -27,7 +27,6 @@ export function useLiveFeed() {
   const gamePk = useGameStore((s) => s.gamePk)
   const isPolling = useGameStore((s) => s.isPolling)
   const setLiveFeed = useGameStore((s) => s.setLiveFeed)
-  const setCurrentPlay = useGameStore((s) => s.setCurrentPlay)
   const setTimecode = useGameStore((s) => s.setTimecode)
   const setPolling = useGameStore((s) => s.setPolling)
   const setError = useGameStore((s) => s.setError)
@@ -62,11 +61,11 @@ export function useLiveFeed() {
 
     let cancelled = false
 
-    async function init() {
+    async function init(pk: number) {
       try {
         setPolling(true)
         setError(null)
-        const feed = await fetchLiveFeed(gamePk)
+        const feed = await fetchLiveFeed(pk)
         if (cancelled) return
         feedRef.current = feed
         lastTimecodeRef.current = feed.metaData.timecode
@@ -85,7 +84,7 @@ export function useLiveFeed() {
       }
     }
 
-    init()
+    init(gamePk)
 
     return () => {
       cancelled = true
