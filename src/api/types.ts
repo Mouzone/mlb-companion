@@ -291,3 +291,10 @@ export interface SavantBattedBall {
   strikes: string
   outs_when_up: string
 }
+
+export interface SavantGamePitch {
+  play_id: string
+  ab_number: number
+  pitch_number: number
+  batSpeed: number | null
+}

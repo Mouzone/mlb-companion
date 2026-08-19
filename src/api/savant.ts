@@ -1,6 +1,20 @@
-import type { SavantBattedBall } from './types'
+import type { SavantBattedBall, SavantGamePitch } from './types'
 
 const SAVANT_BASE = 'https://baseballsavant.mlb.com'
+
+interface SavantGameFeedResponse {
+  home_batters: Record<string, SavantGamePitch[]>
+  away_batters: Record<string, SavantGamePitch[]>
+}
+
+export async function fetchSavantGameFeed(gamePk: number): Promise<SavantGamePitch[]> {
+  const res = await fetch(`${SAVANT_BASE}/gf?game_pk=${gamePk}`)
+  if (!res.ok) throw new Error(`Savant game feed fetch failed: ${res.status}`)
+  const data: SavantGameFeedResponse = await res.json()
+  const homeRows = Object.values(data.home_batters ?? {}).flat()
+  const awayRows = Object.values(data.away_batters ?? {}).flat()
+  return [...homeRows, ...awayRows]
+}
 
 export async function fetchSavantBattedBalls(
   playerId: number,
