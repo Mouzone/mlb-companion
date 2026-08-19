@@ -1,0 +1,266 @@
+/* ============================================================================
+   MLB Companion — Global tokens, reset, base typography
+   Target device: iPhone 13 PWA standalone — 390 x 844 CSS px
+   Palette matches vite.config.ts PWA manifest (theme #1b3a2f / bg #0d1b12).
+
+   HEIGHT BUDGET (the only vertical px values allowed in this codebase):
+     719 679 479 470 200 190 186 172 160 150 120 95 55 44 40 22 18
+
+   Vertical arithmetic on iPhone 13 standalone:
+     844 total
+      -47 env(safe-area-inset-top)
+      -34 env(safe-area-inset-bottom)
+      = 763 usable
+      -44 .tab-bar
+      = 719 .tab-content
+      -40 .sub-tab-nav
+      = 679 --content-h   <-- ALREADY excludes BOTH the tab bar and the nav
+
+   The 40px .sub-tab-nav is ALWAYS a SIBLING ABOVE the --content-h box.
+   Never nest the nav inside it, and never subtract 40px from --content-h
+   a second time — that double-subtraction is the classic overflow bug.
+   ========================================================================= */
+
+/* --- Reset -------------------------------------------------------------- */
+/* MANDATORY: without border-box, padding on a 100dvh element overflows. */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+button,
+input,
+select {
+  font: inherit;
+  color: inherit;
+  margin: 0;
+}
+
+ul,
+ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+img,
+svg,
+canvas {
+  display: block;
+  max-width: 100%;
+}
+
+table {
+  border-collapse: collapse;
+  border-spacing: 0;
+}
+
+/* --- Design tokens ------------------------------------------------------ */
+:root {
+  /* Core palette (locked — matches the PWA manifest) */
+  --mlb-primary: #1b3a2f;
+  --mlb-bg: #0d1b12;
+  --mlb-accent: #2d5a3f;
+  --mlb-text: #e0e0e0;
+  --mlb-muted: #888888;
+
+  /* Derived surfaces */
+  --mlb-surface: #12241a;
+  --mlb-surface-raised: #17301f;
+  --mlb-line: #25422f;
+  --mlb-line-soft: #1c3325;
+  --mlb-accent-bright: #3d7a55;
+
+  /* Signal accents — sharp, used sparingly */
+  --mlb-live: #d94f3d;
+  --mlb-hot: #e05a3a;
+  --mlb-cold: #4a90c2;
+  --mlb-chalk: #f2f0e6;
+
+  /* --- Height budget, tokenised --- */
+  --tab-bar-h: 44px;
+  --sub-tab-h: 40px;
+  --cards-h: 200px;
+
+  /* 719px on iPhone 13 — the flex root that sits directly under the tab bar */
+  --tab-content-h: calc(
+    100dvh - 44px - env(safe-area-inset-top) - env(safe-area-inset-bottom)
+  );
+
+  /* 679px on iPhone 13 — tab bar AND sub-tab nav are already removed here */
+  --content-h: calc(
+    100dvh - 44px - 40px - env(safe-area-inset-top) - env(safe-area-inset-bottom)
+  );
+
+  /* 479px — the Pitcher-vs-Batter sub-tab box (679 minus 200 of stat cards) */
+  --pvb-content-h: calc(var(--content-h) - 200px);
+
+  /* Type scale — dense scoreboard readout */
+  --fs-micro: 9px;
+  --fs-label: 10px;
+  --fs-body: 11px;
+  --fs-data: 12px;
+  --fs-title: 13px;
+  --fs-hero: 17px;
+
+  /* Rhythm */
+  --sp-1: 2px;
+  --sp-2: 4px;
+  --sp-3: 6px;
+  --sp-4: 8px;
+  --sp-5: 12px;
+  --radius: 6px;
+  --radius-lg: 10px;
+
+  --font-ui:
+    -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue",
+    system-ui, sans-serif;
+  --font-num: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
+
+  color-scheme: dark;
+  font-family: var(--font-ui);
+  font-size: var(--fs-body);
+  line-height: 1.3;
+  color: var(--mlb-text);
+  background-color: var(--mlb-bg);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  background:
+    radial-gradient(
+      130% 62% at 50% 0%,
+      rgba(45, 90, 63, 0.24) 0%,
+      rgba(13, 27, 18, 0) 72%
+    ),
+    var(--mlb-bg);
+  color: var(--mlb-text);
+  font-family: var(--font-ui);
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* --- Base typography ---------------------------------------------------- */
+h1,
+h2,
+h3,
+h4 {
+  margin: 0;
+  font-weight: 700;
+  color: var(--mlb-chalk);
+  letter-spacing: 0.01em;
+}
+
+h1 {
+  font-size: var(--fs-hero);
+}
+
+h2 {
+  font-size: var(--fs-title);
+}
+
+h3,
+h4 {
+  font-size: var(--fs-data);
+}
+
+p {
+  margin: 0;
+}
+
+/* Every numeric readout is tabular so columns never jitter between polls. */
+.num,
+.stat-value,
+.team-score,
+.counter,
+.seq-velo,
+.split-table td,
+.stat-grid .stat-value {
+  font-family: var(--font-num);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+/* --- Shared state utilities (centred, muted, zero layout shift) --------- */
+.loading,
+.error,
+.empty,
+.no-data,
+.no-game,
+.no-pitch {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 0;
+  padding: var(--sp-4);
+  overflow: hidden;
+  font-size: var(--fs-body);
+  color: var(--mlb-muted);
+  text-align: center;
+}
+
+.error {
+  color: var(--mlb-live);
+}
+
+.loading::after {
+  content: "";
+  width: 18px;
+  height: 18px;
+  margin-left: var(--sp-3);
+  border: 2px solid var(--mlb-line);
+  border-top-color: var(--mlb-accent-bright);
+  border-radius: 50%;
+  animation: mlb-spin 0.8s linear infinite;
+}
+
+.loading-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  font-size: var(--fs-label);
+  color: var(--mlb-muted);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  background: rgba(13, 27, 18, 0.72);
+  backdrop-filter: blur(2px);
+}
+
+@keyframes mlb-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
