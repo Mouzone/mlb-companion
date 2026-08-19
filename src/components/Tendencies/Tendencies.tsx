@@ -51,9 +51,9 @@ export function Tendencies() {
             <div className="stat-line">
               <Stat label="ERA" value={stats.pitcherSeason.era} />
               <Stat label="WHIP" value={stats.pitcherSeason.whip} />
-              <Stat label="K/9" value={((stats.pitcherSeason.strikeouts / Math.max(parseFloat(stats.pitcherSeason.inningsPitched || '1'), 1)) * 9).toFixed(1)} />
+              <Stat label="K/9" value={((stats.pitcherSeason.strikeOuts / Math.max(parseFloat(stats.pitcherSeason.inningsPitched || '1'), 1)) * 9).toFixed(1)} />
               <Stat label="BB/9" value={((stats.pitcherSeason.baseOnBalls / Math.max(parseFloat(stats.pitcherSeason.inningsPitched || '1'), 1)) * 9).toFixed(1)} />
-              <Stat label="OPP AVG" value={stats.pitcherSeason.oppAvg} />
+              <Stat label="OPP AVG" value={stats.pitcherSeason.avg} />
             </div>
           ) : <div className="stat-line">No season data</div>}
         </div>

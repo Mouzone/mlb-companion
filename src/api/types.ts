@@ -14,8 +14,18 @@ export interface ScheduledGame {
     statusCode: string
   }
   teams: {
-    away: { team: Team; record?: string; score?: number }
-    home: { team: Team; record?: string; score?: number }
+    away: {
+      team: Team
+      record?: string
+      score?: number
+      probablePitcher?: { id: number; fullName: string }
+    }
+    home: {
+      team: Team
+      record?: string
+      score?: number
+      probablePitcher?: { id: number; fullName: string }
+    }
   }
   venue?: { name: string }
   probablePitcher?: {
@@ -78,18 +88,22 @@ export interface StatSplit {
 export interface GameLogEntry {
   date: string
   opponent: { id: number; name: string }
-  summary: string
+  summary?: string
   stat: {
     hits: number
     doubles: number
     homeRuns: number
     rbi: number
-    strikeouts: number
+    strikeOuts: number
     plateAppearances: number
     avg: string
     obp: string
     slg: string
     ops: string
+    era?: string
+    inningsPitched?: string
+    earnedRuns?: number
+    baseOnBalls?: number
   }
   isHome: boolean
   isWin: boolean
@@ -120,18 +134,35 @@ export interface SeasonStat {
   atBats: number
   plateAppearances: number
   hits: number
+  wrcPlus?: number
+  iso?: number
+  kPct?: number
+  bbPct?: number
+  babip?: string
+  woba?: number
 }
 
 export interface PitcherSeasonStat {
   era: string
   whip: string
-  strikeouts: number
+  strikeOuts: number
   baseOnBalls: number
   inningsPitched: string
   hits: number
   earnedRuns: number
-  oppAvg: string
+  avg: string
   gamesPlayed: number
+  homeRuns: number
+  hitBatsmen?: number
+  battersFaced?: number
+  groundBalls?: number
+  totalBattedBalls?: number
+  fip?: number
+  eraPlus?: number
+  kPct?: number
+  bbPct?: number
+  hr9?: number
+  gbPct?: number
 }
 
 export interface PlayEvent {
@@ -250,6 +281,14 @@ export interface LiveFeed {
         home: { runs: number; hits: number; errors: number }
         away: { runs: number; hits: number; errors: number }
       }
+      currentInning?: number
+      inningState?: string
+      isTopInning?: boolean
+      offense?: {
+        first?: { id: number; fullName: string }
+        second?: { id: number; fullName: string }
+        third?: { id: number; fullName: string }
+      }
     }
   }
   metaData: {
@@ -290,6 +329,16 @@ export interface SavantBattedBall {
   balls: string
   strikes: string
   outs_when_up: string
+  woba_value?: string
+  estimated_woba_using_speedangle?: string
+  estimated_ba_using_speedangle?: string
+  launch_speed_angle?: string
+  swing_path_tilt?: string
+  babip_value?: string
+  woba_denom?: string
+  iso_value?: string
+  delta_run_exp?: string
+  bat_speed?: string
 }
 
 export interface SavantGamePitch {
@@ -297,4 +346,94 @@ export interface SavantGamePitch {
   ab_number: number
   pitch_number: number
   batSpeed: number | null
+  game_pk?: string
+  batter?: number
+  pitch_type?: string
+  start_speed?: number | null
+  balls?: number
+  strikes?: number
+  outs?: number
+  inning?: number
+  description?: string
+  zone?: number | null
+  extension?: number | null
+  spin_rate?: number | null
+  breaks?: {
+    breakAngle?: number | null
+    breakLength?: number | null
+    breakVertical?: number | null
+    breakHorizontal?: number | null
+  } | null
+  avg_pitch_speed?: {
+    pitch_type?: string
+    pitch_type_literal?: string
+    avg_pitch_speed?: string
+    min_pitch_speed?: string
+    max_pitch_speed?: string
+    count?: number
+  }[]
+}
+
+export interface CareerPitcherStat {
+  era: string
+  whip: string
+  strikeOuts: number
+  baseOnBalls: number
+  inningsPitched: string
+  hits: number
+  earnedRuns: number
+  homeRuns: number
+  hitBatsmen: number
+  gamesPlayed: number
+  avg: string
+  battersFaced?: number
+  fip?: number
+  kPct?: number
+  bbPct?: number
+  hr9?: number
+}
+
+export interface CareerBatterStat {
+  avg: string
+  obp: string
+  slg: string
+  ops: string
+  homeRuns: number
+  rbi: number
+  strikeOuts: number
+  baseOnBalls: number
+  atBats: number
+  plateAppearances: number
+  hits: number
+  iso?: number
+  kPct?: number
+  bbPct?: number
+}
+
+export interface InGameH2HAtBat {
+  inning: number
+  result: string
+  event: string
+  count: { balls: number; strikes: number }
+  pitches: PlayEvent[]
+}
+
+export interface SeriesH2HGame {
+  gamePk: number
+  date: string
+  atBats: InGameH2HAtBat[]
+}
+
+export interface H2HAggregate {
+  pa: number
+  avg: number
+  ops: number
+  hr: number
+  k: number
+  bb: number
+}
+
+export interface PlayByPlayResponse {
+  allPlays: CurrentPlay[]
+  currentPlay?: CurrentPlay
 }
