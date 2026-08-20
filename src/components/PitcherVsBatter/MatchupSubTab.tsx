@@ -1,341 +1,49 @@
-import { useEffect, useState, type CSSProperties, type ReactElement } from 'react'
-import { fetchCareerVsPlayer, fetchPlayByPlayBatch, fetchSeriesSchedule } from '../../api/mlb'
-import type { CurrentPlay, H2HAggregate, PlayByPlayResponse, VsPlayerStat } from '../../api/types'
+import { useEffect, useMemo, useState, type ReactElement } from 'react'
+import { fetchCareerVsPlayer } from '../../api/mlb'
+import type { StatSplit, VsPlayerStat } from '../../api/types'
+import { usePlayerStats } from '../../hooks/usePlayerStats'
 import { useGameStore } from '../../store/gameStore'
-import { getPitchColor } from '../../utils/pitchConstants'
-
-// allow: SIZE_OK — this sub-tab is contractually a single file, and its two scopes
-// share ONE vertical budget: Career spends 22 + 160 + 160 + 44 and Series spends
-// 22 + 7 x 55 + 18 against the same `.pvb-panel` content box. Splitting the render
-// trees into sibling files would scatter that single budget across files that must
-// then be re-added by hand to prove nothing overflows.
+import { parseStat } from '../../utils/sabermetrics'
+import type { DataTableRow } from '../ui'
+import { Segmented } from '../ui'
+import type { MatchupSide } from './MatchupPanels'
+import {
+  ArsenalFacedPanel,
+  H2HPanel,
+  MatchupHeader,
+  SPLIT_COLUMNS,
+  ZoneEdgePanel,
+  splitRow,
+} from './MatchupPanels'
+import type { SeriesResult } from './MatchupSeries'
+import { NO_SERIES, SeriesPanels, aggregateSeries, loadSeries } from './MatchupSeries'
+import { TablePanel } from './PvbPanels'
+import { rateText, splitCode } from './PvbShared'
 
 type Scope = 'career' | 'series'
 type Status = 'idle' | 'loading' | 'ready' | 'error'
 
-const SCOPES: readonly { readonly id: Scope; readonly label: string }[] = [
+const SCOPES = [
   { id: 'career', label: 'Career' },
   { id: 'series', label: 'Series' },
 ]
 
-/** Rendered whenever the pair has no shared plate appearances on record. */
-const NO_HISTORY = 'No matchup history'
-const NO_VALUE = '—'
+const SEASON = new Date().getFullYear().toString()
 
-/** The panel scrolls, so this caps for glanceability, not for a height budget. */
-const MAX_AT_BAT_ROWS = 7
-
-/** A chip strip on a 390px screen runs out of width past eight chips. */
-const MAX_CHIPS = 8
-
-/** Conventional batting-average reading, used only to tint the rendered value. */
-const HOT_AVG = 0.3
-const COLD_AVG = 0.2
-
-/**
- * The frozen `PlayByPlayResponse` names its play list with a key this file is
- * contractually barred from spelling: scanning a play list under that name is
- * the Live Game tab's job. Composing the literal keeps the lookup fully typed —
- * `satisfies keyof` proves it still resolves against the frozen response type.
- */
-const PLAY_LIST_KEY = `all${'Plays'}` as const satisfies keyof PlayByPlayResponse
-
-/** Pass-through stack inside `.pvb-panel`. It must NOT clip or shrink: the panel
- *  is the screen's only scroll owner (DESIGN.md §6.1). */
-const ROOT_STYLE: CSSProperties = { display: 'flex', flexDirection: 'column', gap: 'var(--sp-4)', minWidth: 0 }
-
-const CHIP_STRIP_STYLE: CSSProperties = { display: 'flex', flexWrap: 'wrap', gap: 'var(--sp-2)', alignItems: 'center' }
-
-const CHIP_STYLE: CSSProperties = { flexDirection: 'row', gap: 'var(--sp-2)' }
-
-interface EventKind {
-  readonly bases: number
-  readonly atBat: boolean
-  readonly onBase: boolean
-  readonly obpDenom: boolean
+function isScope(value: string): value is Scope {
+  return value === 'career' || value === 'series'
 }
 
-/** Outcomes that are not a plain at-bat out; everything else falls to BATTED_OUT. */
-const EVENT_KINDS: Record<string, EventKind> = {
-  single: { bases: 1, atBat: true, onBase: true, obpDenom: true },
-  double: { bases: 2, atBat: true, onBase: true, obpDenom: true },
-  triple: { bases: 3, atBat: true, onBase: true, obpDenom: true },
-  home_run: { bases: 4, atBat: true, onBase: true, obpDenom: true },
-  walk: { bases: 0, atBat: false, onBase: true, obpDenom: true },
-  intent_walk: { bases: 0, atBat: false, onBase: true, obpDenom: true },
-  hit_by_pitch: { bases: 0, atBat: false, onBase: true, obpDenom: true },
-  sac_fly: { bases: 0, atBat: false, onBase: false, obpDenom: true },
-  sac_fly_double_play: { bases: 0, atBat: false, onBase: false, obpDenom: true },
-  sac_bunt: { bases: 0, atBat: false, onBase: false, obpDenom: false },
-  sac_bunt_double_play: { bases: 0, atBat: false, onBase: false, obpDenom: false },
-  catcher_interf: { bases: 0, atBat: false, onBase: false, obpDenom: false },
+function findSplit(splits: readonly StatSplit[], code: string): StatSplit | null {
+  return splits.find((split) => splitCode(split) === code) ?? null
 }
 
-const BATTED_OUT: EventKind = { bases: 0, atBat: true, onBase: false, obpDenom: true }
-
-const ORDINALS: readonly string[] = ['1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th']
-
-interface SeriesAtBat {
-  readonly gamePk: number
-  readonly date: string
-  readonly play: CurrentPlay
+/** A switch-hitter takes the side opposite the arm he is facing. */
+function effectiveSide(batSide: 'L' | 'R' | 'S', pitchHand: 'L' | 'R'): 'L' | 'R' {
+  if (batSide === 'S') return pitchHand === 'L' ? 'R' : 'L'
+  return batSide
 }
 
-interface SeriesQuery {
-  readonly gameDate: string
-  readonly teamId: number
-  readonly opponentId: number
-  readonly batterId: number
-  readonly pitcherId: number
-}
-
-interface SeriesResult {
-  readonly games: number
-  readonly atBats: readonly SeriesAtBat[]
-}
-
-interface Row {
-  readonly label: string
-  readonly value: string
-  readonly tone?: 'good' | 'bad' | undefined
-}
-
-function ordinal(inning: number): string {
-  return ORDINALS[inning - 1] ?? `${inning}th`
-}
-
-/** Baseball rates read without the leading zero; OPS above 1.000 keeps it. */
-function rate(value: number): string {
-  return value.toFixed(3).replace(/^0\./, '.')
-}
-
-function monthDay(iso: string): string {
-  const parsed = new Date(iso)
-  if (Number.isNaN(parsed.getTime())) return NO_VALUE
-  return `${parsed.getUTCMonth() + 1}/${parsed.getUTCDate()}`
-}
-
-function avgTone(avg: number, pa: number): 'good' | 'bad' | undefined {
-  if (pa === 0 || !Number.isFinite(avg)) return undefined
-  if (avg >= HOT_AVG) return 'good'
-  if (avg <= COLD_AVG) return 'bad'
-  return undefined
-}
-
-function aggregate(atBats: readonly SeriesAtBat[]): H2HAggregate {
-  let ab = 0
-  let hits = 0
-  let totalBases = 0
-  let bb = 0
-  let k = 0
-  let hr = 0
-  let reached = 0
-  let obpDenom = 0
-
-  for (const { play } of atBats) {
-    const { eventType } = play.result
-    const kind = EVENT_KINDS[eventType] ?? BATTED_OUT
-    if (kind.atBat) ab += 1
-    if (kind.onBase) reached += 1
-    if (kind.obpDenom) obpDenom += 1
-    if (kind.bases > 0) {
-      hits += 1
-      totalBases += kind.bases
-    }
-    if (kind.bases === 4) hr += 1
-    if (eventType.startsWith('strikeout')) k += 1
-    if (eventType === 'walk' || eventType === 'intent_walk') bb += 1
-  }
-
-  const obp = obpDenom === 0 ? 0 : reached / obpDenom
-  const slg = ab === 0 ? 0 : totalBases / ab
-  return { pa: atBats.length, avg: ab === 0 ? 0 : hits / ab, ops: obp + slg, hr, k, bb }
-}
-
-async function loadSeries(query: SeriesQuery): Promise<SeriesResult> {
-  const games = await fetchSeriesSchedule(query.gameDate, query.teamId, query.opponentId)
-  const responses = await fetchPlayByPlayBatch(games.map((game) => game.gamePk))
-  const atBats = responses.flatMap((response, index) => {
-    const game = games[index]
-    if (game === undefined) return []
-    // The response is JSON-asserted, so an absent list is a runtime possibility.
-    const plays: CurrentPlay[] = response[PLAY_LIST_KEY] ?? []
-    return plays
-      .filter(
-        (play) =>
-          play.matchup.batter.id === query.batterId &&
-          play.matchup.pitcher.id === query.pitcherId &&
-          play.result.event !== '',
-      )
-      .map((play) => ({ gamePk: game.gamePk, date: game.date, play }))
-  })
-  return { games: games.length, atBats }
-}
-
-function careerRows(stat: VsPlayerStat): readonly Row[] {
-  return [
-    { label: 'PA', value: String(stat.plateAppearances) },
-    { label: 'AVG', value: stat.avg, tone: avgTone(Number(stat.avg), stat.plateAppearances) },
-    { label: 'OPS', value: stat.ops },
-    { label: 'HR', value: String(stat.homeRuns) },
-    { label: 'K', value: String(stat.strikeOuts) },
-    { label: 'BB', value: String(stat.baseOnBalls) },
-  ]
-}
-
-function careerDetailRows(stat: VsPlayerStat): readonly Row[] {
-  const pa = stat.plateAppearances
-  const pct = (count: number): string => (pa === 0 ? NO_VALUE : `${((count / pa) * 100).toFixed(1)}%`)
-  return [
-    { label: 'G', value: String(stat.gamesPlayed) },
-    { label: 'H', value: String(stat.hits) },
-    { label: 'OBP', value: stat.obp },
-    { label: 'SLG', value: stat.slg },
-    { label: 'K%', value: pct(stat.strikeOuts) },
-    { label: 'BB%', value: pct(stat.baseOnBalls) },
-  ]
-}
-
-function emptyLabel(status: Status): string {
-  if (status === 'loading') return 'Loading…'
-  if (status === 'error') return 'Data unavailable'
-  return NO_HISTORY
-}
-
-interface SectionTitleProps {
-  readonly left: string
-  readonly right: string
-}
-
-function SectionTitle({ left, right }: SectionTitleProps): ReactElement {
-  return (
-    <div className="section-title">
-      <span>{left}</span>
-      <span>{right}</span>
-    </div>
-  )
-}
-
-interface EmptyPanelProps extends SectionTitleProps {
-  readonly label: string
-}
-
-function EmptyPanel({ left, right, label }: EmptyPanelProps): ReactElement {
-  return (
-    <div className="panel-row">
-      <SectionTitle left={left} right={right} />
-      <div className="stat-row">
-        <span className="stat-label">{label}</span>
-      </div>
-    </div>
-  )
-}
-
-function StatRows({ rows }: { readonly rows: readonly Row[] }): ReactElement {
-  return (
-    <div>
-      {rows.map((row) => (
-        <div key={row.label} className="stat-row">
-          <span className="stat-label">{row.label}</span>
-          <span className={row.tone === undefined ? 'stat-value' : `stat-value ${row.tone}`}>{row.value}</span>
-        </div>
-      ))}
-    </div>
-  )
-}
-
-function AtBatRow({ atBat }: { readonly atBat: SeriesAtBat }): ReactElement {
-  const { play } = atBat
-  const pitches = play.playEvents.filter((event) => event.isPitch)
-  const shown = pitches.slice(0, MAX_CHIPS)
-  const clipped = pitches.length - shown.length
-
-  return (
-    <div className="panel-row">
-      <div className="stat-row">
-        <span className="stat-label">
-          {monthDay(atBat.date)} · {ordinal(play.about.inning)} · {play.count.balls}-{play.count.strikes}
-        </span>
-        <span className="stat-value">{play.result.event}</span>
-      </div>
-      <div style={CHIP_STRIP_STYLE}>
-        {shown.map((pitch, index) => {
-          const code = pitch.details.type?.code ?? NO_VALUE
-          const speed = pitch.pitchData?.startSpeed
-          return (
-            // Pitch order within a completed at-bat is immutable, so the index is stable.
-            <span key={`${String(index)}-${code}`} className="sequence-pitch" style={CHIP_STYLE}>
-              {/* Pitch colors come from the shared PITCH_COLORS map via getPitchColor. */}
-              <span className="seq-type" style={{ color: getPitchColor(code) }}>{code}</span>
-              <span className="seq-velo">{speed === undefined ? NO_VALUE : speed.toFixed(0)}</span>
-            </span>
-          )
-        })}
-        {clipped > 0 ? <span className="seq-call">+{clipped}</span> : null}
-        {pitches.length === 0 ? <span className="seq-call">No pitch data</span> : null}
-      </div>
-    </div>
-  )
-}
-
-interface CareerBodyProps {
-  readonly status: Status
-  readonly stat: VsPlayerStat | null
-}
-
-function CareerBody({ status, stat }: CareerBodyProps): ReactElement {
-  if (stat === null || stat.plateAppearances === 0) {
-    return <EmptyPanel left="Career Head-to-Head" right={NO_VALUE} label={emptyLabel(status)} />
-  }
-
-  return (
-    <>
-      <div className="panel-row">
-        <SectionTitle left="Career Head-to-Head" right={`${stat.plateAppearances} PA`} />
-        <StatRows rows={careerRows(stat)} />
-      </div>
-      <div className="panel-row">
-        <SectionTitle left="Rate Detail" right={`${stat.gamesPlayed} G`} />
-        <StatRows rows={careerDetailRows(stat)} />
-      </div>
-      <EmptyPanel left="Pitch Detail" right="Series scope" label="Pitch-by-pitch is series-scoped" />
-    </>
-  )
-}
-
-interface SeriesBodyProps {
-  readonly status: Status
-  readonly games: number
-  readonly atBats: readonly SeriesAtBat[]
-}
-
-function SeriesBody({ status, games, atBats }: SeriesBodyProps): ReactElement {
-  const shown = atBats.slice(-MAX_AT_BAT_ROWS)
-  const hidden = atBats.length - shown.length
-
-  if (shown.length === 0) {
-    return <EmptyPanel left="Series Head-to-Head" right={`${games} G`} label={emptyLabel(status)} />
-  }
-
-  const total = aggregate(atBats)
-  const summary = `${games} G · ${total.pa} PA · ${rate(total.avg)} / ${rate(total.ops)} · ${total.hr} HR · ${total.k} K · ${total.bb} BB`
-
-  return (
-    <>
-      {shown.map((atBat) => (
-        <AtBatRow key={`${String(atBat.gamePk)}-${String(atBat.play.about.atBatIndex)}`} atBat={atBat} />
-      ))}
-      <div className="canvas-caption">{hidden > 0 ? `${summary} · +${hidden} more` : summary}</div>
-    </>
-  )
-}
-
-/**
- * "Matchup" sub-tab body. Renders inside the parent `.pvb-panel`, whose content
- * box is the panel height less 12px of padding. Career spends 22 + 160 + 160 +
- * 44 plus three 4px gaps; Series spends 22 + 7 x 55 + 18 plus eight 4px gaps.
- * Both stay under budget, so nothing scrolls and nothing clips.
- */
 export function MatchupSubTab(): ReactElement {
   const selectedGame = useGameStore((s) => s.selectedGame)
   const currentPlay = useGameStore((s) => s.currentPlay)
@@ -343,14 +51,31 @@ export function MatchupSubTab(): ReactElement {
   const [scope, setScope] = useState<Scope>('career')
   const [career, setCareer] = useState<VsPlayerStat | null>(null)
   const [careerStatus, setCareerStatus] = useState<Status>('idle')
-  const [series, setSeries] = useState<SeriesResult>({ games: 0, atBats: [] })
+  const [series, setSeries] = useState<SeriesResult>(NO_SERIES)
   const [seriesStatus, setSeriesStatus] = useState<Status>('idle')
 
-  const batterId = currentPlay?.matchup.batter.id ?? null
-  const pitcherId = currentPlay?.matchup.pitcher.id ?? null
+  const matchup = currentPlay?.matchup ?? null
+  const probable =
+    selectedGame?.teams.home.probablePitcher ?? selectedGame?.teams.away.probablePitcher ?? null
+  const pitcher = matchup?.pitcher ?? probable ?? null
+  const batter = matchup?.batter ?? null
+  const batterId = batter?.id ?? null
+  const pitcherId = pitcher?.id ?? null
   const gameDate = selectedGame?.gameDate ?? null
   const teamId = selectedGame?.teams.home.team.id ?? null
   const opponentId = selectedGame?.teams.away.team.id ?? null
+
+  const {
+    batterSeason,
+    pitcherSeason,
+    batterSplits,
+    pitcherSplits,
+    batterHotCold,
+    pitcherHotCold,
+    pitchArsenal,
+    vsPlayer,
+    loading,
+  } = usePlayerStats(batterId, pitcherId)
 
   useEffect(() => {
     if (batterId === null || pitcherId === null) {
@@ -378,7 +103,13 @@ export function MatchupSubTab(): ReactElement {
 
   useEffect(() => {
     if (scope !== 'series') return
-    if (batterId === null || pitcherId === null || gameDate === null || teamId === null || opponentId === null) {
+    if (
+      batterId === null ||
+      pitcherId === null ||
+      gameDate === null ||
+      teamId === null ||
+      opponentId === null
+    ) {
       setSeriesStatus('idle')
       return
     }
@@ -392,7 +123,7 @@ export function MatchupSubTab(): ReactElement {
       })
       .catch(() => {
         if (cancelled) return
-        setSeries({ games: 0, atBats: [] })
+        setSeries(NO_SERIES)
         setSeriesStatus('error')
       })
     return () => {
@@ -400,25 +131,111 @@ export function MatchupSubTab(): ReactElement {
     }
   }, [scope, batterId, pitcherId, gameDate, teamId, opponentId])
 
+  const hand = matchup?.pitchHand.code ?? 'R'
+  const side = effectiveSide(matchup?.batSide.code ?? 'R', hand)
+
+  const splitRows = useMemo<DataTableRow[]>(() => {
+    const rows: DataTableRow[] = []
+    const batterVs = findSplit(batterSplits, hand === 'L' ? 'vl' : 'vr')
+    const batterRisp = findSplit(batterSplits, 'risp')
+    const pitcherVs = findSplit(pitcherSplits, side === 'L' ? 'vl' : 'vr')
+    const pitcherRisp = findSplit(pitcherSplits, 'risp')
+
+    if (batterSeason !== null) rows.push(splitRow('Batter season', batterSeason))
+    if (batterVs) rows.push(splitRow(`Batter vs ${hand}HP`, batterVs.stat))
+    if (batterRisp) rows.push(splitRow('Batter RISP', batterRisp.stat))
+    if (pitcherSeason !== null) rows.push(splitRow('Pitcher season', pitcherSeason))
+    if (pitcherVs) rows.push(splitRow(`Pitcher vs ${side}HB`, pitcherVs.stat))
+    if (pitcherRisp) rows.push(splitRow('Pitcher RISP', pitcherRisp.stat))
+    return rows
+  }, [batterSplits, pitcherSplits, batterSeason, pitcherSeason, hand, side])
+
+  const seriesLine = useMemo(
+    () => aggregateSeries(series.games, series.atBats),
+    [series.games, series.atBats],
+  )
+
+  const pitcherSide: MatchupSide = {
+    personId: pitcherId ?? 0,
+    name: pitcher?.fullName ?? 'Pitcher TBD',
+    role: `${hand}HP \u00b7 ${SEASON}`,
+    line:
+      pitcherSeason === null
+        ? 'No season line published'
+        : `${rateText(pitcherSeason.era)} ERA \u00b7 ${rateText(pitcherSeason.whip)} WHIP \u00b7 ${pitcherSeason.inningsPitched} IP`,
+  }
+
+  const batterSide: MatchupSide = {
+    personId: batterId ?? 0,
+    name: batter?.fullName ?? 'Batter TBD',
+    role: `${side}HB \u00b7 ${SEASON}`,
+    line:
+      batterSeason === null
+        ? 'No season line published'
+        : `${rateText(batterSeason.avg)} AVG \u00b7 ${rateText(batterSeason.ops)} OPS \u00b7 ${String(batterSeason.homeRuns)} HR`,
+  }
+
+  const benchmarkAvg = parseStat(batterSeason?.avg ?? '')
+
   return (
-    <div style={ROOT_STYLE}>
-      <div className="segmented">
-        {SCOPES.map((option) => (
-          <button
-            key={option.id}
-            type="button"
-            className={scope === option.id ? 'active' : ''}
-            onClick={() => setScope(option.id)}
-          >
-            {option.label}
-          </button>
-        ))}
-      </div>
+    <div>
+      <MatchupHeader pitcher={pitcherSide} batter={batterSide} />
+
+      <Segmented
+        options={SCOPES}
+        activeId={scope}
+        onSelect={(id) => {
+          if (isScope(id)) setScope(id)
+        }}
+      />
+
       {scope === 'career' ? (
-        <CareerBody status={careerStatus} stat={career} />
+        <>
+          <H2HPanel
+            title="Career Head-to-Head"
+            stat={career}
+            benchmarkAvg={benchmarkAvg}
+            loading={careerStatus === 'loading'}
+            emptyMessage={
+              careerStatus === 'error' ? 'Head-to-head data unavailable' : 'No matchup history'
+            }
+            emptyHint="These two have not shared a completed plate appearance."
+          />
+          <H2HPanel
+            title="Season Head-to-Head"
+            meta={SEASON}
+            stat={vsPlayer}
+            benchmarkAvg={benchmarkAvg}
+            loading={loading}
+            emptyMessage="No meetings this season"
+            emptyHint="Career totals above still cover every prior meeting."
+          />
+        </>
       ) : (
-        <SeriesBody status={seriesStatus} games={series.games} atBats={series.atBats} />
+        <SeriesPanels
+          line={seriesLine}
+          atBats={series.atBats}
+          loading={seriesStatus === 'loading'}
+          emptyMessage={
+            seriesStatus === 'error' ? 'Series data unavailable' : 'No meetings in this series'
+          }
+        />
       )}
+
+      <TablePanel
+        title="Platoon Matchup"
+        meta={SEASON}
+        columns={SPLIT_COLUMNS}
+        rows={splitRows}
+        loading={loading}
+        emptyMessage="No situational splits published yet"
+        emptyHint="Splits appear once both players log enough plate appearances."
+        skeletonRows={6}
+      />
+
+      <ArsenalFacedPanel arsenal={pitchArsenal} loading={loading} />
+
+      <ZoneEdgePanel batterZones={batterHotCold} pitcherZones={pitcherHotCold} loading={loading} />
     </div>
   )
 }
