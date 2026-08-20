@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { useGameStore } from './store/gameStore'
 import { GameSelect } from './components/GameSelect/GameSelect'
-import { LiveAtBat } from './components/LiveAtBat/LiveAtBat'
+import { LiveGameTab } from './components/LiveGame/LiveGameTab'
 import { PitcherVsBatter } from './components/PitcherVsBatter/PitcherVsBatter'
 import { fetchLiveFeed } from './api/mlb'
 import { fetchSavantGameFeed } from './api/savant'
@@ -104,7 +104,7 @@ function App() {
           Pitcher vs Batter
         </button>
       </div>
-      {activeTab === 'live' ? <LiveAtBat /> : <PitcherVsBatter />}
+      {activeTab === 'live' ? <LiveGameTab /> : <PitcherVsBatter />}
     </div>
   )
 }
