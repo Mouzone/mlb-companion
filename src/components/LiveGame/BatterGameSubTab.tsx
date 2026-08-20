@@ -8,12 +8,10 @@ import {
   PitchCode,
   PitchShare,
   fixed,
-  mean,
   ordinal,
   percent,
   pitchesOf,
   rateOf,
-  speedsOf,
   splitPitches,
   trajectoryLabel,
 } from './GameSubTabShared'
@@ -74,13 +72,11 @@ export function BatterGameSubTab(): ReactElement {
   const completedPlays = batterPlays.filter((play) => play.result.event !== '')
 
   const split = splitPitches(batterPitches)
-  const speeds = speedsOf(batterPitches)
   const line = buildGameLine(completedPlays)
   const mix = buildMix(batterPitches)
 
   const swingPct = rateOf(split.swings, split.total)
   const whiffPct = rateOf(split.whiffs, split.swings)
-  const contactPct = rateOf(split.fouls + split.inPlay, split.swings)
   const chasePct = rateOf(split.chases, split.outOfZone)
   const zonePct = rateOf(split.inZone, split.zoned)
   const takenStrikePct = rateOf(split.called, split.total - split.swings)
@@ -157,7 +153,6 @@ export function BatterGameSubTab(): ReactElement {
           <StatGrid minColumnWidth={64}>
             <Stat label="Swing %" value={percent(swingPct)} />
             <Stat label="Whiff %" value={percent(whiffPct)} />
-            <Stat label="Cont %" value={percent(contactPct)} />
             <Stat label="Chase %" value={percent(chasePct)} />
             <Stat label="Zone %" value={percent(zonePct)} />
             <Stat label="Taken %" value={percent(takenStrikePct)} />
@@ -165,8 +160,6 @@ export function BatterGameSubTab(): ReactElement {
             <Stat label="SwStr" value={String(split.whiffs)} />
             <Stat label="Foul" value={String(split.fouls)} />
             <Stat label="In Play" value={String(split.inPlay)} />
-            <Stat label="Balls" value={String(split.balls)} />
-            <Stat label="Avg Velo" value={fixed(mean(speeds), 1)} />
           </StatGrid>
         )}
       </GamePanel>

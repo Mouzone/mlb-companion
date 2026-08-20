@@ -196,12 +196,9 @@ export function PitchingSubTab(): ReactElement {
             <Stat label="WHIP" value={fixed(form.whip, 2)} />
             <Stat label="IP" value={fixed(form.innings, 1)} />
             <Stat label="Opp AVG" value={rate3(form.avg)} />
-            <Stat label="K/9" value={fixed(form.k9, 1)} />
-            <Stat label="BB/9" value={fixed(form.bb9, 1)} />
             <Stat label="K" value={String(form.strikeOuts)} />
             <Stat label="BB" value={String(form.baseOnBalls)} />
             <Stat label="H" value={String(form.hits)} />
-            <Stat label="ER" value={String(form.earnedRuns)} />
             <Stat label="HR" value={String(form.homeRuns)} />
           </StatGrid>
         ) : logLoading ? (

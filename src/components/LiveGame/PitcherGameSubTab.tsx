@@ -127,10 +127,7 @@ export function PitcherGameSubTab(): ReactElement {
           <Stat label="Chase %" value={percent(chasePct)} />
           <Stat label="Called" value={String(split.called)} />
           <Stat label="SwStr" value={String(split.whiffs)} />
-          <Stat label="Foul" value={String(split.fouls)} />
           <Stat label="In Play" value={String(split.inPlay)} />
-          <Stat label="Balls" value={String(split.balls)} />
-          <Stat label="Tracked" value={String(speeds.length)} />
         </StatGrid>
       </GamePanel>
 

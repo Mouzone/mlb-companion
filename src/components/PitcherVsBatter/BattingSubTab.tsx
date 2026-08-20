@@ -2,7 +2,7 @@ import { useMemo, type ReactElement } from 'react'
 import type { GameLogEntry, StatSplit } from '../../api/types'
 import { usePlayerStats } from '../../hooks/usePlayerStats'
 import { useGameStore } from '../../store/gameStore'
-import { computeBBpct, computeISO, computeKpct, parseStat } from '../../utils/sabermetrics'
+import { computeBBpct, computeKpct, parseStat } from '../../utils/sabermetrics'
 import type { DataTableColumn, DataTableRow } from '../ui'
 import { EmptyPanel, Segmented, Stat, StatGrid } from '../ui'
 import { SprayPanel } from './BattingPanels'
@@ -180,8 +180,6 @@ export function BattingSubTab(): ReactElement {
   const spanAvg = ratio(form.hits, form.atBats)
   const delta = spanAvg !== null && seasonAvg !== null ? spanAvg - seasonAvg : null
   const verdict = compareTo(spanAvg, seasonAvg, false)
-  const plateAppearances = batterSeason?.plateAppearances ?? null
-  const iso = computeISO(seasonAvg, parseStat(batterSeason?.slg ?? ''))
   const side = matchup?.batSide.code
   const logSpan =
     gameLog.length > 0
@@ -203,27 +201,6 @@ export function BattingSubTab(): ReactElement {
         </StatGrid>
       </PlayerIdentity>
 
-      <ZonePanel
-        title="Hot / Cold"
-        caption="Batting average by strike-zone cell"
-        zones={batterHotCold}
-        loading={loading}
-        emptyMessage="No zone data for this season"
-      />
-
-      <SprayPanel data={savantData} loading={loading} />
-
-      <TablePanel
-        title="Splits"
-        meta={SEASON}
-        columns={SPLIT_COLUMNS}
-        rows={splitRows}
-        loading={loading}
-        emptyMessage="No situational splits published yet"
-        emptyHint="Splits appear once the batter records enough plate appearances."
-        skeletonRows={5}
-      />
-
       <Panel title="Recent Form" meta={`${String(form.games)} of ${String(gameLog.length)} G`}>
         <Segmented
           options={SPAN_OPTIONS}
@@ -239,9 +216,6 @@ export function BattingSubTab(): ReactElement {
             <Stat label="PA" value={String(form.plateAppearances)} />
             <Stat label="2B" value={String(form.doubles)} />
             <Stat label="HR" value={String(form.homeRuns)} />
-            <Stat label="RBI" value={String(form.rbi)} />
-            <Stat label="BB" value={String(form.baseOnBalls)} />
-            <Stat label="K" value={String(form.strikeOuts)} />
             <Stat label="K%" value={percent(computeKpct(form.strikeOuts, form.plateAppearances), 0)} />
             <Stat label="BB%" value={percent(computeBBpct(form.baseOnBalls, form.plateAppearances), 0)} />
           </StatGrid>
@@ -252,22 +226,26 @@ export function BattingSubTab(): ReactElement {
         )}
       </Panel>
 
-      <Panel title="Season Rates" meta={SEASON}>
-        <StatGrid>
-          <Stat label="ISO" value={rate3(iso)} />
-          <Stat label="BABIP" value={rateText(batterSeason?.babip)} />
-          <Stat label="K%" value={percent(computeKpct(batterSeason?.strikeOuts ?? null, plateAppearances))} />
-          <Stat label="BB%" value={percent(computeBBpct(batterSeason?.baseOnBalls ?? null, plateAppearances))} />
-          <Stat label="PA" value={whole(plateAppearances)} />
-          <Stat label="AB" value={whole(batterSeason?.atBats ?? null)} />
-          <Stat label="H" value={whole(batterSeason?.hits ?? null)} />
-          <Stat label="HR" value={whole(batterSeason?.homeRuns ?? null)} />
-          <Stat label="RBI" value={whole(batterSeason?.rbi ?? null)} />
-          <Stat label="BB" value={whole(batterSeason?.baseOnBalls ?? null)} />
-          <Stat label="SO" value={whole(batterSeason?.strikeOuts ?? null)} />
-          <Stat label="OPS" value={rateText(batterSeason?.ops)} />
-        </StatGrid>
-      </Panel>
+      <SprayPanel data={savantData} loading={loading} />
+
+      <ZonePanel
+        title="Hot / Cold"
+        caption="Batting average by strike-zone cell"
+        zones={batterHotCold}
+        loading={loading}
+        emptyMessage="No zone data for this season"
+      />
+
+      <TablePanel
+        title="Splits"
+        meta={SEASON}
+        columns={SPLIT_COLUMNS}
+        rows={splitRows}
+        loading={loading}
+        emptyMessage="No situational splits published yet"
+        emptyHint="Splits appear once the batter records enough plate appearances."
+        skeletonRows={5}
+      />
 
       <TablePanel
         title="Game Log"
