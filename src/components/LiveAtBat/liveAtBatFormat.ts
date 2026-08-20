@@ -54,8 +54,17 @@ export function ordinal(n: number): string {
   return ORDINALS[n - 1] ?? `${n}th`
 }
 
-export function fixed(value: number | undefined, digits: number, unit: string): string {
-  return value === undefined ? NO_VALUE : `${value.toFixed(digits)}${unit}`
+export function fixed(
+  value: number | null | undefined,
+  digits: number,
+  unit: string,
+): string {
+  // Feeds omit a measurement by dropping the key, by sending null, or by sending
+  // a non-finite number, so the guard has to be positive rather than exclude one
+  // of the three. An asymmetric `=== undefined` check let nulls through and threw.
+  return typeof value === 'number' && Number.isFinite(value)
+    ? `${value.toFixed(digits)}${unit}`
+    : NO_VALUE
 }
 
 /** "Bobby Witt Jr." → "Witt Jr." — the widest form that survives a 76px column. */

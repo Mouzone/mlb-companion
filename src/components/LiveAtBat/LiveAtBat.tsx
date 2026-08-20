@@ -126,7 +126,7 @@ export function LiveAtBat(): ReactElement {
     { label: 'Hardness', value: humanizeEnum(hitData?.hardness) },
     {
       label: batSpeed.isGameAverage ? 'Bat Spd Avg' : 'Bat Speed',
-      value: batSpeed.mph === null ? NO_VALUE : `${batSpeed.mph.toFixed(1)} mph`,
+      value: fixed(batSpeed.mph, 1, ' mph'),
     },
     // Swing-path tilt is CSV-only on Savant and lags a day; the gf feed omits it.
     { label: 'Swing Tilt', value: NO_VALUE },

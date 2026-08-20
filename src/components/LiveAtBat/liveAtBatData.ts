@@ -55,8 +55,12 @@ export function readBatSpeed(
   const playId = event === undefined ? null : playIdOf(event)
   if (playId !== null) {
     const match = rows.find((row) => row.play_id === playId)
-    if (match !== undefined && match.batSpeed !== null) {
-      return { mph: match.batSpeed, isGameAverage: false }
+    // Savant drops `batSpeed` entirely on pitches with no bat tracking rather than
+    // sending null, so a `!== null` test passes undefined straight through and
+    // breaks this function's own `number | null` contract.
+    const measured: unknown = match?.batSpeed
+    if (typeof measured === 'number' && Number.isFinite(measured)) {
+      return { mph: measured, isGameAverage: false }
     }
   }
 
@@ -269,7 +273,8 @@ export function derivePitchSequence(pitches: readonly PlayEvent[]): readonly Seq
       key: playIdOf(pitch) ?? `pitch-${index}`,
       number: index + 1,
       code: code ?? NO_VALUE,
-      velocity: speed === undefined ? NO_VALUE : speed.toFixed(1),
+      velocity:
+        typeof speed === 'number' && Number.isFinite(speed) ? speed.toFixed(1) : NO_VALUE,
       call: callName(pitch.details.call?.code),
       tone: callTone(pitch.details.call?.code),
     }

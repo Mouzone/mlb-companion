@@ -347,7 +347,12 @@ export interface SavantGamePitch {
   play_id: string
   ab_number: number
   pitch_number: number
-  batSpeed: number | null
+  /**
+   * Savant signals "no bat tracking on this pitch" by omitting the key entirely
+   * rather than sending null, and it does so on well over half of all pitches.
+   * Optional-and-nullable keeps the compiler honest at every read site.
+   */
+  batSpeed?: number | null
   game_pk?: string
   batter?: number
   pitch_type?: string

@@ -130,7 +130,9 @@ export function speedsOf(pitches: readonly PlayEvent[]): number[] {
 }
 
 export function percent(value: number | null, digits = 0): string {
-  return value === null ? NO_VALUE : `${value.toFixed(digits)}%`
+  return typeof value === 'number' && Number.isFinite(value)
+    ? `${value.toFixed(digits)}%`
+    : NO_VALUE
 }
 
 export function fixed(value: number | null | undefined, digits: number, unit = ''): string {
@@ -139,7 +141,7 @@ export function fixed(value: number | null | undefined, digits: number, unit = '
 }
 
 export function signed(value: number | null, digits: number): string {
-  if (value === null) return NO_VALUE
+  if (typeof value !== 'number' || !Number.isFinite(value)) return NO_VALUE
   return `${value >= 0 ? '+' : ''}${value.toFixed(digits)}`
 }
 
