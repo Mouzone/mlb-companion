@@ -344,6 +344,22 @@ Required set: `chevron-left`, `chevron-right`, `chevron-down`, `dot-live`, `diam
 - Accessibility: `role="img"` with `aria-label="Watchability {n} out of 100, {tierLabel}"`, where
   `tierLabel` is `must watch` / `great` / `good` / `average` / `skippable`.
 
+### 5.15 `StatsGuide` — searchable stat reference
+
+`src/components/StatsGuide/StatsGuide.tsx`. A single global reference surface keeps dense stat
+cards free of repeated help icons while making every displayed abbreviation discoverable.
+
+- Trigger: fixed 48px circular button at the lower-right safe area, `--c-brand-900` surface,
+  white information mark, `--shadow-md`. It remains available on the game slate and game views.
+- Open state: fixed scrim plus a right-edge drawer, capped at 400px and 88vw. The drawer owns its
+  internal scroll; it does not change the app shell's one-scroll-owner contract.
+- Anatomy: title and close control, search input, result count, then an alphabetized definition
+  list. Each entry prints abbreviation, full name, optional formula, and a short use description.
+- Interaction: opening focuses search; Escape, close, or scrim dismisses; dismissal restores focus
+  to the trigger. Background document scrolling is locked while open.
+- Motion: scrim opacity and drawer transform use `--dur-base` / `--ease-out`; both become immediate
+  under reduced motion. All controls retain 44px targets and `--shadow-focus`.
+
 ---
 
 ## 6. Layout & responsive
