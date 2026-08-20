@@ -16,23 +16,52 @@ export async function fetchSavantGameFeed(gamePk: number): Promise<SavantGamePit
   return [...homeRows, ...awayRows]
 }
 
+const RECENT_WINDOW_DAYS = 60
+
+// Savant ignores `player_id` on statcast_search and silently returns the entire
+// league (~25k rows). The recognised filters are the bracketed lookup params.
+function playerLookupParam(playerType: 'batter' | 'pitcher'): string {
+  return playerType === 'batter' ? 'batters_lookup%5B%5D' : 'pitchers_lookup%5B%5D'
+}
+
+// Bound in-season requests to a recent window so a single player stays well
+// under ~1500 rows. Past seasons are already bounded by hfSea.
+function recentWindowStart(season: string): string | null {
+  const now = new Date()
+  if (String(now.getUTCFullYear()) !== season) return null
+  const start = new Date(now.getTime() - RECENT_WINDOW_DAYS * 24 * 60 * 60 * 1000)
+  return start.toISOString().slice(0, 10)
+}
+
 export async function fetchSavantBattedBalls(
   playerId: number,
   season: string,
   playerType: 'batter' | 'pitcher' = 'batter',
 ): Promise<SavantBattedBall[]> {
-  const url = `${SAVANT_BASE}/statcast_search/csv?all=true&type=details&year=${season}&player_type=${playerType}&player_id=${playerId}&minPA=0`
-  const res = await fetch(url)
+  const params = [
+    'all=true',
+    'type=details',
+    `hfSea=${season}%7C`,
+    `player_type=${playerType}`,
+    `${playerLookupParam(playerType)}=${playerId}`,
+    'minPA=0',
+  ]
+  const windowStart = recentWindowStart(season)
+  if (windowStart) params.push(`game_date_gt=${windowStart}`)
+
+  const res = await fetch(`${SAVANT_BASE}/statcast_search/csv?${params.join('&')}`)
   if (!res.ok) throw new Error(`Savant fetch failed: ${res.status}`)
   const csvText = await res.text()
   return parseSavantCSV(csvText)
 }
 
 function parseSavantCSV(csv: string): SavantBattedBall[] {
-  const lines = csv.trim().split('\n')
+  // Savant serves a UTF-8 BOM and quotes every header cell, so a naive split
+  // yields keys like `"pitch_type"` and every lookup misses.
+  const lines = csv.replace(/^\uFEFF/, '').trim().split('\n')
   if (lines.length < 2) return []
 
-  const headers = lines[0].split(',')
+  const headers = parseCSVLine(lines[0]).map((h) => h.trim())
   const rows: SavantBattedBall[] = []
 
   for (let i = 1; i < lines.length; i++) {
@@ -66,6 +95,16 @@ function parseSavantCSV(csv: string): SavantBattedBall[] {
       balls: row.balls ?? '',
       strikes: row.strikes ?? '',
       outs_when_up: row.outs_when_up ?? '',
+      woba_value: row.woba_value ?? '',
+      woba_denom: row.woba_denom ?? '',
+      estimated_woba_using_speedangle: row.estimated_woba_using_speedangle ?? '',
+      estimated_ba_using_speedangle: row.estimated_ba_using_speedangle ?? '',
+      launch_speed_angle: row.launch_speed_angle ?? '',
+      babip_value: row.babip_value ?? '',
+      iso_value: row.iso_value ?? '',
+      delta_run_exp: row.delta_run_exp ?? '',
+      swing_path_tilt: row.swing_path_tilt ?? '',
+      bat_speed: row.bat_speed ?? '',
     })
   }
 
