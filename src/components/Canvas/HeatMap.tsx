@@ -1,4 +1,5 @@
 import { useRef, useEffect } from 'react'
+import { CHART, HEAT_EMPTY, TEMP_COLORS, UNKNOWN_SERIES_COLOR } from '../../utils/chartTheme'
 import type { HotColdZone } from '../../api/types'
 
 interface HeatMapProps {
@@ -6,12 +7,7 @@ interface HeatMapProps {
   size?: number
 }
 
-const TEMP_COLORS: Record<string, string> = {
-  hot: '#ff4444',
-  cold: '#4488ff',
-  warm: '#ff8844',
-  lukewarm: '#44aa88',
-}
+const TEMP_FILLS: Readonly<Record<string, string>> = TEMP_COLORS
 
 export function HeatMap({ zones, size = 150 }: HeatMapProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -33,7 +29,7 @@ export function HeatMap({ zones, size = 150 }: HeatMapProps) {
     const cellW = w / 3
     const cellH = h / 3
 
-    ctx.fillStyle = '#0d1b12'
+    ctx.fillStyle = CHART.background
     ctx.fillRect(0, 0, size, size)
 
     const zoneMap = new Map<number, HotColdZone>()
@@ -49,21 +45,21 @@ export function HeatMap({ zones, size = 150 }: HeatMapProps) {
         const y = padding + row * cellH
 
         if (z) {
-          ctx.fillStyle = TEMP_COLORS[z.temp] ?? '#333333'
+          ctx.fillStyle = TEMP_FILLS[z.temp] ?? UNKNOWN_SERIES_COLOR
           ctx.globalAlpha = 0.6
         } else {
-          ctx.fillStyle = '#1a2a1a'
+          ctx.fillStyle = HEAT_EMPTY
           ctx.globalAlpha = 1
         }
         ctx.fillRect(x, y, cellW, cellH)
         ctx.globalAlpha = 1
 
-        ctx.strokeStyle = '#2a4a2a'
+        ctx.strokeStyle = CHART.grid
         ctx.lineWidth = 1
         ctx.strokeRect(x, y, cellW, cellH)
 
         if (z && z.value) {
-          ctx.fillStyle = '#ffffff'
+          ctx.fillStyle = CHART.ink
           ctx.font = '10px system-ui, sans-serif'
           ctx.textAlign = 'center'
           ctx.textBaseline = 'middle'
@@ -73,11 +69,11 @@ export function HeatMap({ zones, size = 150 }: HeatMapProps) {
       }
     }
 
-    ctx.strokeStyle = '#3a6a3a'
+    ctx.strokeStyle = CHART.border
     ctx.lineWidth = 2
     ctx.strokeRect(padding, padding, w, h)
 
-    ctx.fillStyle = '#666666'
+    ctx.fillStyle = CHART.label
     ctx.font = '9px system-ui, sans-serif'
     ctx.textAlign = 'left'
     ctx.fillText('K', 2, padding - 2)

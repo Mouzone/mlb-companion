@@ -1,6 +1,6 @@
 import { useRef, useEffect } from 'react'
 import type { PitchArsenalItem } from '../../api/types'
-import { getPitchColor } from '../../utils/pitchConstants'
+import { CHART, getPitchColor, readableInkOn } from '../../utils/chartTheme'
 
 interface ArsenalBarsProps {
   arsenal: PitchArsenalItem[]
@@ -30,7 +30,7 @@ export function ArsenalBars({ arsenal, width = 280 }: ArsenalBarsProps) {
     canvas.height = totalHeight * dpr
     ctx.scale(dpr, dpr)
 
-    ctx.fillStyle = '#0d1b12'
+    ctx.fillStyle = CHART.background
     ctx.fillRect(0, 0, width, totalHeight)
 
     sorted.forEach((pitch, i) => {
@@ -39,7 +39,7 @@ export function ArsenalBars({ arsenal, width = 280 }: ArsenalBarsProps) {
       const color = getPitchColor(code)
       const barW = (pitch.percentage / 100) * barAreaWidth
 
-      ctx.fillStyle = '#aaaaaa'
+      ctx.fillStyle = CHART.ink
       ctx.font = '12px system-ui, sans-serif'
       ctx.textAlign = 'left'
       ctx.textBaseline = 'middle'
@@ -48,11 +48,14 @@ export function ArsenalBars({ arsenal, width = 280 }: ArsenalBarsProps) {
       ctx.fillStyle = color
       ctx.fillRect(labelWidth, y, barW, barHeight)
 
-      ctx.fillStyle = '#ffffff'
+      const percentage = `${pitch.percentage.toFixed(1)}%`
       ctx.font = '11px system-ui, sans-serif'
-      ctx.fillText(`${pitch.percentage.toFixed(1)}%`, labelWidth + 4, y + barHeight / 2)
+      const percentageSurface =
+        4 + ctx.measureText(percentage).width <= barW ? color : CHART.background
+      ctx.fillStyle = readableInkOn(percentageSurface)
+      ctx.fillText(percentage, labelWidth + 4, y + barHeight / 2)
 
-      ctx.fillStyle = '#cccccc'
+      ctx.fillStyle = CHART.label
       ctx.textAlign = 'right'
       ctx.fillText(`${pitch.averageSpeed.toFixed(0)} mph`, width - padding, y + barHeight / 2)
       ctx.textAlign = 'left'

@@ -1,21 +1,14 @@
-// Unified pitch-type color map. Source of truth: ZonePlot.tsx's original palette (KN: '#ffffff').
+// Back-compat shim over ./chartTheme, which is the single source of truth for
+// every chart color literal (enforced by scripts/design-checks.mjs). Existing
+// consumers import PITCH_COLORS / getPitchColor from here; new code should
+// import from ./chartTheme directly.
+//
+// PITCH_COLORS is the widened lookup rather than the 13-key canonical map so
+// that callers can index it with raw API pitch codes, including the legacy
+// screwball code `SC`.
 
-export const PITCH_COLORS: Record<string, string> = {
-  FF: '#ff4444',
-  SI: '#ff6644',
-  FC: '#ff8844',
-  SL: '#4488ff',
-  ST: '#44aaff',
-  CU: '#44ff88',
-  KC: '#44ffaa',
-  CH: '#88ff44',
-  FS: '#aaff44',
-  KN: '#ffffff',
-  FO: '#ffff44',
-  SC: '#ff44ff',
-  EP: '#44ffff',
-}
-
-export function getPitchColor(code: string): string {
-  return PITCH_COLORS[code] ?? '#888888'
-}
+export {
+  PITCH_COLOR_LOOKUP as PITCH_COLORS,
+  UNKNOWN_PITCH_COLOR,
+  getPitchColor,
+} from './chartTheme'

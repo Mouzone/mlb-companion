@@ -1,5 +1,11 @@
 import { useRef, useEffect } from 'react'
-import { PITCH_COLORS } from '../../utils/pitchConstants'
+import {
+  CALL_COLORS as CALL_PALETTE,
+  CHART,
+  UNKNOWN_SERIES_COLOR,
+  getPitchColor,
+  readableInkOn,
+} from '../../utils/chartTheme'
 import type { PlayEvent } from '../../api/types'
 
 interface ZonePlotProps {
@@ -10,21 +16,18 @@ interface ZonePlotProps {
   pitches?: PlayEvent[]
 }
 
+/** Gameday call codes mapped onto the four semantic call slots. */
 const CALL_COLORS: Record<string, string> = {
-  B: '#4488ff',
-  C: '#ff4444',
-  S: '#ff4444',
-  F: '#ffaa44',
-  X: '#44ff44',
-  E: '#44ff44',
+  B: CALL_PALETTE.ball,
+  C: CALL_PALETTE.strike,
+  S: CALL_PALETTE.strike,
+  F: CALL_PALETTE.foul,
+  X: CALL_PALETTE.inplay,
+  E: CALL_PALETTE.inplay,
 }
 
 const PADDING = 12
 const DOT_RADIUS = 6
-const UNKNOWN_PITCH_COLOR = '#888888'
-const BACKGROUND = '#0d1b12'
-const GRID_LINE = '#2a5a3a'
-const GRID_BORDER = '#3a7a4a'
 
 /** Below this canvas size the 3x3 grid plus 12px dots leaves no legible room for a legend. */
 const LEGEND_MIN_SIZE = 172
@@ -166,10 +169,10 @@ function drawLegend(ctx: CanvasRenderingContext2D, layout: LegendLayout, origin:
     const centreY = origin.y + LEGEND_TOP_GAP + rowIndex * LEGEND_ROW_HEIGHT + LEGEND_ROW_HEIGHT / 2
     let cursorX = origin.x
     for (const code of row) {
-      ctx.fillStyle = PITCH_COLORS[code] ?? UNKNOWN_PITCH_COLOR
+      ctx.fillStyle = getPitchColor(code)
       ctx.fillRect(cursorX, centreY - LEGEND_SWATCH_SIZE / 2, LEGEND_SWATCH_SIZE, LEGEND_SWATCH_SIZE)
       cursorX += LEGEND_SWATCH_SIZE + LEGEND_LABEL_GAP
-      ctx.fillStyle = '#9ec7a8'
+      ctx.fillStyle = CHART.legendLabel
       ctx.fillText(code, cursorX, centreY)
       cursorX += ctx.measureText(code).width + LEGEND_ITEM_GAP
     }
@@ -180,7 +183,7 @@ function drawGrid(ctx: CanvasRenderingContext2D, grid: GridBox): void {
   const cellW = grid.width / 3
   const cellH = grid.height / 3
 
-  ctx.strokeStyle = GRID_LINE
+  ctx.strokeStyle = CHART.grid
   ctx.lineWidth = 1
   for (let i = 1; i <= 2; i++) {
     ctx.beginPath()
@@ -193,7 +196,7 @@ function drawGrid(ctx: CanvasRenderingContext2D, grid: GridBox): void {
     ctx.stroke()
   }
 
-  ctx.strokeStyle = GRID_BORDER
+  ctx.strokeStyle = CHART.axis
   ctx.lineWidth = 2
   ctx.strokeRect(grid.left, grid.top, grid.width, grid.height)
 }
@@ -204,11 +207,11 @@ function drawNumberedDot(ctx: CanvasRenderingContext2D, dot: Dot): void {
   ctx.arc(dot.x, dot.y, DOT_RADIUS, 0, Math.PI * 2)
   ctx.fill()
 
-  ctx.strokeStyle = BACKGROUND
+  ctx.strokeStyle = CHART.markerStroke
   ctx.lineWidth = 1
   ctx.stroke()
 
-  ctx.fillStyle = '#000000'
+  ctx.fillStyle = readableInkOn(dot.color)
   ctx.font = `bold ${dot.label.length > 1 ? 7 : 8}px system-ui, sans-serif`
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
@@ -237,7 +240,7 @@ export function ZonePlot({ zone, size = 150, pitchType, callCode, pitches }: Zon
     canvas.height = size * dpr
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
 
-    ctx.fillStyle = BACKGROUND
+    ctx.fillStyle = CHART.background
     ctx.fillRect(0, 0, size, size)
 
     const innerWidth = size - PADDING * 2
@@ -267,15 +270,15 @@ export function ZonePlot({ zone, size = 150, pitchType, callCode, pitches }: Zon
         drawNumberedDot(ctx, {
           x: clamp(point.x, DOT_RADIUS + 1, size - DOT_RADIUS - 1),
           y: clamp(point.y, DOT_RADIUS + 1, plotBottom - DOT_RADIUS - 1),
-          color: code ? PITCH_COLORS[code] ?? UNKNOWN_PITCH_COLOR : UNKNOWN_PITCH_COLOR,
+          color: getPitchColor(code),
           label: String(index + 1),
         })
       })
     } else if (zone !== null && zone !== undefined) {
       const cell = zoneToCell(zone)
       if (cell) {
-        ctx.fillStyle = callCode ? CALL_COLORS[callCode] ?? '#ffaa44' : '#ffaa44'
-        ctx.strokeStyle = pitchType ? PITCH_COLORS[pitchType] ?? '#ffffff' : '#ffffff'
+        ctx.fillStyle = callCode ? CALL_COLORS[callCode] ?? UNKNOWN_SERIES_COLOR : UNKNOWN_SERIES_COLOR
+        ctx.strokeStyle = getPitchColor(pitchType)
         ctx.lineWidth = 2
         drawSinglePitch(ctx, cell, grid)
       }

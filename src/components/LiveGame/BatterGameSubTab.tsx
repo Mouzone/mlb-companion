@@ -1,7 +1,7 @@
 import type { ReactElement } from 'react'
 import { useGameStore } from '../../store/gameStore'
 import { ZonePlot } from '../Canvas/ZonePlot'
-import { PITCH_COLORS } from '../../utils/pitchConstants'
+import { PITCH_COLORS, UNKNOWN_PITCH_COLOR } from '../../utils/pitchConstants'
 import type { CurrentPlay, PlayEvent, SavantGamePitch } from '../../api/types'
 
 // allow: SIZE_OK — three sibling sections share ONE fixed 470px budget
@@ -14,8 +14,6 @@ const NO_VALUE = '—'
 
 /** ZonePlot draws its legend inside the square, and 172 is its legend threshold. */
 const ZONE_PLOT_SIZE = 172
-
-const UNKNOWN_PITCH_COLOR = '#888888'
 
 const ORDINALS: readonly string[] = [
   '1st',
