@@ -1,5 +1,5 @@
 import type { ReactElement } from 'react'
-import { Badge, PlayerAvatar, TeamLogo } from '../ui'
+import { Badge, PlayerAvatar, ScoreRing, TeamLogo } from '../ui'
 import type { BadgeTone } from '../ui'
 import type { ScheduledGame } from '../../api/types'
 
@@ -106,12 +106,27 @@ function probableFor(game: ScheduledGame, side: Side): { id: number; fullName: s
   return game.teams[side].probablePitcher ?? game.probablePitcher?.[side] ?? null
 }
 
+const NAME_MAX = 15
+
+/* Box-score convention: the surname identifies the pitcher, so it survives
+   intact and the given name reduces to an initial ("Yoshinobu Yamamoto" ->
+   "Y. Yamamoto"). Everything after the first token is kept so suffixes ride
+   along ("Ronald Acuna Jr." -> "R. Acuna Jr."). */
+function shortenName(fullName: string): string {
+  if (fullName.length <= NAME_MAX) return fullName
+  const [first, ...rest] = fullName.split(' ').filter((part) => part.length > 0)
+  if (first === undefined || rest.length === 0) return fullName
+  return `${first.charAt(0)}. ${rest.join(' ')}`
+}
+
 export interface GameCardProps {
   readonly game: ScheduledGame
   readonly onSelect: (game: ScheduledGame) => void
+  /** 0-100 watchability. `null` while the nightly payload is loading or absent. */
+  readonly watchability?: number | null
 }
 
-export function GameCard({ game, onSelect }: GameCardProps): ReactElement {
+export function GameCard({ game, onSelect, watchability = null }: GameCardProps): ReactElement {
   const away = game.teams.away
   const home = game.teams.home
   const line = readLinescore(game)
@@ -137,7 +152,7 @@ export function GameCard({ game, onSelect }: GameCardProps): ReactElement {
     const other = scores === null ? null : scores[side === 'away' ? 'home' : 'away']
     const trailing = score !== null && other !== null && score < other
 
-    // A <button> only admits phrasing content, so rows are flex spans, not divs.
+    // A <button> only admits phrasing content, so rows are spans, not divs.
     return (
       <span className="gc-team">
         <TeamLogo teamId={entry.team.id} abbreviation={entry.team.abbreviation} size="lg" />
@@ -145,9 +160,7 @@ export function GameCard({ game, onSelect }: GameCardProps): ReactElement {
           <span className="gc-name">{entry.team.name}</span>
           {record !== null ? <span className="gc-record">{record}</span> : null}
         </span>
-        {score !== null ? (
-          <span className={trailing ? 'gc-score gc-score--trail' : 'gc-score'}>{score}</span>
-        ) : null}
+        <span className={trailing ? 'gc-score gc-score--trail' : 'gc-score'}>{score}</span>
       </span>
     )
   }
@@ -157,7 +170,7 @@ export function GameCard({ game, onSelect }: GameCardProps): ReactElement {
       <span className="gc-probable">
         <PlayerAvatar personId={pitcher.id} name={pitcher.fullName} size="sm" />
         <span className="gc-probable-text">
-          <span className="gc-probable-name">{pitcher.fullName}</span>
+          <span className="gc-probable-name">{shortenName(pitcher.fullName)}</span>
           <span className="gc-probable-role">{game.teams[side].team.abbreviation} SP</span>
         </span>
       </span>
@@ -166,9 +179,12 @@ export function GameCard({ game, onSelect }: GameCardProps): ReactElement {
 
   return (
     <button type="button" className="game-card" onClick={() => onSelect(game)} aria-label={label}>
-      <span className="gc-teams">
-        {teamRow('away')}
-        {teamRow('home')}
+      <span className="gc-head">
+        <span className="gc-teams">
+          {teamRow('away')}
+          {teamRow('home')}
+        </span>
+        <ScoreRing score={watchability} size="lg" live={chip.tone === 'live'} />
       </span>
 
       <span className="gc-footer">

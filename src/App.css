@@ -319,12 +319,37 @@ button:focus-visible,
   -webkit-overflow-scrolling: touch;
 }
 
+.slate-header {
+  display: flex;
+  width: 100%;
+  max-width: 1104px;
+  align-self: center;
+  align-items: end;
+  justify-content: space-between;
+}
+
+.slate-heading {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  min-width: 0;
+}
+
 .date {
   font-size: var(--fs-label);
   font-weight: var(--fw-semibold);
   color: var(--c-ink-muted);
   letter-spacing: var(--tracking-caps);
   text-transform: uppercase;
+}
+
+/* Shrink-wraps the control instead of letting the column stretch it to full
+   width, which would read as a tab bar rather than a sort toggle. */
+
+.slate-sort {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
 }
 
 /* A plain grid, NOT a second scroll container. The inner `min()` lets a track
@@ -334,8 +359,11 @@ button:focus-visible,
 
 .game-group {
   display: grid;
+  width: 100%;
+  max-width: 1104px;
+  align-self: center;
   grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 1fr));
-  gap: var(--sp-3);
+  gap: var(--sp-4);
   align-items: start;
   min-width: 0;
 }
@@ -382,6 +410,15 @@ button:focus-visible,
   display: flex;
   flex-direction: column;
   gap: var(--sp-4);
+  /* Capped and centred rather than filling the track: past ~400px the card
+     gains no information, it just spreads the same content thinner. Centring
+     splits the leftover track space evenly instead of stranding it on one
+     side. The cap is on the card, not the track, because auto-fill counts
+     tracks by the minmax *min* but sizes them to the max, so a fixed max
+     overflows the group at wide viewports. */
+  width: 100%;
+  max-width: 360px;
+  justify-self: center;
   min-width: 0;
   padding: var(--sp-4);
   text-align: left;
@@ -410,17 +447,33 @@ button:focus-visible,
   transform: scale(0.995);
 }
 
-/* --- Band 1: one row per team ------------------------------------------- */
+/* --- Band 1: one row per team, watchability ring alongside --------------- */
+
+/* A row, not a positioned overlay: the ring reserves its own track so a long
+   team name shortens instead of running underneath the score. */
+
+.gc-head {
+  display: flex;
+  gap: var(--sp-4);
+  align-items: center;
+  min-width: 0;
+}
+
+.gc-head > .ui-ring {
+  flex: 0 0 auto;
+}
 
 .gc-teams {
   display: flex;
+  flex: 1 1 auto;
   flex-direction: column;
   gap: var(--sp-3);
   min-width: 0;
 }
 
 .gc-team {
-  display: flex;
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) auto;
   gap: var(--sp-4);
   align-items: center;
   min-width: 0;
@@ -428,7 +481,6 @@ button:focus-visible,
 
 .gc-identity {
   display: flex;
-  flex: 1 1 auto;
   flex-direction: column;
   gap: var(--sp-1);
   min-width: 0;
@@ -464,6 +516,25 @@ button:focus-visible,
   letter-spacing: var(--tracking-tight);
 }
 
+@media (max-width: 420px) {
+  .slate-header {
+    gap: var(--sp-3);
+    align-items: flex-start;
+  }
+
+  .gc-head {
+    gap: var(--sp-4);
+  }
+
+  .gc-team {
+    gap: var(--sp-3);
+  }
+
+  .gc-name {
+    font-size: var(--fs-label);
+  }
+}
+
 /* Weight ranks the two rows at a glance. Never the sole channel (§7): the
    numerals themselves state the margin, and the badge prints the status. */
 .gc-score--trail {
@@ -497,11 +568,13 @@ button:focus-visible,
 .gc-venue {
   flex: 1 1 auto;
   min-width: 0;
+  padding-left: var(--sp-3);
   overflow: hidden;
   font-size: var(--fs-label);
   font-weight: var(--fw-medium);
   color: var(--c-ink-muted);
   text-align: right;
+  border-left: 1px solid var(--c-border);
   white-space: nowrap;
   text-overflow: ellipsis;
 }
@@ -589,16 +662,9 @@ button:focus-visible,
    which already adds a track the moment two 320px cards fit; pinning
    `repeat(2)` here would instead squeeze cards below that floor.
 
-   NOTE: DESIGN.md §6.4's breakpoint table also lists "Game grid three-up"
-   for --bp-lg, but at the 960px content budget this section pins (§6.4's
-   own number), 3 tracks of the §6.5 320px floor plus 2 gaps need 976px —
-   16px more than is available. Three-up and the 320px floor cannot both
-   hold at 960px; pinning `repeat(3)` here was tried and produces 314.7px
-   cards (under the floor) that ellipsis-truncate venue names and pitcher
-   names that fit fine at two-up. Two-up + no truncation wins over matching
-   the aspirational three-up line; see DESIGN.md change-protocol before
-   revisiting (would need a wider content budget or a narrower card floor,
-   both cross-screen changes). */
+   The 1024px breakpoint keeps the proven 960px two-column budget. At 1200px,
+   GameSelect alone opens to 1104px: exactly three 360px cards plus two 12px
+   gaps, without changing the narrower live-game screens. */
 
 @media (min-width: 768px) {
   .game-select {
@@ -609,6 +675,12 @@ button:focus-visible,
 @media (min-width: 1024px) {
   .game-select {
     padding-inline: max(var(--sp-4), calc((100% - 960px) / 2));
+  }
+}
+
+@media (min-width: 1200px) {
+  .game-select {
+    padding-inline: max(var(--sp-4), calc((100% - 1104px) / 2));
   }
 }
 
