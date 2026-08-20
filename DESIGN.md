@@ -310,6 +310,27 @@ Hand-authored inline SVG only (zero icon dependencies permitted). `currentColor`
 `stroke-width: 1.5`, 20×20 default box, `aria-hidden="true"` when decorative.
 Required set: `chevron-left`, `chevron-right`, `chevron-down`, `dot-live`, `diamond` (base state).
 
+### 5.14 `ScoreRing` — watchability score
+
+`src/components/ui/ScoreRing.tsx`. Props `{ score: number | null, size?: 'sm' | 'md' | 'lg', live?: boolean }`.
+
+- **Built from `<span>` and `<svg>` only, never `<div>`.** `GameCard`'s root is a `<button>`,
+  which accepts only phrasing content — a block-level child would be invalid HTML.
+- Anatomy: an SVG ring (`strokeDasharray`/`strokeDashoffset` drawing the arc) with the numeral
+  grid-stacked on top as text. `null` or a non-finite score renders `—` instead of a ring.
+- `GEOMETRY` per size: `sm` 32px, radius 13, stroke 2.5 · `md` 40px, radius 17, stroke 3 ·
+  `lg` 96px, radius 42, stroke 6. The `lg` size is not arbitrary — 96px is two 44px `TeamLogo lg`
+  rows plus one `--sp-3` (8px) gap, so the ring matches the height of the card's two-team block
+  exactly.
+- Tier colors deviate deliberately from the raw heat ramp to hold a 3:1 contrast floor on white:
+  `elite` → `--c-heat-5`, `great` → `--c-heat-4`, `good` → `--c-warn`, `average` → `--c-heat-1`,
+  `skip` → `--c-ink-muted`. `--c-heat-3` (`#f4b942`, ~1.9:1) was rejected for the `good` tier and
+  replaced with `--c-warn` (`#b25e09`, 4.7:1). The numeral itself always stays `--c-ink` (13.5:1);
+  only the ring stroke carries tier color. This is consistent with §2.3 — the score is a benchmark
+  comparison (a game rated against the field), not a decorative value, so coloring it is earned.
+- Accessibility: `role="img"` with `aria-label="Watchability {n} out of 100, {tierLabel}"`, where
+  `tierLabel` is `must watch` / `great` / `good` / `average` / `skippable`.
+
 ---
 
 ## 6. Layout & responsive
@@ -359,19 +380,37 @@ The app previously had **zero** width breakpoints. Three are introduced:
 | Name | Query | Behavior |
 |---|---|---|
 | base | — | Single column. Screen gutter `--sp-4`. |
-| `--bp-sm` | `min-width: 480px` | Stat grids gain a column; game cards go two-up. |
+| `--bp-sm` | `min-width: 480px` | Stat grids gain a column; game cards remain one-up until two 320px tracks fit. |
 | `--bp-md` | `min-width: 768px` | Content max-width `720px`, centered. Game grid two-up with larger cards. Charts scale up. |
-| `--bp-lg` | `min-width: 1024px` | Content max-width `960px`. Game grid three-up. Side-by-side pitcher/batter cards replace the swipe carousel. |
+| `--bp-lg` | `min-width: 1024px` | Content max-width `960px`. Game grid remains two-up. Side-by-side pitcher/batter cards replace the swipe carousel. |
+| slate wide | `min-width: 1200px` | GameSelect alone opens to `1104px` for three 360px cards; live-game screens keep the 960px budget. |
 
 ### 6.5 GameSelect (scroll + density)
 
 `.game-select` is a scroll owner. Cards are no longer a fixed 55px row.
 
-- Card: `--radius-lg`, `--sp-4` padding, `1px solid var(--c-border)`, `--shadow-xs`.
-- Anatomy: team logo (`md`) + team name + record, one row per team, score right-aligned in
-  `--fs-hero` `tabular-nums`; footer row with status badge, start time or inning, and both
-  probable pitchers rendered as `PlayerAvatar sm` + name + line.
-- Grid: `repeat(auto-fill, minmax(min(320px,100%), 1fr))`, `gap: var(--sp-3)`.
+- Card: `--radius-lg`, `--sp-4` padding, `1px solid var(--c-border)`, `--shadow-xs`, capped
+  `width: 100%; max-width: 360px; justify-self: center` (see below for why the cap lives on the
+  card, not the grid track).
+- A new `.gc-head` flex row sits above the footer, pairing the `.gc-teams` block with a
+  `ScoreRing size="lg"` at the right — the watchability score for that game (`null` renders `—`
+  rather than dropping the ring, so every card keeps the same head layout).
+- `.gc-teams` stacks two independent `.gc-team` grids. Each row uses
+  `44px minmax(0, 1fr) auto` for logo / full team identity / run score. The identity track absorbs
+  available width, so the run score aligns at the edge of the team zone with a consistent token
+  gap before the 96px rating instead of relying on an empty spacer column.
+- Status strip: badge, start time or inning, and venue. A divider on the venue separates location
+  from game-state telemetry on narrow cards.
+- Probable-pitcher strip: two `PlayerAvatar sm` + name + role cells. Pitcher names longer than 15 characters shorten to
+  first-initial + full surname (box-score convention), keeping all trailing tokens so suffixes
+  survive; `PlayerAvatar` still gets the full name for its accessible label.
+- A compact slate header pairs title/date with a `Segmented` control (Time / Watchability), sorting cards within each
+  status group (Live / Upcoming / Final) rather than across them, so the grouping survives a sort
+  change. Cards with no score sort last, not as zero.
+- Grid: `repeat(auto-fill, minmax(min(320px,100%), 1fr))`, `gap: var(--sp-4)`. The card's own
+  `max-width: 360px` is what actually bounds card width — `auto-fill` sizes tracks to the
+  `minmax` **max**, not the min, so without the cap on the card itself, wide viewports would
+  stretch cards past a comfortable reading width.
 
 ---
 

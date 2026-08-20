@@ -59,6 +59,16 @@ src/
                                            pitcherSplits, gameLog (sliced to 5 most recent), vsPlayer, savantData
                                            (filtered to rows with both hc_x and hc_y present), loading. Imported
                                            by PitcherVsBatter, PitchingSubTab, BattingSubTab.
+    useWatchability.ts                    useWatchability(games) => { scores: ReadonlyMap<number,
+                                           WatchabilityResult>, loading, stale }. Fetches /watchability.json once
+                                           on mount (a missing payload degrades to cards with no score rather
+                                           than blocking the slate); polls fetchWinProbability every 30s
+                                           (LIVE_POLL_INTERVAL) for live games only, via Promise.allSettled so
+                                           one failed game keeps its prior plays. Deliberately far slower than
+                                           useLiveFeed's 4s single-game poll, because this covers the whole slate
+                                           and excitement is a game-shape measure, not a pitch-by-pitch one.
+                                           Reattaches parkFactor from leagueConstants.ts's PARK_FACTORS, since the
+                                           payload itself omits it (see section 12). Imported by GameSelect.
 
   utils/
     pitchConstants.ts                     Exports PITCH_COLORS (Record<string,string>, keys FF SI FC SL ST CU KC
@@ -68,19 +78,52 @@ src/
     leagueConstants.ts                    Exports LEAGUE_ERA (4.20), LEAGUE_WOBA (0.310), WOBA_SCALE (1.24),
                                            LEAGUE_R_PER_PA (0.120), and PARK_FACTORS (Record<string, number>, 30
                                            team-abbreviation keys). Hardcoded; must be updated annually before
-                                           each season (see section 9). Imported by PitcherVsBatter.
+                                           each season (see section 9). Imported by PitcherVsBatter and (for
+                                           PARK_FACTORS only) useWatchability, which reattaches park factor onto
+                                           the watchability payload client-side.
     sabermetrics.ts                       Pure computation functions: computeFIP, computeERAplus, computeWRCplus,
                                            computeISO, computeKpct, computeBBpct, computeHR9, computeGBpct,
                                            parseStat, ipToDecimal. See section 7 for formulas. Imported by
                                            PitcherVsBatter, MatchupSubTab (indirectly via ipToDecimal/parseStat),
                                            PitchingSubTab, BattingSubTab.
+    watchability.ts                       Client-side watchability scoring engine (~640 lines, zero deps). See
+                                           section 12 for the full formula. Exports types (Baseline,
+                                           LeagueBaseline, TeamRating, PitcherRating, GameInputs, PayloadGame,
+                                           WatchabilityPayload, WinProbabilityPlay, ScoreBreakdown,
+                                           WatchabilityResult, WatchabilityTier, GameProgressState), constants
+                                           (WEIGHTS, HOME_FIELD_ELO), and functions eloWinProbability, tierFor,
+                                           computePregameScore, computeExcitementIndex, computeLiveScore,
+                                           computeWatchability. Imported by useWatchability.
 
   components/
     GameSelect/GameSelect.tsx             Pre-game picker. Fetches fetchSchedule(todayStr()) on mount, groups
                                            games into Live / Upcoming (Preview) / Final by
                                            status.abstractGameState, renders GameCard buttons that call
                                             gameStore.selectGame on click. Its `.game-select` container is this
-                                            screen's single scroll owner (see section 8). Imported by App.tsx.
+                                            screen's single scroll owner (see section 8). Calls
+                                            useWatchability(games) and passes each game's score down to its
+                                            GameCard. Renders a Segmented (Time | Watchability) sort control under
+                                            the date line; sorting happens within each Live/Upcoming/Final group
+                                            so that grouping survives a sort change, and scoreless games sort
+                                            last rather than as zero. Initial sort mode reads `?sort=watchability`
+                                            via initialSortMode(), which backs the PWA manifest shortcut (section
+                                            10). Imported by App.tsx.
+    GameSelect/GameCard.tsx               Individual game card, rendered as a <button>. New optional prop
+                                           `watchability?: number | null`, rendered via `<ScoreRing size="lg">`
+                                           in a `.gc-head` row alongside `.gc-teams`. Each team row always
+                                           renders its `.gc-score` span, even when empty, because `.gc-team` is
+                                           `display: contents` and a dropped child would shift the next row's
+                                           logo into the wrong grid column (see DESIGN.md §6.5). shortenName()
+                                           shortens any pitcher name over 15 characters (NAME_MAX) to
+                                           first-initial + full surname, box-score style, keeping all trailing
+                                           tokens so suffixes survive; PlayerAvatar still receives the full name
+                                           for its accessible name. Imported by GameSelect.
+    ui/ScoreRing.tsx                      The 14th UI primitive (DESIGN.md §5.14). ScoreRing({ score, size, live
+                                           }): renders the 0-100 watchability score as an SVG ring with the
+                                           numeral stacked on top, built entirely from <span> and <svg> — never
+                                           <div> — because GameCard's root is a <button>, which only admits
+                                           phrasing content. `null`/non-finite scores render `—`. Imported by
+                                           GameCard.
      LiveGame/LiveGameTab.tsx              Live Game tab wrapper. Exports LiveGameTab. Owns the `.tab-content`
                                             flex root directly under the 48px `.tab-bar`; renders the 44px
                                             `.sub-tab-nav` (At Bat / Batter Game / Pitcher Game) as a sibling above
@@ -155,6 +198,13 @@ src/
                                            panels, the `.h-*` utility classes, PvB card strip, canvas wrappers,
                                            dense data primitives (stat rows/grids/split tables), live at-bat
                                            layout, game-select layout, focus-visibility rules. See section 8.
+                                           `.game-card`/`.gc-skeleton` gained `width:100%; max-width:400px;
+                                           justify-self:center` — the cap lives on the card, not the grid
+                                           track's `minmax()` max, because `auto-fill` sizes tracks to the max,
+                                           which would otherwise overflow `.game-group` at wide viewports.
+                                           `.gc-teams` became a 4-track grid with `.gc-team` set to `display:
+                                           contents` so both team rows share logo/name/runs tracks; see
+                                           DESIGN.md §6.5.
   index.css                               Global reset, CSS custom-property tokens (palette, height budget,
                                            type scale, spacing), base typography, shared loading/error/empty
                                            state utilities. See section 8.
@@ -162,12 +212,23 @@ src/
 vercel.json                               Vercel deploy config: framework "vite", buildCommand "tsc -b && vite
                                            build", outputDirectory "dist", SPA rewrite of /(.*) to /index.html.
 vite.config.ts                            Vite config: @vitejs/plugin-react, vite-plugin-pwa (autoUpdate,
-                                           manifest with standalone display/portrait orientation, NetworkFirst
-                                           runtime caching for statsapi.mlb.com (5 min TTL) and
-                                           baseballsavant.mlb.com (10 min TTL)).
+                                           manifest with standalone display orientation, NetworkFirst runtime
+                                           caching for statsapi.mlb.com (5 min TTL) and baseballsavant.mlb.com
+                                           (10 min TTL), plus a StaleWhileRevalidate rule for /watchability.json.
+                                           See section 10.
 index.html                                Root HTML. Sets viewport-fit=cover and maximum-scale=1.0,
                                            user-scalable=no on the viewport meta tag (viewport-fit=cover is
                                            required for env(safe-area-inset-*) to resolve to a non-zero value).
+
+scripts/
+  build-watchability.mjs                  Nightly watchability data pipeline (~480 lines, Node ESM, zero deps).
+                                           See section 12. Run as `node scripts/build-watchability.mjs
+                                           [YYYY-MM-DD]` (defaults to today). Writes public/watchability.json
+                                           and public/elo-state.json.
+
+.github/workflows/
+  watchability.yml                        Runs the pipeline on a schedule and commits its output. See section
+                                           10.
 ```
 
 ## 3. Data Flow
@@ -200,6 +261,13 @@ Baseball Savant (baseballsavant   ──┘                            │
 - `usePlayerStats` is called independently by `PitcherVsBatter`, `PitchingSubTab`, and `BattingSubTab` with the same `(batterId, pitcherId)` pair; each call refetches all 10 endpoints (no cross-component caching layer exists).
 - Sabermetric derivations (FIP, ERA+, wRC+, ISO, K%, BB%, HR/9, GB%) happen in the consuming components (`PitcherVsBatter`, indirectly `PitchingSubTab`/`BattingSubTab`), not inside the store or the fetchers — raw stat objects are stored/passed as-is and computed on render.
 - No data ever flows backward from components into the API layer; all fetchers are one-directional reads.
+- **Watchability is a separate, parallel data flow that never touches gameStore.** `scripts/build-watchability.mjs`
+  runs nightly (outside the app, via GitHub Actions), computes league baselines and per-game inputs, and writes
+  `public/watchability.json`. `useWatchability`, called from `GameSelect`, fetches that static file once on mount,
+  reattaches `parkFactor` from `leagueConstants.ts`, and layers on live win-probability plays (polled every 30s via
+  `fetchWinProbability`) for games in progress. All scoring — pregame, live, and the crossfade between them — runs
+  in `src/utils/watchability.ts`, entirely in the browser. The pipeline emits inputs only; it never computes a
+  score. See section 12 for why that split matters.
 
 ## 4. API Endpoints Reference
 
@@ -221,6 +289,7 @@ All MLB Stats API endpoints use `BASE = 'https://statsapi.mlb.com/api'` from `sr
 | `GET /v1/people/{batterId}/stats` | `stats=vsPlayerTotal&group=hitting&opposingPlayerId=<pitcherId>`, falling back to `stats=vsPlayer&group=hitting&opposingPlayerId=<pitcherId>` | `fetchCareerVsPlayer(batterId, pitcherId)` | Same `VsPlayerStat` shape; tries `vsPlayerTotal` first, falls back to `vsPlayer` on error |
 | `GET /v1/schedule` | `sportId=1&startDate=<-7d>&endDate=<+7d>` around the target game date | `fetchSeriesSchedule(gameDate, teamId, opponentId)` | Filters to games between the two teams, groups into consecutive-day runs, returns the run containing the target date as `{ gamePk, date }[]` |
 | `GET /v1/game/{gamePk}/playByPlay` | path param `gamePk` (note: **v1**, not v1.1) | `fetchPlayByPlay(gamePk)` / `fetchPlayByPlayBatch(gamePks)` | `PlayByPlayResponse`; batch version chunks requests at most 5 concurrent (`chunk(arr, 5)`) |
+| `GET /v1/game/{gamePk}/winProbability` | path param `gamePk` | `fetchWinProbability(gamePk)` | `WinProbabilityPlay[]`, one entry per play, carrying `leverageIndex`, `homeTeamWinProbability`, `homeTeamWinProbabilityAdded` (WPA in percentage points, not a fraction), `dramaIndex`, and `about.captivatingIndex`. `dramaIndex` and `captivatingIndex` are undocumented MLB fields, so the response is parsed through runtime guards and degrades to null components rather than throwing. Called by `useWatchability` every 30s for live games, feeding `computeExcitementIndex`/`computeLiveScore` in `watchability.ts` (section 12). This is a separate call rather than reusing `/v1.1/game/{gamePk}/feed/live`, which the app already fetches: that feed carries `about.captivatingIndex` but not `leverageIndex`, win probability, or `dramaIndex`. |
 
 Baseball Savant endpoints use `SAVANT_BASE = 'https://baseballsavant.mlb.com'` from `src/api/savant.ts`.
 
@@ -234,7 +303,7 @@ Baseball Savant endpoints use `SAVANT_BASE = 'https://baseballsavant.mlb.com'` f
 ```
 main.tsx
   App.tsx
-    (no selectedGame) GameSelect
+    (no selectedGame) GameSelect -> GameCard -> ScoreRing
     (selectedGame set)
       tab-bar (Live Game | Pitcher vs Batter buttons)
       activeTab === 'live'
@@ -294,6 +363,8 @@ Actions and when each is dispatched:
 - `setGameFeedPitches(pitches)` — called by `App.tsx`'s Savant game-feed effect on every `gamePk` change (success sets the rows, failure sets `[]`).
 - `setError(err)` — called by `App.tsx`'s deep-link handler and by `useLiveFeed` on any fetch/poll failure.
 - `reset()` — called from the "← Games" back button in `LiveAtBat`. Clears `selectedGame`, `gamePk`, `liveFeed`, `currentPlay`, `lastTimecode`, `isPolling`, `gameFeedPitches`, `error`, returning the app to `GameSelect`.
+
+Watchability scores deliberately do **not** live in `gameStore`. `useWatchability` owns its own `scores`/`loading`/`stale` state local to `GameSelect`, the same pattern `usePlayerStats` already uses for `PitcherVsBatter` — the store holds cross-screen selection state, not per-fetch caches.
 
 ## 7. Sabermetric Computations
 
@@ -403,7 +474,9 @@ Deterministic QA entry point: `http://localhost:5173/?gamePk=746352` — a compl
 
 Deployment is Vercel, configured entirely by `vercel.json`: `framework: "vite"`, `buildCommand: "tsc -b && vite build"`, `outputDirectory: "dist"`, and a catch-all SPA rewrite of `/(.*)` to `/index.html` (required since there is no client-side router — the app is a single route with `?gamePk=` as its only query-string input).
 
-PWA behavior is configured in `vite.config.ts` via `vite-plugin-pwa`: `registerType: 'autoUpdate'`, manifest with `display: 'standalone'` and `orientation: 'portrait'`, and Workbox `NetworkFirst` runtime caching for `statsapi.mlb.com` (50 entries, 300s TTL) and `baseballsavant.mlb.com` (20 entries, 600s TTL).
+PWA behavior is configured in `vite.config.ts` via `vite-plugin-pwa`: `registerType: 'autoUpdate'`, manifest with `display: 'standalone'`, `id: '/'`, `scope: '/'`, `categories: ['sports']`, and a `shortcuts` entry ("Most watchable games" → `/?sort=watchability`); `orientation: 'portrait'` was removed because the app now has desktop layouts. Workbox gained `navigateFallback: 'index.html'` and `cleanupOutdatedCaches: true`, and a new **first** runtime-caching rule gives `/watchability.json` a `StaleWhileRevalidate` strategy (cacheName `mlb-watchability`, 4 entries, 86400s TTL) so ratings render instantly and survive offline. The two pre-existing `NetworkFirst` rules for `statsapi.mlb.com` (50 entries, 300s TTL) and `baseballsavant.mlb.com` (20 entries, 600s TTL) both gained `networkTimeoutSeconds: 4`, so they fall back to cache instead of hanging on dead-air mobile connections.
+
+**Watchability data pipeline.** `.github/workflows/watchability.yml` runs `scripts/build-watchability.mjs` on ubuntu-latest with Node 24, on two crons — `0 11 * * *` (07:00 ET, picks up the finished slate and updated Elo) and `0 16 * * *` (12:00 ET, picks up late-announced probable pitchers) — plus `workflow_dispatch` for manual runs. `permissions: contents: write`; `concurrency: { group: watchability, cancel-in-progress: false }` so overlapping runs queue instead of racing. It commits `public/watchability.json` and `public/elo-state.json` as `chore(data): refresh watchability ratings`, skipping the commit when nothing changed. Because the app-side formula lives entirely in `src/utils/watchability.ts`, retuning weights is a normal `git push` deploy — it never requires re-running this pipeline.
 
 ## 11. Known Limitations
 
@@ -424,3 +497,74 @@ PWA behavior is configured in `vite.config.ts` via `vite-plugin-pwa`: `registerT
 15. **`usePlayerStats` is called independently by four components** (`PitcherVsBatter`, `MatchupSubTab`, `PitchingSubTab`, `BattingSubTab`) with no shared cache. It is a plain `useState`/`useEffect` firing a ten-way `Promise.all`, each request individually `.catch()`-defaulted, so switching between the Pitcher vs Batter card strip and its sub-tabs re-requests the same batter/pitcher pair from scratch.
 16. **The recent-form span is global, not per-tab.** `recentFormGames` is a single `gameStore` field (default `7`) and both `PitchingSubTab` and `BattingSubTab` dispatch `setRecentFormGames` against it, so changing the span in one sub-tab silently changes it in the other.
 17. **No test framework, no client-side router, and no backend exist in this project**, by design; do not introduce any of the three without updating this document and `vercel.json`'s SPA rewrite assumption.
+18. **Manifest `screenshots` are still missing.** The repo-root `memo-desktop.png` (1280x4044) and `memo-mobile.png` (397x5288) are full-page captures whose aspect ratios exceed Chrome's 2.3 limit for install-prompt screenshots; properly-sized viewport captures are still needed to unlock the rich install prompt.
+19. **`registerType: 'autoUpdate'` still reloads silently mid-session.** An update toast, so the user knows a reload just happened, would be an improvement.
+20. **FanGraphs cannot be used as a watchability data source.** Their terms prohibit scraping and automated export, so SIERA, official wRC+, and Depth Charts projections are unavailable to the pipeline; every watchability input is derived from the MLB Stats API or computed locally in `scripts/build-watchability.mjs`.
+21. **The watchability formula is calibrated by construction, not yet validated against realised outcomes.** Weights were chosen deliberately, not fit to data. Backtesting pregame scores against actual Excitement Index for completed games is the natural next step, and has not been done.
+22. **The Elo constants in `build-watchability.mjs` are not a reproduction of FiveThirtyEight's MLB Elo.** FiveThirtyEight's MLB Elo is archived and its methodology page now redirects away; the constants here are informed by their published CSV columns but are this project's own choices.
+
+## 12. Watchability Score
+
+Every game card on `GameSelect` shows a 0-100 watchability score in a `ScoreRing` (DESIGN.md §5.14) at the right of the card. It answers one question: is this game worth watching? Before first pitch the score is predictive, built from team and pitcher quality; once the game starts it crossfades into a measure of actual, in-progress excitement. Users can sort the slate by Time or Watchability.
+
+**Architecture rule.** The nightly pipeline (`scripts/build-watchability.mjs`) emits inputs only — team ratings, pitcher ratings, Elo, stakes context. All scoring math lives in `src/utils/watchability.ts` and runs in the browser. This split means the formula can be retuned in a normal deploy; it never requires re-running the pipeline. Every league baseline (means and standard deviations for wRC+, FIP, ISO, and the rest) is computed nightly across all 30 teams — never hardcoded from outside literature — so the score is always calibrated against the current season, not a fixed historical bar.
+
+### 12.1 Pregame score
+
+`computePregameScore()` combines six components into a composite, then squashes it to 0-100 with `100 * sigmoid(1.15 * composite)`. Weights sum to 1.00:
+
+| Component | Weight | What it measures |
+|---|---|---|
+| Pitching | 0.27 | Starter quality, blended with recent form |
+| Offense | 0.20 | Team hitting production, park-adjusted |
+| Competitiveness | 0.18 | How close the game is expected to be |
+| Team quality | 0.14 | Overall team strength |
+| Stakes | 0.12 | Playoff race and rivalry context |
+| Bullpen | 0.09 | Relief pitching, weighted by blowout risk |
+
+- **Pitching (0.27).** Each starter is scored as `zInverted(FIP) * 0.6 + z(K%) * 0.4`, blended with recent form (last-5-starts Game Score v2, see section 12.3) at `formWeight = 0.35 * clamp01(startsSampled / 5)`. The two starters combine as `0.6 * max + 0.4 * min` — one ace is reason enough to watch, so the better arm counts for more than half. Falls back to team rotation FIP when no probable pitcher has been announced yet.
+- **Offense (0.20).** Mean of both teams' `z(wRC+) * 0.45 + z(ISO) * 0.30 + z(HR/G) * 0.25`, plus a park adjustment of `(parkFactor - 1) * 3`.
+- **Competitiveness (0.18).** `1 - 2 * |eloWinProbability - 0.5|`, z-scored. This peaks at a coin-flip matchup, because close games are what generate high-leverage innings.
+- **Team quality (0.14).** `z(elo) * 0.6 + z(winPct) * 0.4` per team, combined as `0.65 * mean + 0.35 * min` so one weak opponent still drags the score down, plus a nudge from each team's 10-game Elo trend.
+- **Stakes (0.12).** `raceLeverage = clamp01(1 - min(divisionGamesBack, wildCardGamesBack) / 8)`. The composite is `race * 0.35 + bye * 0.20 + byeDuel * 0.15 + rivalryRace * 0.20 + sameDivision * 0.10`, where `bye` captures both teams' contention for a top-two seed (a first-round bye). The whole component is gated by `urgency = seasonProgress^1.5`, so a September series matters far more than the same matchup in April.
+- **Bullpen (0.09).** `zInverted(bullpenFIP) * 0.65 + zInverted(blownSaveRate) * 0.35`, scaled by `blowoutRisk = 1 - sigmoid(competitivenessZ)`. A shaky bullpen costs the most when a blowout is likely and the least when the game is already close.
+
+### 12.2 Live score and the crossfade
+
+Once a game starts, `computeLiveScore()` takes over, weighted as `LIVE_WEIGHTS`: excitement index 0.40, leverage 0.30, closeness 0.20, drama 0.10.
+
+`computeExcitementIndex()` implements the Baseball-Reference Excitement Index: `sum(|WPA|) / plays * 1000`. Win probability added arrives from the API in percentage points, so it's divided by 100 before summing. Component z-scores use `EGI_MEAN 33` / `EGI_SD 15` (excitement), `LI_MEAN 1.0` / `LI_SD 0.8` (leverage), and `DRAMA_MEAN 70` / `DRAMA_SD 45` (drama). A `lateness = clamp(inning / 9, 0.2, 1.3)` multiplier makes late-game leverage count for more and keeps climbing into extra innings. `dramaZ` is averaged over the last 8 plays rather than the single most recent one, so a quiet groundout doesn't collapse the score mid-rally.
+
+The pregame and live scores never switch abruptly — they crossfade via `GameProgressState`: `preview` uses pure pregame (`liveWeight = 0`), `final` uses pure live (`liveWeight = 1`), and everything in between uses `liveWeight = clamp01(playCount / 45)`, reaching full weight around the sixth inning. The result is one number that stays meaningful throughout the game, without a noisy swing after the first few innings.
+
+### 12.3 Tiers
+
+`tierFor()` buckets the final score into a `WatchabilityTier`: `elite` (≥80), `great` (65-79), `good` (50-64), `average` (35-49), `skip` (<35). These drive both the `ScoreRing` stroke color and its accessible label (DESIGN.md §5.14).
+
+"Game Score v2" (Tango's version, used for recent starter form) is `40 + 2*outs + K - 2*BB - 2*H - 3*R - 6*HR`, computed over a pitcher's last 5 starts with linear recency weighting — the newest start counts 5x the oldest.
+
+### 12.4 Where the numbers come from
+
+`scripts/build-watchability.mjs` runs nightly (section 10) against the MLB Stats API (`https://statsapi.mlb.com/api/v1`):
+
+- `/teams?sportId=1` for the 30-team roster.
+- `/teams/stats?stats=season&group=hitting|pitching&sportId=1&season={yr}` — all 30 teams' hitting and pitching lines in one call each.
+- `/teams/stats?stats=statSplits&sitCodes=rp,sp&group=pitching&sportId=1&season={yr}` for the bullpen-vs-rotation FIP split. This bulk endpoint truncates near 50 rows, so the pipeline falls back to the per-team `/teams/{id}/stats?...` form for any team missing an `sp` or `rp` row.
+- `/standings?leagueId=103,104&season={yr}&standingsTypes=regularSeason` for games-back and stakes context.
+- The full `gameType=R` season schedule, replayed game-by-game to build Elo.
+- `/schedule?...&hydrate=probablePitcher,team` for the day's slate.
+- `/people/{id}/stats?stats=gameLog&group=pitching` per probable starter, for recent-form Game Score.
+
+All of it runs through a bounded-concurrency `mapLimit` helper (5 concurrent requests) with 3 retries and backoff. A verified run against a real slate produced `30 teams, 1911 completed games, 9 on slate`, with these league baselines: wRC+ mean 100.0 / sd 6.01, ISO .157 / .012, rotation FIP 4.264 / .448, bullpen FIP 4.215 / .388, blown-save rate .360 / .085, starter Game Score 50.82 / 6.00, Elo 1500 / 30.25, win% .4999 / .061.
+
+**Elo.** `ELO_START 1500`, `ELO_K 4`, `ELO_HFA 24`, `ELO_CARRYOVER 0.75` (teams regress 25% toward the mean at season rollover). K is small on purpose: a single MLB game is weak evidence — 4 Elo points is roughly a .0058 win-percentage shift, about 0.93 wins over a 162-game season. The margin-of-victory multiplier, `log(|margin| + 1) * (2.2 / (winnerEdge * 0.001 + 2.2))`, follows FiveThirtyEight's published approach to correct for favorite autocorrelation. There is deliberately **no pitcher-adjusted Elo**: starter quality is already its own weighted component above, so folding it into Elo would double-count it.
+
+**wRC+** is derived as `100 * (1 + (wOBA - lgWOBA) / (WOBA_SCALE * LEAGUE_R_PER_PA))`, algebraically identical to the canonical FanGraphs formula at a park factor of 1. Park factor is deliberately excluded here — the pregame scoring formula (12.1) applies its own park term, so folding one into wRC+ as well would apply it twice. wOBA itself uses linear weights uBB .69, HBP .72, 1B .89, 2B 1.27, 3B 1.62, HR 2.10, scaled by `WOBA_SCALE 1.24` against `LEAGUE_R_PER_PA 0.12`.
+
+**Live plays** come from `GET /v1/game/{gamePk}/winProbability` (section 4), polled by `useWatchability` every 30 seconds.
+
+### 12.5 Regenerating the data
+
+Run `node scripts/build-watchability.mjs [YYYY-MM-DD]` (date defaults to today) to write `public/watchability.json` and `public/elo-state.json` locally. In production this happens automatically via `.github/workflows/watchability.yml` (section 10); there is normally no need to run it by hand except for local QA of a specific date's slate.
+
+**This score has not been validated against realised outcomes.** The weights above are a calibrated-by-construction starting point, not a fit to historical Excitement Index data. See Known Limitations, items 21-22.
