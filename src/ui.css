@@ -35,6 +35,14 @@
   text-align: right;
 }
 
+.ui-stat__heading {
+  display: flex;
+  gap: var(--sp-2);
+  align-items: baseline;
+  justify-content: space-between;
+  width: 100%;
+}
+
 .ui-stat__label {
   font-size: var(--fs-label);
   font-weight: var(--fw-semibold);
@@ -84,6 +92,43 @@
 
 .ui-stat__value--empty {
   color: var(--c-ink-subtle);
+}
+
+.ui-stat[class*="ui-stat--percentile-"] {
+  padding: var(--sp-2);
+  background: color-mix(in srgb, var(--ui-stat-percentile) 10%, var(--c-bg));
+  border-left: var(--sp-1) solid color-mix(in srgb, var(--ui-stat-percentile) 65%, var(--c-ink));
+  border-radius: var(--radius-sm);
+}
+
+.ui-stat--percentile-1 {
+  --ui-stat-percentile: var(--c-heat-1);
+}
+
+.ui-stat--percentile-2 {
+  --ui-stat-percentile: var(--c-heat-2);
+}
+
+.ui-stat--percentile-3 {
+  --ui-stat-percentile: var(--c-heat-3);
+}
+
+.ui-stat--percentile-4 {
+  --ui-stat-percentile: var(--c-heat-4);
+}
+
+.ui-stat--percentile-5 {
+  --ui-stat-percentile: var(--c-heat-5);
+}
+
+.ui-stat__benchmark {
+  flex: 0 0 auto;
+  font-family: var(--font-num);
+  font-size: var(--fs-label);
+  font-weight: var(--fw-bold);
+  line-height: var(--lh-snug);
+  color: var(--c-ink);
+  font-variant-numeric: tabular-nums;
 }
 
 /* ===== StatGrid ========================================================== */

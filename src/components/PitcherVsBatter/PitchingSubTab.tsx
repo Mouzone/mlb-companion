@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactElement } from 'react'
-import { fetchGameLog } from '../../api/mlb'
+import { fetchCachedGameLog } from '../../api/playerStatsCache'
 import type { GameLogEntry, StatSplit } from '../../api/types'
 import { usePlayerStats } from '../../hooks/usePlayerStats'
 import { useGameStore } from '../../store/gameStore'
@@ -74,7 +74,7 @@ export function PitchingSubTab(): ReactElement {
     }
     let cancelled = false
     setLogLoading(true)
-    fetchGameLog(pitcherId, SEASON, 'pitching')
+    fetchCachedGameLog(pitcherId, SEASON, 'pitching')
       .then((entries) => {
         if (!cancelled) setLog(entries)
       })

@@ -1,17 +1,18 @@
 import type { ReactElement } from 'react'
-import { useEffect, useState } from 'react'
-import { fetchCareerStats } from '../../api/mlb'
+import { useState } from 'react'
 import { BattingSubTab } from './BattingSubTab'
 import { MatchupSubTab } from './MatchupSubTab'
 import { PitchingSubTab } from './PitchingSubTab'
 import { Segmented, SubTabNav } from '../ui'
-import type { CareerBatterStat, CareerPitcherStat, StatSplit } from '../../api/types'
+import type { StatSplit } from '../../api/types'
+import type { ActiveBenchmarkCohorts, PitcherRole } from '../../api/benchmarks'
 import { usePlayerStats } from '../../hooks/usePlayerStats'
+import { useStatBenchmarks } from '../../hooks/useStatBenchmarks'
+import { useCareerMatchupStats } from '../../hooks/useCareerMatchupStats'
 import { useGameStore } from '../../store/gameStore'
 import { PARK_FACTORS } from '../../utils/leagueConstants'
 import type { Cell, PlatoonBlock } from './PvbCards'
 import {
-  PvbCard,
   batterCareerCells,
   batterSeasonCells,
   extraStat,
@@ -19,8 +20,10 @@ import {
   pitcherSeasonCells,
   platoonCells,
 } from './PvbCards'
+import { PvbCard } from './PvbCard'
 import { splitCode, whole } from './PvbShared'
 import { parseStat } from '../../utils/sabermetrics'
+import { benchmarkBatterCells, benchmarkPitcherCells } from './PvbBenchmarks'
 
 type SubTab = 'matchup' | 'pitching' | 'batting'
 type Scope = 'season' | 'career'
@@ -56,11 +59,6 @@ function renderSubTab(tab: SubTab): ReactElement {
   }
 }
 
-/** Career responses share no discriminant field, so narrow on a pitching-only key. */
-function isCareerPitcher(stat: CareerBatterStat | CareerPitcherStat): stat is CareerPitcherStat {
-  return 'era' in stat
-}
-
 function findSplit(splits: readonly StatSplit[], code: string): StatSplit | null {
   return splits.find((split) => splitCode(split) === code) ?? null
 }
@@ -77,15 +75,24 @@ function strapOf(prefix: string, workload: string | null, games: number | null):
     .join(' \u00b7 ')
 }
 
+function roleOfPitcher(
+  pitcherId: number | null,
+  cohorts: ActiveBenchmarkCohorts | null,
+): PitcherRole | null {
+  if (pitcherId === null || cohorts === null) return null
+  if (cohorts.starters.some(({ playerId }) => playerId === pitcherId)) return 'starter'
+  if (cohorts.relievers.some(({ playerId }) => playerId === pitcherId)) return 'reliever'
+  return null
+}
+
 export function PitcherVsBatter(): ReactElement {
   const selectedGame = useGameStore((s) => s.selectedGame)
   const currentPlay = useGameStore((s) => s.currentPlay)
   const activeSubTab = useGameStore((s) => s.activeSubTab)
   const setActiveSubTab = useGameStore((s) => s.setActiveSubTab)
 
-  const [pitcherCareer, setPitcherCareer] = useState<CareerPitcherStat | null>(null)
-  const [batterCareer, setBatterCareer] = useState<CareerBatterStat | null>(null)
   const [scope, setScope] = useState<Scope>('season')
+  const { cohorts: benchmarkCohorts, loading: benchmarksLoading } = useStatBenchmarks(scope)
 
   const matchup = currentPlay?.matchup ?? null
   const batterId = matchup?.batter.id ?? null
@@ -93,49 +100,15 @@ export function PitcherVsBatter(): ReactElement {
     selectedGame?.teams.home.probablePitcher ?? selectedGame?.teams.away.probablePitcher ?? null
   const pitcher = matchup?.pitcher ?? probable ?? null
   const pitcherId = pitcher?.id ?? null
+  const { pitcher: pitcherCareer, batter: batterCareer } = useCareerMatchupStats(
+    pitcherId,
+    batterId,
+  )
 
   const { batterSeason, pitcherSeason, batterSplits, pitcherSplits, loading } = usePlayerStats(
     batterId,
     pitcherId,
   )
-
-  useEffect(() => {
-    let cancelled = false
-    if (pitcherId === null) {
-      setPitcherCareer(null)
-      return
-    }
-    fetchCareerStats(pitcherId, 'pitching')
-      .then((stat) => {
-        if (cancelled) return
-        setPitcherCareer(stat !== null && isCareerPitcher(stat) ? stat : null)
-      })
-      .catch(() => {
-        if (!cancelled) setPitcherCareer(null)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [pitcherId])
-
-  useEffect(() => {
-    let cancelled = false
-    if (batterId === null) {
-      setBatterCareer(null)
-      return
-    }
-    fetchCareerStats(batterId, 'hitting')
-      .then((stat) => {
-        if (cancelled) return
-        setBatterCareer(stat !== null && !isCareerPitcher(stat) ? stat : null)
-      })
-      .catch(() => {
-        if (!cancelled) setBatterCareer(null)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [batterId])
 
   const parkFactor = PARK_FACTORS[selectedGame?.teams.home.team.abbreviation ?? ''] ?? 1.0
   const season = scope === 'season'
@@ -144,20 +117,50 @@ export function PitcherVsBatter(): ReactElement {
   const hand = matchup?.pitchHand.code ?? 'R'
   const side = effectiveSide(matchup?.batSide.code ?? 'R', hand)
 
-  const pitcherCells: Cell[] = season
+  const rawPitcherCells: Cell[] = season
     ? pitcherSeason
       ? pitcherSeasonCells(pitcherSeason, parkFactor)
       : []
     : pitcherCareer
       ? pitcherCareerCells(pitcherCareer)
       : []
-  const batterCells: Cell[] = season
+  const rawBatterCells: Cell[] = season
     ? batterSeason
       ? batterSeasonCells(batterSeason)
       : []
     : batterCareer
       ? batterCareerCells(batterCareer)
       : []
+
+  const pitcherRole = roleOfPitcher(pitcherId, benchmarkCohorts)
+  const pitcherCells: Cell[] =
+    pitcherRole !== null && pitcherSeason !== null && benchmarkCohorts?.scope === 'season'
+      ? benchmarkPitcherCells(rawPitcherCells, pitcherSeason, {
+          scope: 'season',
+          role: pitcherRole,
+          cohort:
+            pitcherRole === 'starter' ? benchmarkCohorts.starters : benchmarkCohorts.relievers,
+        })
+      : pitcherRole !== null && pitcherCareer !== null && benchmarkCohorts?.scope === 'career'
+        ? benchmarkPitcherCells(rawPitcherCells, pitcherCareer, {
+            scope: 'career',
+            role: pitcherRole,
+            cohort:
+              pitcherRole === 'starter' ? benchmarkCohorts.starters : benchmarkCohorts.relievers,
+          })
+        : rawPitcherCells
+  const batterCells: Cell[] =
+    batterSeason !== null && benchmarkCohorts?.scope === 'season'
+      ? benchmarkBatterCells(rawBatterCells, batterSeason, {
+          scope: 'season',
+          cohort: benchmarkCohorts.batters,
+        })
+      : batterCareer !== null && benchmarkCohorts?.scope === 'career'
+        ? benchmarkBatterCells(rawBatterCells, batterCareer, {
+            scope: 'career',
+            cohort: benchmarkCohorts.batters,
+          })
+        : rawBatterCells
 
   // Both platoon blocks render or neither does, so the two cards stay exactly
   // the same height under `align-items: stretch` and neither grows a void.
@@ -220,7 +223,7 @@ export function PitcherVsBatter(): ReactElement {
             role="pitcher"
             cells={pitcherCells}
             platoon={pitcherPlatoon}
-            loading={loading}
+            loading={loading || benchmarksLoading}
           />
           <PvbCard
             personId={batterId ?? 0}
@@ -234,7 +237,7 @@ export function PitcherVsBatter(): ReactElement {
             role="batter"
             cells={batterCells}
             platoon={batterPlatoon}
-            loading={loading}
+            loading={loading || benchmarksLoading}
           />
         </div>
       </div>

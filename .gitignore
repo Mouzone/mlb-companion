@@ -27,3 +27,6 @@ dist-ssr
 .omo/
 .playwright-mcp/
 .vercel
+
+# Root-level QA screenshot artifacts
+/*.png

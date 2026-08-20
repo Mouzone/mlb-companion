@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactElement } from 'react'
-import { fetchCareerVsPlayer } from '../../api/mlb'
+import { fetchCachedCareerVsPlayer } from '../../api/playerStatsCache'
 import type { StatSplit, VsPlayerStat } from '../../api/types'
 import { usePlayerStats } from '../../hooks/usePlayerStats'
 import { useGameStore } from '../../store/gameStore'
@@ -85,7 +85,7 @@ export function MatchupSubTab(): ReactElement {
     }
     let cancelled = false
     setCareerStatus('loading')
-    fetchCareerVsPlayer(batterId, pitcherId)
+    fetchCachedCareerVsPlayer(batterId, pitcherId)
       .then((stat) => {
         if (cancelled) return
         setCareer(stat)

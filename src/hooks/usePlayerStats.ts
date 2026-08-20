@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useEffect, useState } from 'react'
 import {
   fetchSeasonStats,
   fetchPitchArsenal,
@@ -35,41 +35,42 @@ interface PlayerStatsData {
 
 const currentYear = new Date().getFullYear().toString()
 
+const EMPTY_PLAYER_STATS: PlayerStatsData = {
+  batterSeason: null,
+  pitcherSeason: null,
+  pitchArsenal: [],
+  batterHotCold: [],
+  pitcherHotCold: [],
+  batterSplits: [],
+  pitcherSplits: [],
+  gameLog: [],
+  vsPlayer: null,
+  savantData: [],
+  loading: false,
+}
+
+const playerStatsRequests = new Map<string, Promise<PlayerStatsData>>()
+
 export function usePlayerStats(
   batterId: number | null,
   pitcherId: number | null,
 ): PlayerStatsData {
-  const [data, setData] = useState<PlayerStatsData>({
-    batterSeason: null,
-    pitcherSeason: null,
-    pitchArsenal: [],
-    batterHotCold: [],
-    pitcherHotCold: [],
-    batterSplits: [],
-    pitcherSplits: [],
-    gameLog: [],
-    vsPlayer: null,
-    savantData: [],
-    loading: false,
-  })
+  const [data, setData] = useState<PlayerStatsData>(EMPTY_PLAYER_STATS)
 
-  const fetchAll = useCallback(async () => {
-    if (!batterId || !pitcherId) return
+  useEffect(() => {
+    if (batterId === null || pitcherId === null) {
+      setData(EMPTY_PLAYER_STATS)
+      return
+    }
+
+    let active = true
     setData((prev) => ({ ...prev, loading: true }))
 
-    try {
-      const [
-        batterSeason,
-        pitcherSeason,
-        pitchArsenal,
-        batterHotCold,
-        pitcherHotCold,
-        batterSplits,
-        pitcherSplits,
-        gameLog,
-        vsPlayer,
-        savantData,
-      ] = await Promise.all([
+    const cacheKey = `${currentYear}:${batterId}:${pitcherId}`
+    const cachedRequest = playerStatsRequests.get(cacheKey)
+    const request =
+      cachedRequest ??
+      Promise.all([
         fetchSeasonStats(batterId, 'hitting', currentYear).catch(() => null),
         fetchSeasonStats(pitcherId, 'pitching', currentYear).catch(() => null),
         fetchPitchArsenal(pitcherId, currentYear).catch(() => []),
@@ -80,29 +81,51 @@ export function usePlayerStats(
         fetchGameLog(batterId, currentYear).catch(() => []),
         fetchVsPlayer(batterId, pitcherId, currentYear).catch(() => null),
         fetchSavantBattedBalls(batterId, currentYear, 'batter').catch(() => []),
-      ])
+      ]).then(
+        ([
+          batterSeason,
+          pitcherSeason,
+          pitchArsenal,
+          batterHotCold,
+          pitcherHotCold,
+          batterSplits,
+          pitcherSplits,
+          gameLog,
+          vsPlayer,
+          savantData,
+        ]): PlayerStatsData => ({
+          batterSeason: batterSeason as SeasonStat | null,
+          pitcherSeason: pitcherSeason as PitcherSeasonStat | null,
+          pitchArsenal,
+          batterHotCold,
+          pitcherHotCold,
+          batterSplits,
+          pitcherSplits,
+          gameLog: gameLog.slice(0, 5),
+          vsPlayer,
+          savantData: savantData.filter((result) => result.hc_x && result.hc_y),
+          loading: false,
+        }),
+      )
 
-      setData({
-        batterSeason: batterSeason as SeasonStat | null,
-        pitcherSeason: pitcherSeason as PitcherSeasonStat | null,
-        pitchArsenal,
-        batterHotCold,
-        pitcherHotCold,
-        batterSplits,
-        pitcherSplits,
-        gameLog: gameLog.slice(0, 5),
-        vsPlayer,
-        savantData: savantData.filter((r: SavantBattedBall) => r.hc_x && r.hc_y),
-        loading: false,
-      })
-    } catch {
-      setData((prev) => ({ ...prev, loading: false }))
+    if (cachedRequest === undefined) {
+      playerStatsRequests.set(cacheKey, request)
+    }
+
+    void request.then(
+      (result) => {
+        if (active) setData(result)
+      },
+      () => {
+        playerStatsRequests.delete(cacheKey)
+        if (active) setData((prev) => ({ ...prev, loading: false }))
+      },
+    )
+
+    return () => {
+      active = false
     }
   }, [batterId, pitcherId])
-
-  useEffect(() => {
-    fetchAll()
-  }, [fetchAll])
 
   return data
 }

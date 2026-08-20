@@ -77,6 +77,12 @@ Interactive and identity color. Derived from MLB navy `#041E42`.
 > **Rule:** a stat is colored *only* when it is being compared against a benchmark. A plain `.000`
 > is `--c-ink`, never red. Red means "worse than league average", not "small number".
 
+Percentile-ranked player stats are the explicit exception to the semantic red/green convention:
+they use the ordered heat ramp below, with blue = lower-performing and red = higher-performing.
+Every heat-coded stat must also print its `P00–P100` rank and expose the cohort in an accessible
+label, so color is never the only signal. Semantic alerts and unranked comparisons keep the
+positive/negative colors above.
+
 ### 2.4 Data visualization
 
 Heat ramp — must read on white, and must remain distinguishable in grayscale.
@@ -235,7 +241,14 @@ The atom of the entire app.
 - Anatomy: label (`--fs-label`, 500, `--c-ink-muted`, uppercase, `--tracking-caps`) above value
   (`--fs-data`, 600, `--c-ink`, `--font-num`, `tabular-nums`).
 - States: `default` · `positive` (value `--c-positive`) · `negative` (value `--c-negative`) ·
-  `empty` (value renders `—` in `--c-ink-subtle`) · `loading` (skeleton bar at value height).
+  `percentile-1…5` (`--c-heat-1…5` surface accent plus a visible `P00–P100` rank) · `empty`
+  (value renders `—` in `--c-ink-subtle`) · `loading` (skeleton bar at value height).
+- Percentile bands: P00–19 = heat 1, P20–39 = heat 2, P40–59 = heat 3, P60–79 = heat 4,
+  P80–100 = heat 5. The rank is always oriented so a larger percentile means a better outcome,
+  including metrics where lower raw values are favorable.
+- Benchmark metadata names both population and sample size, for example “P87 among 164 active
+  MLB starting pitchers (season).” Starter/bullpen identity follows current-season usage and is
+  reused for career comparisons; batter cohorts contain active MLB hitters only.
 - Rule: label and value share a left edge. In a grid, all values share a baseline.
 
 ### 5.2 `StatGrid` — responsive stat matrix

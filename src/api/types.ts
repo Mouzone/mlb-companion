@@ -152,6 +152,8 @@ export interface PitcherSeasonStat {
   earnedRuns: number
   avg: string
   gamesPlayed: number
+  gamesStarted?: number
+  gamesPitched?: number
   homeRuns: number
   hitBatsmen?: number
   battersFaced?: number
@@ -385,6 +387,8 @@ export interface CareerPitcherStat {
   homeRuns: number
   hitBatsmen: number
   gamesPlayed: number
+  gamesStarted?: number
+  gamesPitched?: number
   avg: string
   battersFaced?: number
   fip?: number
