@@ -15,8 +15,18 @@ export default defineConfig({
         theme_color: '#041e42',
         background_color: '#ffffff',
         display: 'standalone',
-        orientation: 'portrait',
         start_url: '/',
+        id: '/',
+        scope: '/',
+        categories: ['sports'],
+        shortcuts: [
+          {
+            name: 'Most watchable games',
+            short_name: 'Most watchable',
+            url: '/?sort=watchability',
+            description: "Today's slate ranked by watchability",
+          },
+        ],
         // `any` and `maskable` need separate artwork: `any` is full-bleed, while
         // `maskable` is cropped to an 80%-diameter safe circle by Android launchers.
         // One entry declaring both purposes gets either shrunk or cropped.
@@ -34,12 +44,29 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,ico}'],
+        navigateFallback: 'index.html',
+        cleanupOutdatedCaches: true,
         runtimeCaching: [
+          // Ratings are a whole-slate snapshot rebuilt nightly, so a cached copy is
+          // never meaningfully wrong within a day. Serving it from cache first is
+          // what lets the slate render scores instantly and with no signal at all.
+          {
+            urlPattern: ({ url }) => url.pathname === '/watchability.json',
+            handler: 'StaleWhileRevalidate',
+            options: {
+              cacheName: 'mlb-watchability',
+              expiration: { maxEntries: 4, maxAgeSeconds: 86400 },
+            },
+          },
+          // Without a timeout these hang on the dead-air mobile connections this app
+          // is actually used on (ballpark wifi, cellular) instead of falling back to
+          // cache, so the fallback that justifies NetworkFirst never fires.
           {
             urlPattern: /^https:\/\/statsapi\.mlb\.com\/.*/,
             handler: 'NetworkFirst',
             options: {
               cacheName: 'mlb-statsapi',
+              networkTimeoutSeconds: 4,
               expiration: { maxEntries: 50, maxAgeSeconds: 300 },
             },
           },
@@ -48,6 +75,7 @@ export default defineConfig({
             handler: 'NetworkFirst',
             options: {
               cacheName: 'mlb-savant',
+              networkTimeoutSeconds: 4,
               expiration: { maxEntries: 20, maxAgeSeconds: 600 },
             },
           },
