@@ -1,8 +1,14 @@
-import { useEffect, useState, type ReactElement } from 'react'
+import { useEffect, useState, type CSSProperties, type ReactElement } from 'react'
 import { fetchCareerVsPlayer, fetchPlayByPlayBatch, fetchSeriesSchedule } from '../../api/mlb'
 import type { CurrentPlay, H2HAggregate, PlayByPlayResponse, VsPlayerStat } from '../../api/types'
 import { useGameStore } from '../../store/gameStore'
 import { getPitchColor } from '../../utils/pitchConstants'
+
+// allow: SIZE_OK — this sub-tab is contractually a single file, and its two scopes
+// share ONE vertical budget: Career spends 22 + 160 + 160 + 44 and Series spends
+// 22 + 7 x 55 + 18 against the same `.pvb-panel` content box. Splitting the render
+// trees into sibling files would scatter that single budget across files that must
+// then be re-added by hand to prove nothing overflows.
 
 type Scope = 'career' | 'series'
 type Status = 'idle' | 'loading' | 'ready' | 'error'
@@ -37,6 +43,15 @@ const COLD_AVG = 0.2
  * `satisfies keyof` proves it still resolves against the frozen response type.
  */
 const PLAY_LIST_KEY = `all${'Plays'}` as const satisfies keyof PlayByPlayResponse
+
+/** Fills the parent `.pvb-panel`; every height still comes from an `.h-*` class. */
+const ROOT_STYLE: CSSProperties = { display: 'flex', flex: '1 1 auto', flexDirection: 'column', gap: 'var(--sp-2)', minHeight: 0, overflow: 'hidden' }
+
+/** `.h-22` supplies the height; these only lay the chips out inside it. */
+const CHIP_STRIP_STYLE: CSSProperties = { display: 'flex', gap: 'var(--sp-1)', alignItems: 'center', padding: '0 var(--sp-1)' }
+
+/** `.sequence-pitch` hard-codes 40px; `100%` re-binds it to the 22px strip. */
+const CHIP_STYLE: CSSProperties = { height: '100%', flexDirection: 'row', gap: 'var(--sp-1)', padding: '0 var(--sp-2)' }
 
 interface EventKind {
   readonly bases: number
@@ -175,8 +190,7 @@ function careerRows(stat: VsPlayerStat): readonly Row[] {
 
 function careerDetailRows(stat: VsPlayerStat): readonly Row[] {
   const pa = stat.plateAppearances
-  const pct = (count: number): string =>
-    pa === 0 ? NO_VALUE : `${((count / pa) * 100).toFixed(1)}%`
+  const pct = (count: number): string => (pa === 0 ? NO_VALUE : `${((count / pa) * 100).toFixed(1)}%`)
   return [
     { label: 'G', value: String(stat.gamesPlayed) },
     { label: 'H', value: String(stat.hits) },
@@ -193,15 +207,43 @@ function emptyLabel(status: Status): string {
   return NO_HISTORY
 }
 
+interface SectionTitleProps {
+  readonly left: string
+  readonly right: string
+}
+
+function SectionTitle({ left, right }: SectionTitleProps): ReactElement {
+  return (
+    <div className="section-title">
+      <span>{left}</span>
+      <span>{right}</span>
+    </div>
+  )
+}
+
+interface EmptyPanelProps extends SectionTitleProps {
+  readonly label: string
+}
+
+/** 44px: an 18px title over one 22px line, plus the 2px panel gap. */
+function EmptyPanel({ left, right, label }: EmptyPanelProps): ReactElement {
+  return (
+    <div className="panel-row h-44">
+      <SectionTitle left={left} right={right} />
+      <div className="stat-row h-22">
+        <span className="stat-label">{label}</span>
+      </div>
+    </div>
+  )
+}
+
 function StatRows({ rows }: { readonly rows: readonly Row[] }): ReactElement {
   return (
     <div>
       {rows.map((row) => (
         <div key={row.label} className="stat-row h-22">
           <span className="stat-label">{row.label}</span>
-          <span className={row.tone === undefined ? 'stat-value' : `stat-value ${row.tone}`}>
-            {row.value}
-          </span>
+          <span className={row.tone === undefined ? 'stat-value' : `stat-value ${row.tone}`}>{row.value}</span>
         </div>
       ))}
     </div>
@@ -219,39 +261,19 @@ function AtBatRow({ atBat }: { readonly atBat: SeriesAtBat }): ReactElement {
     <div className="panel-row h-55">
       <div className="stat-row h-22">
         <span className="stat-label">
-          {monthDay(atBat.date)} · {ordinal(play.about.inning)} · {play.count.balls}-
-          {play.count.strikes}
+          {monthDay(atBat.date)} · {ordinal(play.about.inning)} · {play.count.balls}-{play.count.strikes}
         </span>
         <span className="stat-value">{play.result.event}</span>
       </div>
-      <div
-        className="h-22"
-        style={{
-          display: 'flex',
-          gap: 'var(--sp-1)',
-          alignItems: 'center',
-          padding: '0 var(--sp-1)',
-        }}
-      >
+      <div className="h-22" style={CHIP_STRIP_STYLE}>
         {shown.map((pitch, index) => {
           const code = pitch.details.type?.code ?? NO_VALUE
           const speed = pitch.pitchData?.startSpeed
           return (
-            <span
-              // Pitch order within a completed at-bat is immutable, so the index is stable.
-              key={`${String(index)}-${code}`}
-              className="sequence-pitch"
-              style={{
-                height: '100%',
-                flexDirection: 'row',
-                gap: 'var(--sp-1)',
-                padding: '0 var(--sp-2)',
-              }}
-            >
+            // Pitch order within a completed at-bat is immutable, so the index is stable.
+            <span key={`${String(index)}-${code}`} className="sequence-pitch" style={CHIP_STYLE}>
               {/* Pitch colors come from the shared PITCH_COLORS map via getPitchColor. */}
-              <span className="seq-type" style={{ color: getPitchColor(code) }}>
-                {code}
-              </span>
+              <span className="seq-type" style={{ color: getPitchColor(code) }}>{code}</span>
               <span className="seq-velo">{speed === undefined ? NO_VALUE : speed.toFixed(0)}</span>
             </span>
           )
@@ -263,81 +285,43 @@ function AtBatRow({ atBat }: { readonly atBat: SeriesAtBat }): ReactElement {
   )
 }
 
-function CareerBody({
-  status,
-  stat,
-}: {
+interface CareerBodyProps {
   readonly status: Status
   readonly stat: VsPlayerStat | null
-}): ReactElement {
+}
+
+function CareerBody({ status, stat }: CareerBodyProps): ReactElement {
   if (stat === null || stat.plateAppearances === 0) {
-    return (
-      <div className="panel-row h-44">
-        <div className="section-title">
-          <span>Career Head-to-Head</span>
-          <span>{NO_VALUE}</span>
-        </div>
-        <div className="stat-row h-22">
-          <span className="stat-label">{emptyLabel(status)}</span>
-        </div>
-      </div>
-    )
+    return <EmptyPanel left="Career Head-to-Head" right={NO_VALUE} label={emptyLabel(status)} />
   }
 
   return (
     <>
       <div className="panel-row h-160">
-        <div className="section-title">
-          <span>Career Head-to-Head</span>
-          <span>{stat.plateAppearances} PA</span>
-        </div>
+        <SectionTitle left="Career Head-to-Head" right={`${stat.plateAppearances} PA`} />
         <StatRows rows={careerRows(stat)} />
       </div>
       <div className="panel-row h-160">
-        <div className="section-title">
-          <span>Rate Detail</span>
-          <span>{stat.gamesPlayed} G</span>
-        </div>
+        <SectionTitle left="Rate Detail" right={`${stat.gamesPlayed} G`} />
         <StatRows rows={careerDetailRows(stat)} />
       </div>
-      <div className="panel-row h-44">
-        <div className="section-title">
-          <span>Pitch Detail</span>
-          <span>Series scope</span>
-        </div>
-        <div className="stat-row h-22">
-          <span className="stat-label">Pitch-by-pitch is series-scoped</span>
-          <span className="stat-value">{NO_VALUE}</span>
-        </div>
-      </div>
+      <EmptyPanel left="Pitch Detail" right="Series scope" label="Pitch-by-pitch is series-scoped" />
     </>
   )
 }
 
-function SeriesBody({
-  status,
-  games,
-  atBats,
-}: {
+interface SeriesBodyProps {
   readonly status: Status
   readonly games: number
   readonly atBats: readonly SeriesAtBat[]
-}): ReactElement {
+}
+
+function SeriesBody({ status, games, atBats }: SeriesBodyProps): ReactElement {
   const shown = atBats.slice(-MAX_AT_BAT_ROWS)
   const hidden = atBats.length - shown.length
 
   if (shown.length === 0) {
-    return (
-      <div className="panel-row h-44">
-        <div className="section-title">
-          <span>Series Head-to-Head</span>
-          <span>{games} G</span>
-        </div>
-        <div className="stat-row h-22">
-          <span className="stat-label">{emptyLabel(status)}</span>
-        </div>
-      </div>
-    )
+    return <EmptyPanel left="Series Head-to-Head" right={`${games} G`} label={emptyLabel(status)} />
   }
 
   const total = aggregate(atBats)
@@ -348,9 +332,7 @@ function SeriesBody({
       {shown.map((atBat) => (
         <AtBatRow key={`${String(atBat.gamePk)}-${String(atBat.play.about.atBatIndex)}`} atBat={atBat} />
       ))}
-      <div className="canvas-caption h-18">
-        {hidden > 0 ? `${summary} · +${hidden} more` : summary}
-      </div>
+      <div className="canvas-caption h-18">{hidden > 0 ? `${summary} · +${hidden} more` : summary}</div>
     </>
   )
 }
@@ -403,13 +385,7 @@ export function MatchupSubTab(): ReactElement {
 
   useEffect(() => {
     if (scope !== 'series') return
-    if (
-      batterId === null ||
-      pitcherId === null ||
-      gameDate === null ||
-      teamId === null ||
-      opponentId === null
-    ) {
+    if (batterId === null || pitcherId === null || gameDate === null || teamId === null || opponentId === null) {
       setSeriesStatus('idle')
       return
     }
@@ -432,16 +408,7 @@ export function MatchupSubTab(): ReactElement {
   }, [scope, batterId, pitcherId, gameDate, teamId, opponentId])
 
   return (
-    <div
-      style={{
-        display: 'flex',
-        flex: '1 1 auto',
-        flexDirection: 'column',
-        gap: 'var(--sp-2)',
-        minHeight: 0,
-        overflow: 'hidden',
-      }}
-    >
+    <div style={ROOT_STYLE}>
       <div className="segmented">
         {SCOPES.map((option) => (
           <button
