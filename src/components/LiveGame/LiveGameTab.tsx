@@ -1,5 +1,6 @@
 import type { ReactElement } from 'react'
 import { useGameStore } from '../../store/gameStore'
+import { useLiveFeed } from '../../hooks/useLiveFeed'
 import { LiveAtBat } from '../LiveAtBat/LiveAtBat'
 import { BatterGameSubTab } from './BatterGameSubTab'
 import { PitcherGameSubTab } from './PitcherGameSubTab'
@@ -40,6 +41,9 @@ function renderSubTab(subTab: LiveSubTab): ReactElement {
  * ABOVE `.sub-tab-panel`; `--content-h` (679px) already excludes both bars.
  */
 export function LiveGameTab(): ReactElement {
+  // Called for its polling side effect; unmounting this tab stops the interval.
+  useLiveFeed()
+
   const liveSubTab = useGameStore((s) => s.liveSubTab)
   const setLiveSubTab = useGameStore((s) => s.setLiveSubTab)
 
