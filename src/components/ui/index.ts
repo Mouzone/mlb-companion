@@ -41,3 +41,6 @@ export type { EmptyPanelProps, SkeletonProps } from './EmptyPanel'
 
 export { Icon } from './Icon'
 export type { IconProps, IconName } from './Icon'
+
+export { ScoreRing } from './ScoreRing'
+export type { ScoreRingProps, ScoreRingSize } from './ScoreRing'

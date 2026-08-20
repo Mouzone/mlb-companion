@@ -600,6 +600,80 @@
   color: currentcolor;
 }
 
+/* ===== ScoreRing ========================================================= */
+/* §5.14 — the numeral is a grid-stacked sibling of the SVG rather than a
+   foreignObject, so it inherits normal font tokens and stays selectable. */
+
+.ui-ring {
+  display: inline-grid;
+  flex: 0 0 auto;
+  place-items: center;
+}
+
+.ui-ring__svg,
+.ui-ring__value {
+  grid-area: 1 / 1;
+}
+
+/* Rotate the painted arc to start at 12 o'clock; SVG strokes begin at 3. */
+.ui-ring__svg {
+  transform: rotate(-90deg);
+}
+
+.ui-ring__track {
+  stroke: var(--c-heat-empty);
+}
+
+.ui-ring__fill {
+  stroke: currentcolor;
+  transition: stroke-dashoffset var(--dur-base) var(--ease-out);
+}
+
+.ui-ring__value {
+  font-family: var(--font-num);
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--fw-semibold);
+  color: var(--c-ink);
+}
+
+.ui-ring--sm .ui-ring__value {
+  font-size: var(--fs-label);
+}
+
+.ui-ring--md .ui-ring__value {
+  font-size: var(--fs-data);
+}
+
+.ui-ring--lg .ui-ring__value {
+  font-size: var(--fs-display);
+  font-weight: var(--fw-bold);
+  letter-spacing: var(--tracking-tight);
+}
+
+/* Tier hue rides the stroke only. §2.3: colour marks a benchmark comparison,
+   and these thresholds are the benchmark. The numeral keeps --c-ink because
+   the warm tiers drop below 3:1 on white at this size. */
+
+.ui-ring--elite {
+  color: var(--c-heat-5);
+}
+
+.ui-ring--great {
+  color: var(--c-heat-4);
+}
+
+.ui-ring--good {
+  color: var(--c-warn);
+}
+
+.ui-ring--average {
+  color: var(--c-heat-1);
+}
+
+.ui-ring--skip {
+  color: var(--c-ink-muted);
+}
+
 /* ===== Reduced motion ==================================================== */
 /* DESIGN.md §4.4 / §7 — every primitive animation is nulled, not merely
    shortened, so no residual movement survives the user's preference. */
@@ -608,6 +682,10 @@
   .ui-tab,
   .ui-sub-tab,
   .ui-segmented__option {
+    transition: none;
+  }
+
+  .ui-ring__fill {
     transition: none;
   }
 
