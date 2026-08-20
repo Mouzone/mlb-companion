@@ -1,5 +1,9 @@
+import type { ReactElement } from 'react'
 import { useEffect, useRef, useState } from 'react'
 import { fetchCareerStats } from '../../api/mlb'
+import { BattingSubTab } from './BattingSubTab'
+import { MatchupSubTab } from './MatchupSubTab'
+import { PitchingSubTab } from './PitchingSubTab'
 import type {
   CareerBatterStat,
   CareerPitcherStat,
@@ -36,6 +40,17 @@ const SUB_TABS: { id: SubTab; label: string }[] = [
   { id: 'pitching', label: 'Pitching' },
   { id: 'batting', label: 'Batting' },
 ]
+
+function renderSubTab(tab: SubTab): ReactElement {
+  switch (tab) {
+    case 'matchup':
+      return <MatchupSubTab />
+    case 'pitching':
+      return <PitchingSubTab />
+    case 'batting':
+      return <BattingSubTab />
+  }
+}
 
 interface StatCell {
   label: string
@@ -338,7 +353,7 @@ export function PitcherVsBatter() {
         ))}
       </div>
 
-      <div className="pvb-panel" />
+      <div className="pvb-panel">{renderSubTab(activeSubTab)}</div>
     </div>
   )
 }
