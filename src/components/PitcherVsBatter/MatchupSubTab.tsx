@@ -22,14 +22,10 @@ const SCOPES: readonly { readonly id: Scope; readonly label: string }[] = [
 const NO_HISTORY = 'No matchup history'
 const NO_VALUE = '—'
 
-/**
- * Series list budget. The `.pvb-panel` content box is its height minus 12px of
- * padding; the scope toggle (22) plus the summary caption (18) plus eight 4px
- * flex gaps leave room for exactly seven 55px rows. An eighth row overflows.
- */
+/** The panel scrolls, so this caps for glanceability, not for a height budget. */
 const MAX_AT_BAT_ROWS = 7
 
-/** A 22px chip strip on a 390px screen clips past eight chips. */
+/** A chip strip on a 390px screen runs out of width past eight chips. */
 const MAX_CHIPS = 8
 
 /** Conventional batting-average reading, used only to tint the rendered value. */
@@ -44,14 +40,13 @@ const COLD_AVG = 0.2
  */
 const PLAY_LIST_KEY = `all${'Plays'}` as const satisfies keyof PlayByPlayResponse
 
-/** Fills the parent `.pvb-panel`; every height still comes from an `.h-*` class. */
-const ROOT_STYLE: CSSProperties = { display: 'flex', flex: '1 1 auto', flexDirection: 'column', gap: 'var(--sp-2)', minHeight: 0, overflow: 'hidden' }
+/** Pass-through stack inside `.pvb-panel`. It must NOT clip or shrink: the panel
+ *  is the screen's only scroll owner (DESIGN.md §6.1). */
+const ROOT_STYLE: CSSProperties = { display: 'flex', flexDirection: 'column', gap: 'var(--sp-4)', minWidth: 0 }
 
-/** `.h-22` supplies the height; these only lay the chips out inside it. */
-const CHIP_STRIP_STYLE: CSSProperties = { display: 'flex', gap: 'var(--sp-1)', alignItems: 'center', padding: '0 var(--sp-1)' }
+const CHIP_STRIP_STYLE: CSSProperties = { display: 'flex', flexWrap: 'wrap', gap: 'var(--sp-2)', alignItems: 'center' }
 
-/** `.sequence-pitch` hard-codes 40px; `100%` re-binds it to the 22px strip. */
-const CHIP_STYLE: CSSProperties = { height: '100%', flexDirection: 'row', gap: 'var(--sp-1)', padding: '0 var(--sp-2)' }
+const CHIP_STYLE: CSSProperties = { flexDirection: 'row', gap: 'var(--sp-2)' }
 
 interface EventKind {
   readonly bases: number
@@ -225,12 +220,11 @@ interface EmptyPanelProps extends SectionTitleProps {
   readonly label: string
 }
 
-/** 44px: an 18px title over one 22px line, plus the 2px panel gap. */
 function EmptyPanel({ left, right, label }: EmptyPanelProps): ReactElement {
   return (
-    <div className="panel-row h-44">
+    <div className="panel-row">
       <SectionTitle left={left} right={right} />
-      <div className="stat-row h-22">
+      <div className="stat-row">
         <span className="stat-label">{label}</span>
       </div>
     </div>
@@ -241,7 +235,7 @@ function StatRows({ rows }: { readonly rows: readonly Row[] }): ReactElement {
   return (
     <div>
       {rows.map((row) => (
-        <div key={row.label} className="stat-row h-22">
+        <div key={row.label} className="stat-row">
           <span className="stat-label">{row.label}</span>
           <span className={row.tone === undefined ? 'stat-value' : `stat-value ${row.tone}`}>{row.value}</span>
         </div>
@@ -250,7 +244,6 @@ function StatRows({ rows }: { readonly rows: readonly Row[] }): ReactElement {
   )
 }
 
-/** 55px: a 22px identity line over a 22px pitch strip, plus the 2px panel gap. */
 function AtBatRow({ atBat }: { readonly atBat: SeriesAtBat }): ReactElement {
   const { play } = atBat
   const pitches = play.playEvents.filter((event) => event.isPitch)
@@ -258,14 +251,14 @@ function AtBatRow({ atBat }: { readonly atBat: SeriesAtBat }): ReactElement {
   const clipped = pitches.length - shown.length
 
   return (
-    <div className="panel-row h-55">
-      <div className="stat-row h-22">
+    <div className="panel-row">
+      <div className="stat-row">
         <span className="stat-label">
           {monthDay(atBat.date)} · {ordinal(play.about.inning)} · {play.count.balls}-{play.count.strikes}
         </span>
         <span className="stat-value">{play.result.event}</span>
       </div>
-      <div className="h-22" style={CHIP_STRIP_STYLE}>
+      <div style={CHIP_STRIP_STYLE}>
         {shown.map((pitch, index) => {
           const code = pitch.details.type?.code ?? NO_VALUE
           const speed = pitch.pitchData?.startSpeed
@@ -297,11 +290,11 @@ function CareerBody({ status, stat }: CareerBodyProps): ReactElement {
 
   return (
     <>
-      <div className="panel-row h-160">
+      <div className="panel-row">
         <SectionTitle left="Career Head-to-Head" right={`${stat.plateAppearances} PA`} />
         <StatRows rows={careerRows(stat)} />
       </div>
-      <div className="panel-row h-160">
+      <div className="panel-row">
         <SectionTitle left="Rate Detail" right={`${stat.gamesPlayed} G`} />
         <StatRows rows={careerDetailRows(stat)} />
       </div>
@@ -332,7 +325,7 @@ function SeriesBody({ status, games, atBats }: SeriesBodyProps): ReactElement {
       {shown.map((atBat) => (
         <AtBatRow key={`${String(atBat.gamePk)}-${String(atBat.play.about.atBatIndex)}`} atBat={atBat} />
       ))}
-      <div className="canvas-caption h-18">{hidden > 0 ? `${summary} · +${hidden} more` : summary}</div>
+      <div className="canvas-caption">{hidden > 0 ? `${summary} · +${hidden} more` : summary}</div>
     </>
   )
 }

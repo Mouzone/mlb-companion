@@ -2,6 +2,7 @@ import type { ReactElement } from 'react'
 import { useGameStore } from '../../store/gameStore'
 import { useLiveFeed } from '../../hooks/useLiveFeed'
 import { LiveAtBat } from '../LiveAtBat/LiveAtBat'
+import { SubTabNav } from '../ui'
 import { BatterGameSubTab } from './BatterGameSubTab'
 import { PitcherGameSubTab } from './PitcherGameSubTab'
 
@@ -17,6 +18,11 @@ const SUB_TABS: readonly SubTabDescriptor[] = [
   { id: 'batterGame', label: 'Batter Game' },
   { id: 'pitcherGame', label: 'Pitcher Game' },
 ]
+
+/** SubTabNav reports a plain `string`; this narrows it back without a cast. */
+function isLiveSubTab(value: string): value is LiveSubTab {
+  return SUB_TABS.some((tab) => tab.id === value)
+}
 
 function assertNever(value: never): never {
   throw new Error(`Unhandled live sub-tab: ${String(value)}`)
@@ -36,9 +42,9 @@ function renderSubTab(subTab: LiveSubTab): ReactElement {
 }
 
 /**
- * Live Game tab shell. Owns the `.tab-content` flex root (719px) directly under
- * `.tab-bar`, so App.tsx must NOT wrap it. The 40px `.sub-tab-nav` is a sibling
- * ABOVE `.sub-tab-panel`; `--content-h` (679px) already excludes both bars.
+ * Live Game tab shell. Owns the `.tab-content` flex root directly under the
+ * TabBar, so App.tsx must NOT wrap it. The SubTabNav is fixed chrome and a
+ * sibling ABOVE `.sub-tab-panel`, which is this screen's only scroll owner.
  */
 export function LiveGameTab(): ReactElement {
   // Called for its polling side effect; unmounting this tab stops the interval.
@@ -49,18 +55,13 @@ export function LiveGameTab(): ReactElement {
 
   return (
     <div className="tab-content">
-      <div className="sub-tab-nav">
-        {SUB_TABS.map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            className={liveSubTab === tab.id ? 'active' : ''}
-            onClick={() => setLiveSubTab(tab.id)}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
+      <SubTabNav
+        tabs={SUB_TABS}
+        activeId={liveSubTab}
+        onSelect={(id) => {
+          if (isLiveSubTab(id)) setLiveSubTab(id)
+        }}
+      />
       <div className="sub-tab-panel">{renderSubTab(liveSubTab)}</div>
     </div>
   )

@@ -171,11 +171,8 @@ function StatCells({ cells }: { readonly cells: readonly StatCell[] }): ReactEle
 
 /**
  * "Pitcher Game" sub-tab body. Renders as a fragment: LiveGameTab owns the
- * surrounding `.sub-tab-panel`, sized at var(--content-h) — 679px, with the
- * 44px tab bar and 40px sub-tab nav already netted out of that token.
- *
- * Row budget — 190 (mix + zone) + 160 (workload) + 120 (efficiency) = 470px,
- * plus 2 x 4px panel gaps and 2 x 6px panel padding = 490px of the 679px box.
+ * surrounding `.sub-tab-panel`, which is the screen's scroll owner. Rows size
+ * to their content — there is no vertical budget to spend (DESIGN.md §6.3).
  */
 export function PitcherGameSubTab(): ReactElement {
   const liveFeed = useGameStore((s) => s.liveFeed)
@@ -231,10 +228,7 @@ export function PitcherGameSubTab(): ReactElement {
 
   return (
     <>
-      <div
-        className="h-190"
-        style={{ display: 'flex', gap: 'var(--sp-4)', alignItems: 'center' }}
-      >
+      <div style={{ display: 'flex', gap: 'var(--sp-4)', alignItems: 'center' }}>
         <div className="arsenal-canvas">
           <ArsenalBars
             arsenal={[...game.arsenal].sort((a, b) => b.percentage - a.percentage).slice(0, 5)}
@@ -246,7 +240,7 @@ export function PitcherGameSubTab(): ReactElement {
         </div>
       </div>
 
-      <div className="panel-row h-160">
+      <div className="panel-row">
         <div className="section-title">
           <span>{matchup.pitcher.fullName}</span>
           <span>
@@ -260,17 +254,12 @@ export function PitcherGameSubTab(): ReactElement {
           <span>By Inning</span>
           <span>{inningsPitched(game.outs)} IP</span>
         </div>
-        <div
-          className="h-40"
-          style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--sp-2)', padding: '0 var(--sp-3)' }}
-        >
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--sp-2)' }}>
           {game.byInning.map((entry) => (
             <span
               key={entry.inning}
-              className="sequence-pitch h-18"
-              // .h-18 loses to .sequence-pitch's later height:40px, and its
-              // flex-basis would set WIDTH inside this row container.
-              style={{ flex: '0 0 auto', height: 18, flexDirection: 'row', gap: 'var(--sp-2)' }}
+              className="sequence-pitch"
+              style={{ flex: '0 0 auto', flexDirection: 'row', gap: 'var(--sp-2)' }}
             >
               <span className="seq-type">{entry.inning}</span>
               <span className="seq-velo">{entry.pitches}P</span>
@@ -279,7 +268,7 @@ export function PitcherGameSubTab(): ReactElement {
         </div>
       </div>
 
-      <div className="panel-row h-120">
+      <div className="panel-row">
         <div className="section-title">
           <span>Efficiency</span>
           <span>{game.pitches.length === 0 ? NO_VALUE : `${speeds.length} tracked`}</span>

@@ -6,7 +6,21 @@ import { PitcherVsBatter } from './components/PitcherVsBatter/PitcherVsBatter'
 import { fetchLiveFeed } from './api/mlb'
 import { fetchSavantGameFeed } from './api/savant'
 import type { LiveFeed, ScheduledGame } from './api/types'
+import { TabBar } from './components/ui'
 import './App.css'
+
+/** `as const` keeps the literal ids, so `isTabId` can narrow TabBar's `string`
+ *  back to the store's Tab union without a type assertion. */
+const TABS = [
+  { id: 'live', label: 'Live Game' },
+  { id: 'pitcherVsBatter', label: 'Pitcher vs Batter' },
+] as const
+
+type TabId = (typeof TABS)[number]['id']
+
+function isTabId(value: string): value is TabId {
+  return TABS.some((tab) => tab.id === value)
+}
 
 function scheduledGameFromLiveFeed(gamePk: number, feed: LiveFeed): ScheduledGame {
   const away = feed.gameData.teams.away
@@ -88,22 +102,13 @@ function App() {
 
   return (
     <div className="app">
-      <div className="tab-bar">
-        <button
-          type="button"
-          className={`tab-btn ${activeTab === 'live' ? 'active' : ''}`}
-          onClick={() => setActiveTab('live')}
-        >
-          Live Game
-        </button>
-        <button
-          type="button"
-          className={`tab-btn ${activeTab === 'pitcherVsBatter' ? 'active' : ''}`}
-          onClick={() => setActiveTab('pitcherVsBatter')}
-        >
-          Pitcher vs Batter
-        </button>
-      </div>
+      <TabBar
+        tabs={TABS}
+        activeId={activeTab}
+        onSelect={(id) => {
+          if (isTabId(id)) setActiveTab(id)
+        }}
+      />
       {activeTab === 'live' ? <LiveGameTab /> : <PitcherVsBatter />}
     </div>
   )

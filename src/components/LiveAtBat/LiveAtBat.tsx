@@ -155,8 +155,8 @@ function StatCells({ cells }: { readonly cells: readonly StatCell[] }): ReactEle
 
 /**
  * "At Bat" sub-tab body. Renders as a fragment: LiveGameTab owns the surrounding
- * `.sub-tab-panel` (679px). Section budget — 40 + 22 + 22 + 95 + 40 + 172 + 120
- * + 95 + 22 = 628px, plus 8 x 4px gaps and 2 x 6px panel padding = 672px.
+ * `.sub-tab-panel`, which is the screen's scroll owner. Sections size to their
+ * content — there is no vertical budget to spend (DESIGN.md §6.3).
  */
 export function LiveAtBat(): ReactElement {
   const currentPlay = useGameStore((s) => s.currentPlay)
@@ -298,17 +298,17 @@ export function LiveAtBat(): ReactElement {
         </div>
       </div>
 
-      <div className="panel-row h-40">
+      <div className="panel-row">
         <div className="stat-grid stat-grid-3">
           <StatCells cells={paceCells} />
         </div>
       </div>
 
-      <div className="zone-canvas h-172">
+      <div className="zone-canvas">
         <ZonePlot pitches={pitches} size={ZONE_PLOT_SIZE} />
       </div>
 
-      <div className="panel-row h-120">
+      <div className="panel-row">
         <div className="section-title">
           <span>Last Pitch · {pitches.length} in AB</span>
           <span>{callCode === undefined ? NO_VALUE : CALL_NAMES[callCode] ?? callCode}</span>
@@ -318,7 +318,7 @@ export function LiveAtBat(): ReactElement {
         </div>
       </div>
 
-      <div className="panel-row h-95">
+      <div className="panel-row">
         <div className="section-title">
           <span>Contact</span>
           <span>{hitData?.trajectory ?? NO_VALUE}</span>

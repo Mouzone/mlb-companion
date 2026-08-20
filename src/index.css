@@ -222,32 +222,6 @@ table {
   -moz-osx-font-smoothing: grayscale;
   -webkit-text-size-adjust: 100%;
   -webkit-tap-highlight-color: transparent;
-
-  /* ===== Legacy alias shims — removed in todo 7 =========================
-     src/App.css still consumes the old dark-theme --mlb-* names. These
-     aliases keep the app renderable until App.css is rewritten against the
-     white-first tokens; delete this entire block with that rewrite.
-
-     Deviation from the brief, deliberate: --mlb-chalk maps to --c-ink, not
-     to --c-surface-sunken. App.css uses --mlb-chalk as a TEXT colour in ten
-     places, so a near-white value would render that text invisible on the
-     white canvas — the opposite of "keep it renderable".
-     ==================================================================== */
-  --mlb-bg: var(--c-bg);
-  --mlb-surface: var(--c-surface-sunken);
-  --mlb-surface-raised: var(--c-bg);
-  --mlb-line: var(--c-border);
-  --mlb-line-soft: var(--c-border);
-  --mlb-primary: var(--c-brand-900);
-  --mlb-accent: var(--c-brand-600);
-  --mlb-accent-bright: var(--c-brand-500);
-  --mlb-text: var(--c-ink);
-  --mlb-muted: var(--c-ink-muted);
-  --mlb-live: var(--c-live);
-  --mlb-hot: var(--c-heat-4);
-  --mlb-cold: var(--c-heat-1);
-  --mlb-chalk: var(--c-ink);
-  --cards-h: 200px;
 }
 
 body,

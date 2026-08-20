@@ -1,30 +1,51 @@
 /* ============================================================================
-   MLB Companion — Application layout system
-   Zero-overflow, mobile-first, iPhone 13 PWA standalone (390 x 844).
+   MLB Companion — application layout
+   White-first, mobile-first, 390 x 844 primary target.
 
-   STRUCTURAL CONTRACT — downstream markup MUST follow this nesting:
+   Cascade position: index.css (tokens, reset, base type) → ui.css → App.css.
+   Every colour, size, space, radius, shadow and duration below resolves to a
+   var(--token) declared in src/index.css and specified in DESIGN.md.
 
-     .app                       height:100dvh, overflow:hidden, flex column
-       .tab-bar                 44px   ("Live Game" | "Pitcher vs Batter")
-       .tab-content             719px  flex:1 overflow:hidden
-         .sub-tab-nav           40px   SIBLING ABOVE the content box
-         .sub-tab-panel         679px  = var(--content-h)          [Live tab]
-       -- or, for the Pitcher-vs-Batter tab --
-         .sub-tab-nav           40px
-         .pvb-cards             200px  swipeable season/career stat cards
-         .pvb-panel             479px  = var(--content-h) - 200px
+   ── SHELL CONTRACT (DESIGN.md §6.1) ─────────────────────────────────────────
 
-   NEVER re-subtract the 40px sub-tab nav from --content-h. That variable has
-   already removed it. Subtracting a second time overflows by 40px upward and
-   leaves a dead band at the bottom of every panel.
+     .app                 flex column; 100dvh; overflow:hidden; safe-area pad
+       .ui-tab-bar        flex:0 0 var(--tab-bar-h)          ← fixed chrome
+       .tab-content       flex:1 1 auto; min-height:0; overflow:hidden
+         .ui-sub-tab-nav  flex:0 0 var(--sub-tab-h)          ← fixed chrome
+         .sub-tab-panel   flex:1 1 auto; min-height:0; overflow-y:auto  ← SCROLL
+         (or .pvb-panel, identical contract)
 
-   Allowed vertical px values: 719 679 479 470 200 190 186 172 160 150 120
-                               95 55 44 40 22 18
+   EXACTLY ONE vertical scroll owner per screen: the panel. On the GameSelect
+   screen — which has no sub-tab nav — the scroll owner is `.game-select`.
+   `min-height: 0` on every flex ancestor of a scroll owner is a hard
+   requirement; without it the box refuses to shrink and clips instead of
+   scrolls.
+
+   ── THE DEAD-SPACE DOCTRINE (DESIGN.md §6.3) ────────────────────────────────
+
+   There are NO fixed vertical budgets in this file. A container may declare
+   `min-height`; it may never declare `height` unless it is fixed chrome, and
+   fixed chrome lives in ui.css. Content sizes to content, and the panel
+   scrolls. Canvases keep their intrinsic pixel size inside a `width:100%`
+   centred slot. A panel that still looks empty needs more data, not more
+   padding.
+
+   `--content-h` in index.css already subtracts BOTH bars. Never write
+   `calc(var(--content-h) - var(--sub-tab-h))` — that double-subtracts.
+
+   ── OWNERSHIP MAP ───────────────────────────────────────────────────────────
+
+   The file is partitioned into five banner sections so follow-up work can
+   proceed in parallel without merge conflicts. Add a rule under the banner
+   that owns the screen it paints; shared primitives stay in §Shell.
    ========================================================================= */
 
-/* ==========================================================================
-   1. APP SHELL
-   ========================================================================== */
+/* ===== §Shell ===== */
+/* Owner: todo 7 — app shell, tab bar, tab-content, sub-tab nav, panels,
+   breakpoints, focus, and the generic primitives every screen composes from
+   (.panel-row, .panel-split, .stat-grid, .stat-grid-3, .stat-row, .stat-label,
+   .stat-value, .section-title, .good, .bad). Loading / error / empty states
+   live in index.css. */
 
 .app {
   display: flex;
@@ -35,255 +56,810 @@
   padding:
     env(safe-area-inset-top) env(safe-area-inset-right)
     env(safe-area-inset-bottom) env(safe-area-inset-left);
-  background: var(--mlb-bg);
+  background: var(--c-bg);
 }
 
-/* --- Primary tab bar: 44px, sits at the TOP of the shell ---------------- */
-.tab-bar {
-  display: flex;
-  flex: 0 0 var(--tab-bar-h);
-  height: var(--tab-bar-h);
-  overflow: hidden;
-  background: var(--mlb-primary);
-  border-bottom: 1px solid var(--mlb-line);
+/* --- Fixed chrome ------------------------------------------------------- */
+/* The primary tab bar and the sub-tab nav are the TabBar / SubTabNav
+   primitives (ui.css, DESIGN.md §5.5-§5.6). Their chrome is NOT restated
+   here. The only addition is press feedback: ui.css defines hover, focus and
+   the active rule, but no `:active` fill, and touch needs an immediate
+   confirmation of the tap (§4.4). */
+
+.ui-tab:active,
+.ui-sub-tab:active {
+  background: var(--c-surface-hover);
 }
 
-.tab-bar button {
-  position: relative;
-  flex: 1 1 0;
-  height: 100%;
-  padding: 0;
-  overflow: hidden;
-  font-size: var(--fs-data);
-  font-weight: 600;
-  color: var(--mlb-muted);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  cursor: pointer;
-  background: transparent;
-  border: 0;
-  transition:
-    color 0.18s ease,
-    background-color 0.18s ease;
-}
-
-.tab-bar button {
-  border-bottom: 2px solid transparent;
-}
-
-.tab-bar button:active {
-  background: rgba(45, 90, 63, 0.35);
-}
-
-.tab-bar .active {
-  color: var(--mlb-chalk);
-  background: var(--mlb-accent);
-  border-bottom-color: var(--mlb-accent-bright);
-}
-
-/* --- Tab content root: 719px on iPhone 13 (= 40px nav + 679px panel) ----- */
+/* --- Tab content root --------------------------------------------------- */
 .tab-content {
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;
   min-height: 0;
   overflow: hidden;
-  background: var(--mlb-bg);
+  background: var(--c-bg);
 }
 
-/* ==========================================================================
-   2. SUB-TAB NAVIGATION — 40px, ALWAYS a sibling ABOVE the content box
-   ========================================================================== */
+/* --- THE scroll owner --------------------------------------------------- */
+/* One per screen. `overflow-x: hidden` keeps a wide table or chip strip from
+   introducing a second, horizontal scrollbar on the panel itself; strips that
+   genuinely need to pan declare their own `overflow-x: auto`. */
 
-.sub-tab-nav {
-  display: flex;
-  flex: 0 0 var(--sub-tab-h);
-  gap: var(--sp-1);
-  height: var(--sub-tab-h);
-  padding: 0 var(--sp-2);
-  overflow: hidden;
-  background: var(--mlb-surface);
-  border-bottom: 1px solid var(--mlb-line-soft);
-}
-
-.sub-tab-nav button {
-  flex: 1 1 0;
-  height: 100%;
-  padding: 0 var(--sp-2);
-  overflow: hidden;
-  font-size: var(--fs-body);
-  font-weight: 600;
-  color: var(--mlb-muted);
-  letter-spacing: 0.03em;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  cursor: pointer;
-  background: transparent;
-  border: 0;
-  border-bottom: 2px solid transparent;
-  transition:
-    color 0.16s ease,
-    border-color 0.16s ease;
-}
-
-.sub-tab-nav .active {
-  color: var(--mlb-chalk);
-  border-bottom-color: var(--mlb-accent-bright);
-}
-
-/* ==========================================================================
-   3. PANELS — every panel has an explicit height and hides overflow
-   ========================================================================== */
-
-/* Live Game sub-tab body: the full 679px budget. */
-.sub-tab-panel {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-2);
-  height: var(--content-h);
-  max-height: var(--content-h);
-  padding: var(--sp-3);
-  overflow: hidden;
-}
-
-/* Pitcher-vs-Batter sub-tab body: 479px (679 - 200 of stat cards). */
+.sub-tab-panel,
 .pvb-panel {
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;
-  gap: var(--sp-2);
+  gap: var(--sp-4);
   min-height: 0;
-  max-height: var(--pvb-content-h);
-  padding: var(--sp-3);
-  overflow: hidden;
+  padding: var(--sp-4);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
-/* Generic content section inside any panel. */
+/* Panel children size to their content — nothing stretches to fill a budget
+   and nothing shrinks below its content into a clip. */
+.sub-tab-panel > *,
+.pvb-panel > * {
+  flex: 0 0 auto;
+}
+
+/* Some sub-tab bodies render a bare pass-through <div> rather than a fragment;
+   without this they would swallow the panel's gap and their sections would
+   touch. Unclassed on purpose — a classed wrapper owns its own layout. */
+.sub-tab-panel > div:not([class]),
+.pvb-panel > div:not([class]) {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  min-width: 0;
+}
+
+/* --- Generic bordered content section ----------------------------------- */
+/* `.subsection` and `.tendency-section` (§PvB) share this base; only their
+   deltas live under that banner. Card padding owns the gutter, so every
+   descendant — section title, stat row, table cell — sits on ONE left edge. */
+
 .panel-row,
 .subsection,
 .tendency-section {
   display: flex;
   flex-direction: column;
-  gap: var(--sp-1);
-  min-height: 0;
-  overflow: hidden;
-  background: var(--mlb-surface);
-  border: 1px solid var(--mlb-line-soft);
+  gap: var(--sp-3);
+  min-width: 0;
+  padding: var(--sp-4);
+  background: var(--c-bg);
+  border: 1px solid var(--c-border);
   border-radius: var(--radius);
 }
 
-/* Two canvases side by side inside one row. */
+/* Two content columns (typically canvases) side by side inside one row. */
 .panel-split {
   display: flex;
   flex-direction: row;
-  gap: var(--sp-2);
+  gap: var(--sp-4);
   min-width: 0;
-  overflow: hidden;
 }
 
 .panel-split > * {
   flex: 1 1 0;
   min-width: 0;
-  overflow: hidden;
 }
 
-/* --- Height budget utilities (the ONLY sanctioned vertical sizes) -------- */
-.h-190 {
-  flex: 0 0 190px;
-  height: 190px;
-  overflow: hidden;
+/* --- Section title (DESIGN.md §5.10) ------------------------------------ */
+/* Title and metadata differ in BOTH size and colour so metadata never
+   competes. Zero horizontal padding: the parent card owns the gutter. */
+
+.section-title {
+  display: flex;
+  gap: var(--sp-4);
+  align-items: baseline;
+  justify-content: space-between;
+  min-width: 0;
+  padding: 0;
+  font-size: var(--fs-title);
+  font-weight: var(--fw-semibold);
+  color: var(--c-ink);
 }
 
-.h-186 {
-  flex: 0 0 186px;
-  height: 186px;
+.section-title > :first-child {
+  min-width: 0;
   overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.h-172 {
-  flex: 0 0 172px;
-  height: 172px;
-  overflow: hidden;
+.section-title > :last-child:not(:first-child) {
+  flex: 0 0 auto;
+  font-size: var(--fs-label);
+  font-weight: var(--fw-medium);
+  color: var(--c-ink-muted);
+  text-align: right;
+  white-space: nowrap;
 }
 
-.h-160 {
-  flex: 0 0 160px;
-  height: 160px;
-  overflow: hidden;
+/* --- Stat matrix -------------------------------------------------------- */
+/* `.tendencies-grid` and `.season-lines` (§PvB) are aliases of this grid. */
+
+.stat-grid,
+.tendencies-grid,
+.season-lines {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 var(--sp-5);
+  align-content: start;
+  min-width: 0;
 }
 
-.h-150 {
-  flex: 0 0 150px;
-  height: 150px;
-  overflow: hidden;
+.stat-grid-3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
-.h-120 {
-  flex: 0 0 120px;
-  height: 120px;
-  overflow: hidden;
+/* --- Stat row (label left, value right) --------------------------------- */
+.stat-row,
+.stat-line,
+.season-stat,
+.pitch-stat,
+.hit-stat,
+.vs-player-line {
+  display: flex;
+  gap: var(--sp-3);
+  align-items: baseline;
+  justify-content: space-between;
+  min-width: 0;
+  padding: var(--sp-2) 0;
+  border-bottom: 1px solid var(--c-border);
 }
 
-.h-95 {
-  flex: 0 0 95px;
-  height: 95px;
+.stat-label {
+  flex: 1 1 auto;
+  min-width: 0;
   overflow: hidden;
+  font-size: var(--fs-label);
+  font-weight: var(--fw-medium);
+  color: var(--c-ink-muted);
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
-.h-55 {
-  flex: 0 0 55px;
-  height: 55px;
-  overflow: hidden;
+/* Tabular numerals are what make value columns terminate on one edge
+   (DESIGN.md §1.4). Restated locally rather than inherited so a future move
+   of this rule can never silently drop the alignment contract. */
+.stat-value {
+  flex: 0 0 auto;
+  font-family: var(--font-num);
+  font-size: var(--fs-data);
+  font-weight: var(--fw-semibold);
+  line-height: var(--lh-snug);
+  color: var(--c-ink);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: var(--tracking-tight);
+  white-space: nowrap;
 }
 
-.h-44 {
-  flex: 0 0 44px;
-  height: 44px;
-  overflow: hidden;
+/* A stat is coloured ONLY when measured against a benchmark (§2.3). */
+.good,
+.stat-value.good {
+  color: var(--c-positive);
 }
 
-.h-40 {
-  flex: 0 0 40px;
-  height: 40px;
-  overflow: hidden;
+.bad,
+.stat-value.bad {
+  color: var(--c-negative);
 }
 
-.h-22 {
-  flex: 0 0 22px;
-  height: 22px;
-  overflow: hidden;
-}
+/* --- Focus visibility (DESIGN.md §7) ------------------------------------ */
+/* Both channels on purpose: the ring is the specified affordance, the inset
+   outline survives the clipped ancestors this app is full of. */
 
-.h-18 {
-  flex: 0 0 18px;
-  height: 18px;
-  overflow: hidden;
+button:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--c-brand-600);
+  outline-offset: -2px;
+  box-shadow: var(--shadow-focus);
 }
 
 /* ==========================================================================
-   4. PITCHER-VS-BATTER STAT CARDS — 200px horizontal scroll-snap strip
+   §Shell — breakpoints (DESIGN.md §6.4)
+   The app had zero width media queries before this. Content is centred with
+   padding rather than a wrapper element, so no markup change is needed and
+   the scroll owner keeps its full-bleed scrollbar.
+
+   CASCADE RULE FOR THE WHOLE FILE — a media query and a base rule of equal
+   specificity are decided by source order, so a breakpoint can only override
+   selectors declared ABOVE it. This block therefore carries ONLY §Shell
+   selectors; each later section closes with its own breakpoint block. Adding
+   a `.game-card` or `.pvb-cards` override here would silently do nothing.
    ========================================================================== */
+
+@media (min-width: 480px) {
+  .stat-grid,
+  .tendencies-grid,
+  .season-lines {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .stat-grid-3 {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 768px) {
+  .sub-tab-panel,
+  .pvb-panel {
+    padding-inline: max(var(--sp-4), calc((100% - 720px) / 2));
+  }
+}
+
+@media (min-width: 1024px) {
+  .sub-tab-panel,
+  .pvb-panel {
+    padding-inline: max(var(--sp-4), calc((100% - 960px) / 2));
+  }
+}
+
+/* ===== §GameSelect ===== */
+/* Owner: todo 8 — game-select, date, game-group, group-title, game-card*,
+   team-row, team-name, team-score, status-badge. `.game-select` is this
+   screen's single scroll owner (DESIGN.md §6.5): the three `.game-group`
+   blocks are plain grids, not three competing scroll containers. */
+
+.game-select {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: var(--sp-4);
+  min-height: 0;
+  padding: var(--sp-5) var(--sp-4) var(--sp-7);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.date {
+  font-size: var(--fs-label);
+  font-weight: var(--fw-semibold);
+  color: var(--c-ink-muted);
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+}
+
+.game-group {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--sp-3);
+  min-width: 0;
+}
+
+.group-title {
+  grid-column: 1 / -1;
+  font-size: var(--fs-label);
+  font-weight: var(--fw-bold);
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+}
+
+.group-title.live {
+  color: var(--c-live);
+}
+
+.group-title.preview {
+  color: var(--c-ink-muted);
+}
+
+.group-title.final {
+  color: var(--c-ink-secondary);
+}
+
+.game-card {
+  display: flex;
+  gap: var(--sp-4);
+  align-items: center;
+  justify-content: space-between;
+  min-width: 0;
+  padding: var(--sp-4);
+  text-align: left;
+  cursor: pointer;
+  background: var(--c-bg);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-xs);
+  transition:
+    border-color var(--dur-fast) var(--ease-out),
+    background-color var(--dur-fast) var(--ease-out);
+}
+
+.game-card:hover {
+  background: var(--c-surface-hover);
+}
+
+.game-card:active {
+  background: var(--c-surface-hover);
+  border-color: var(--c-brand-600);
+}
+
+.game-card-teams {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: var(--sp-2);
+  min-width: 0;
+}
+
+.game-card-meta {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: var(--sp-2);
+  align-items: flex-end;
+}
+
+.team-row {
+  display: flex;
+  gap: var(--sp-4);
+  align-items: baseline;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+/* Also the linescore team label on the Live tab. */
+.team-name {
+  min-width: 0;
+  overflow: hidden;
+  font-size: var(--fs-body);
+  font-weight: var(--fw-medium);
+  color: var(--c-ink-secondary);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.team-score {
+  flex: 0 0 auto;
+  font-family: var(--font-num);
+  font-size: var(--fs-hero);
+  font-weight: var(--fw-semibold);
+  line-height: var(--lh-tight);
+  color: var(--c-ink);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: var(--tracking-tight);
+}
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: var(--sp-1) var(--sp-3);
+  font-size: var(--fs-label);
+  font-weight: var(--fw-bold);
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  white-space: nowrap;
+  border-radius: var(--radius-pill);
+}
+
+.status-badge.live {
+  color: var(--c-live);
+  background: var(--c-live-bg);
+}
+
+.status-badge.preview {
+  color: var(--c-brand-700);
+  background: var(--c-brand-100);
+}
+
+.status-badge.final {
+  color: var(--c-neutral-badge);
+  background: var(--c-neutral-badge-bg);
+}
+
+/* --- §GameSelect breakpoints -------------------------------------------- */
+/* Declared here, not in §Shell: source order decides ties, so a `.game-*`
+   override placed above these base rules would never apply. */
+
+@media (min-width: 480px) {
+  .game-group {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 768px) {
+  .game-select {
+    padding-inline: max(var(--sp-4), calc((100% - 720px) / 2));
+  }
+}
+
+@media (min-width: 1024px) {
+  .game-select {
+    padding-inline: max(var(--sp-4), calc((100% - 960px) / 2));
+  }
+
+  .game-group {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+/* ===== §LiveAtBat ===== */
+/* Owner: todo 9 — game-header, game-score, bases, base, counter, matchup-*,
+   play-result, rbi, zone-canvas, btn-back, player-name, pitch detail. */
+
+/* Back button, score, base diamond and inning pill share ONE centre axis. */
+.inning-info,
+.game-header {
+  display: flex;
+  gap: var(--sp-4);
+  align-items: center;
+  justify-content: space-between;
+  min-width: 0;
+  padding: var(--sp-3) 0;
+  border-bottom: 1px solid var(--c-border);
+}
+
+.btn-back {
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: var(--sp-2);
+  align-items: center;
+  padding: var(--sp-2) var(--sp-3);
+  font-size: var(--fs-label);
+  font-weight: var(--fw-semibold);
+  color: var(--c-ink-secondary);
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  cursor: pointer;
+  background: var(--c-bg);
+  border: 1px solid var(--c-border-strong);
+  border-radius: var(--radius-sm);
+  transition:
+    color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out);
+}
+
+.btn-back:active {
+  color: var(--c-ink);
+  border-color: var(--c-brand-600);
+}
+
+.game-score {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-family: var(--font-num);
+  font-size: var(--fs-hero);
+  font-weight: var(--fw-semibold);
+  line-height: var(--lh-tight);
+  color: var(--c-ink);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: var(--tracking-tight);
+  white-space: nowrap;
+}
+
+/* Count / inning pill: white on saturated brand, the one place a filled
+   block is warranted because it is the live state readout. */
+.counter {
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: var(--sp-2);
+  align-items: center;
+  padding: var(--sp-2) var(--sp-4);
+  font-family: var(--font-num);
+  font-size: var(--fs-data);
+  font-weight: var(--fw-semibold);
+  color: var(--c-bg);
+  font-variant-numeric: tabular-nums;
+  background: var(--c-brand-700);
+  border: 0;
+  border-radius: var(--radius-pill);
+}
+
+/* --- Baserunners -------------------------------------------------------- */
+/* Occupied is a FILLED diamond against an outlined one. Deliberate deviation
+   from the token brief: mapping the old chalk fill to a near-white surface
+   would make an occupied base invisible on a white canvas, i.e. destroy the
+   only channel this indicator has. Brand fill vs hairline outline clears the
+   3:1 non-text floor (§7). */
+
+.bases {
+  display: flex;
+  flex: 0 0 auto;
+  gap: var(--sp-3);
+  align-items: center;
+  justify-content: center;
+}
+
+.base {
+  width: var(--sp-4);
+  aspect-ratio: 1;
+  background: transparent;
+  border: 1px solid var(--c-border-strong);
+  border-radius: var(--sp-1);
+  transform: rotate(45deg);
+}
+
+.base.occupied {
+  background: var(--c-brand-600);
+  border-color: var(--c-brand-600);
+}
+
+/* --- Matchup header ----------------------------------------------------- */
+.matchup-info {
+  display: flex;
+  gap: var(--sp-4);
+  align-items: stretch;
+  min-width: 0;
+  padding: var(--sp-4);
+  background: var(--c-surface-sunken);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius);
+}
+
+.matchup-player,
+.player-side {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  gap: var(--sp-1);
+  min-width: 0;
+}
+
+.matchup-player.batter {
+  text-align: right;
+}
+
+.matchup-vs {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--fs-label);
+  font-weight: var(--fw-bold);
+  color: var(--c-ink-muted);
+  letter-spacing: var(--tracking-caps);
+}
+
+/* Player identity is never the same size as a stat value (§3.3). */
+.player-name {
+  min-width: 0;
+  overflow: hidden;
+  font-size: var(--fs-lg);
+  font-weight: var(--fw-semibold);
+  line-height: var(--lh-snug);
+  color: var(--c-ink);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.matchup-player .stat-line {
+  padding: 0;
+  font-size: var(--fs-label);
+  color: var(--c-ink-muted);
+  white-space: nowrap;
+  border-bottom: 0;
+}
+
+/* --- Pitch detail ------------------------------------------------------- */
+.current-pitch-section {
+  display: flex;
+  gap: var(--sp-4);
+  min-width: 0;
+}
+
+.pitch-detail,
+.pitch-info-row {
+  display: flex;
+  gap: var(--sp-3);
+  align-items: center;
+  min-width: 0;
+  font-size: var(--fs-body);
+  white-space: nowrap;
+}
+
+.pitch-stats,
+.hit-data {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 var(--sp-5);
+  align-content: start;
+  min-width: 0;
+}
+
+.pitch-sequence {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  min-width: 0;
+}
+
+/* Horizontal pan only — this is NOT a vertical scroll owner. */
+.sequence-strip {
+  display: flex;
+  gap: var(--sp-2);
+  align-items: center;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+
+.sequence-strip::-webkit-scrollbar {
+  display: none;
+}
+
+/* --- Zone plot ---------------------------------------------------------- */
+/* Intrinsic canvas size inside a full-width centred slot (§6.3.3). */
+.zone-canvas {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-width: 0;
+}
+
+/* --- Play result -------------------------------------------------------- */
+.play-result {
+  display: flex;
+  gap: var(--sp-3);
+  align-items: baseline;
+  min-width: 0;
+  padding: var(--sp-3) var(--sp-4);
+  font-size: var(--fs-body);
+  font-weight: var(--fw-medium);
+  color: var(--c-bg);
+  background: var(--c-brand-700);
+  border-radius: var(--radius);
+}
+
+.rbi {
+  margin-left: var(--sp-2);
+  font-family: var(--font-num);
+  font-weight: var(--fw-bold);
+  color: var(--c-bg);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ===== §GameSubTabs ===== */
+/* Owner: todo 10 — rules shared by BatterGameSubTab + PitcherGameSubTab:
+   canvas-slot, canvas-caption, arsenal-canvas, heatmap-canvas, spray-canvas,
+   gamelog-*. The PvB chart sub-tabs consume the same slots, which is why they
+   live here rather than under §PvB. */
+
+/* ArsenalBars renders a bare <canvas> with NO className and NO CSS height, so
+   its intrinsic height attribute (up to 372px at 2x DPR) becomes its rendered
+   CSS height. A wrapper height would only CLIP it. The descendant clamp below
+   is the only way to actually resize it — LOAD-BEARING, do not remove. */
+.arsenal-canvas > canvas {
+  display: block;
+  max-height: 186px;
+}
+
+.arsenal-canvas,
+.heatmap-canvas,
+.spray-canvas,
+.canvas-slot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-width: 0;
+}
+
+.arsenal-canvas {
+  align-items: flex-start;
+}
+
+.heatmap-canvas > canvas,
+.spray-canvas > canvas,
+.zone-canvas > canvas,
+.canvas-slot > canvas {
+  display: block;
+  max-width: 100%;
+}
+
+/* Canvas is not accessible; the caption is part of how a chart is read (§7).
+   --fs-label is the floor for uppercase + tracking (§3.3). */
+.canvas-caption {
+  font-size: var(--fs-label);
+  font-weight: var(--fw-medium);
+  color: var(--c-ink-muted);
+  letter-spacing: var(--tracking-caps);
+  text-align: center;
+  text-transform: uppercase;
+}
+
+/* --- Game log strip ----------------------------------------------------- */
+.game-log {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.gamelog-entry {
+  display: flex;
+  gap: var(--sp-4);
+  align-items: baseline;
+  min-width: 0;
+  padding: var(--sp-2) 0;
+  border-bottom: 1px solid var(--c-border);
+}
+
+.gamelog-date {
+  flex: 0 0 auto;
+  font-family: var(--font-num);
+  font-size: var(--fs-label);
+  color: var(--c-ink-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.gamelog-opp {
+  flex: 0 0 auto;
+  font-size: var(--fs-label);
+  font-weight: var(--fw-semibold);
+  color: var(--c-ink-secondary);
+  text-transform: uppercase;
+}
+
+.gamelog-summary {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  font-family: var(--font-num);
+  font-size: var(--fs-data);
+  color: var(--c-ink);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: var(--tracking-tight);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* --- §GameSubTabs breakpoints ------------------------------------------- */
+/* Charts keep their intrinsic pixel size; the extra room goes to breathing
+   space around them rather than to a stretched canvas. Covers §LiveAtBat's
+   `.zone-canvas` too, which is declared above this point. */
+
+@media (min-width: 768px) {
+  .arsenal-canvas,
+  .heatmap-canvas,
+  .spray-canvas,
+  .canvas-slot,
+  .zone-canvas {
+    padding-block: var(--sp-5);
+  }
+}
+
+/* ===== §PvB ===== */
+/* Owner: todo 11 — pvb-cards*, pvb-card, pitcher-card, batter-card,
+   card-title, card-scope, pvb-dots, pvb-panel, segmented, split-table,
+   sequence-pitch, seq-*, subsection, tendency-*. `.subsection` /
+   `.tendency-section` inherit the generic card in §Shell, and
+   `.tendencies-grid` / `.season-lines` inherit the generic grid there too. */
+
+/* --- Stat card strip ---------------------------------------------------- */
+/* No height budget: the cards size to their stat grid and the strip sizes to
+   the cards. `align-items: stretch` (the flex default) keeps all four the
+   same height so the snap points line up. */
 
 .pvb-cards-wrap {
   position: relative;
-  flex: 0 0 var(--cards-h);
-  height: var(--cards-h);
-  overflow: hidden;
+  flex: 0 0 auto;
+  min-width: 0;
 }
 
 .pvb-cards {
   display: flex;
-  flex: 0 0 var(--cards-h);
   gap: var(--sp-3);
-  height: var(--cards-h);
-  padding: var(--sp-3) var(--sp-3) 18px;
+  min-width: 0;
+  /* Bottom pad reserves the paging-dot band the dots are absolutely placed in. */
+  padding: var(--sp-4) var(--sp-4) var(--sp-6);
   overflow-x: auto;
   overflow-y: hidden;
   scroll-snap-type: x mandatory;
-  -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
 }
 
 .pvb-cards::-webkit-scrollbar {
@@ -295,239 +871,124 @@
   display: flex;
   flex: 0 0 100%;
   flex-direction: column;
-  gap: var(--sp-2);
-  height: 100%;
-  padding: var(--sp-3);
-  overflow: hidden;
+  gap: var(--sp-3);
+  min-width: 0;
+  padding: var(--sp-4);
   scroll-snap-align: center;
   scroll-snap-stop: always;
-  background: linear-gradient(
-    165deg,
-    var(--mlb-surface-raised) 0%,
-    var(--mlb-surface) 100%
-  );
-  border: 1px solid var(--mlb-line);
+  background: var(--c-bg);
+  border: 1px solid var(--c-border);
   border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-xs);
 }
 
+/* Role is carried by a 3px edge rule, not by a filled surface. */
 .pitcher-card {
-  border-left: 3px solid var(--mlb-accent-bright);
+  border-left: 3px solid var(--c-brand-600);
 }
 
 .batter-card {
-  border-left: 3px solid var(--mlb-hot);
+  border-left: 3px solid var(--c-heat-4);
 }
 
-.card-title,
-.player-name {
+.card-title {
   display: flex;
-  flex: 0 0 18px;
-  align-items: center;
+  gap: var(--sp-3);
+  align-items: baseline;
   justify-content: space-between;
-  height: 18px;
+  min-width: 0;
   overflow: hidden;
-  font-size: var(--fs-data);
-  font-weight: 700;
-  color: var(--mlb-chalk);
+  font-size: var(--fs-lg);
+  font-weight: var(--fw-semibold);
+  line-height: var(--lh-snug);
+  color: var(--c-ink);
   white-space: nowrap;
   text-overflow: ellipsis;
 }
 
 .card-scope {
-  font-size: var(--fs-micro);
-  font-weight: 600;
-  color: var(--mlb-muted);
-  letter-spacing: 0.1em;
+  flex: 0 0 auto;
+  font-size: var(--fs-label);
+  font-weight: var(--fw-semibold);
+  color: var(--c-ink-muted);
+  letter-spacing: var(--tracking-caps);
   text-transform: uppercase;
 }
 
 .pvb-dots {
   position: absolute;
   right: 0;
-  bottom: 0;
+  bottom: var(--sp-2);
   left: 0;
   display: flex;
   gap: var(--sp-3);
   align-items: center;
   justify-content: center;
-  height: 18px;
-  overflow: hidden;
   pointer-events: none;
 }
 
 .pvb-dots span {
-  width: 5px;
+  width: var(--sp-3);
   aspect-ratio: 1;
-  background: var(--mlb-line);
-  border-radius: 50%;
-  transition: background-color 0.16s ease;
+  background: var(--c-border-strong);
+  border-radius: var(--radius-pill);
+  transition: background-color var(--dur-fast) var(--ease-out);
 }
 
 .pvb-dots .active {
-  background: var(--mlb-accent-bright);
+  background: var(--c-brand-600);
 }
 
-/* ==========================================================================
-   5. CANVAS WRAPPERS
-   ArsenalBars renders <canvas style={{width}}> with NO className and NO
-   height style, so its intrinsic height attribute becomes its CSS height
-   (5 pitch types x 2 DPR = 372px). The wrapper alone cannot fix that — it
-   would merely clip. The descendant selector below is the only way in.
-   max-height (not height) lets a 2-pitch pitcher render short, not stretched.
-   ========================================================================== */
+/* --- Scope switcher (DESIGN.md §5.7) ------------------------------------ */
+/* Track + white thumb, sized by padding rather than a fixed height so the
+   control grows with the text instead of clipping it. */
 
-.arsenal-canvas {
-  display: flex;
-  flex: 1 1 0;
-  align-items: flex-start;
-  justify-content: center;
-  height: 190px;
-  max-height: 190px;
-  padding: var(--sp-2);
-  overflow: hidden;
-}
-
-.arsenal-canvas > canvas {
-  max-height: 186px;
-  display: block;
-}
-
-.heatmap-canvas,
-.spray-canvas,
-.zone-canvas,
-.canvas-slot {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-}
-
-.heatmap-canvas {
-  height: 150px;
-  max-height: 150px;
-}
-
-.spray-canvas {
-  height: 150px;
-  max-height: 150px;
-}
-
-.zone-canvas {
-  height: 172px;
-  max-height: 172px;
-}
-
-.heatmap-canvas > canvas,
-.spray-canvas > canvas,
-.zone-canvas > canvas,
-.canvas-slot > canvas {
-  display: block;
-  max-width: 100%;
-  max-height: 100%;
-}
-
-.canvas-caption {
-  flex: 0 0 18px;
-  height: 18px;
-  overflow: hidden;
-  font-size: var(--fs-micro);
-  color: var(--mlb-muted);
-  letter-spacing: 0.08em;
-  text-align: center;
-  text-transform: uppercase;
-}
-
-/* ==========================================================================
-   6. DENSE DATA PRIMITIVES — stat rows, grids, split tables
-   ========================================================================== */
-
-.section-title {
-  display: flex;
-  flex: 0 0 18px;
-  align-items: center;
-  justify-content: space-between;
-  height: 18px;
-  padding: 0 var(--sp-3);
-  overflow: hidden;
-  font-size: var(--fs-label);
-  font-weight: 700;
-  color: var(--mlb-muted);
-  letter-spacing: 0.1em;
-  white-space: nowrap;
-  text-transform: uppercase;
-  background: var(--mlb-line-soft);
-}
-
-.stat-grid,
-.tendencies-grid,
-.season-lines {
-  display: grid;
-  flex: 1 1 auto;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0 var(--sp-4);
-  min-height: 0;
-  overflow: hidden;
-  align-content: start;
-}
-
-.stat-grid-3 {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
-.stat-row,
-.stat-line,
-.season-stat,
-.pitch-stat,
-.hit-stat,
-.vs-player-line {
-  display: flex;
-  flex: 0 0 22px;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--sp-2);
-  height: 22px;
-  padding: 0 var(--sp-1);
-  overflow: hidden;
-  border-bottom: 1px solid var(--mlb-line-soft);
-}
-
-.stat-label {
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  font-size: var(--fs-label);
-  color: var(--mlb-muted);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-
-.stat-value {
+.segmented {
+  display: inline-flex;
   flex: 0 0 auto;
-  font-size: var(--fs-data);
-  font-weight: 700;
-  color: var(--mlb-text);
+  gap: var(--sp-1);
+  align-self: flex-start;
+  padding: var(--sp-1);
+  background: var(--c-surface-sunken);
+  border: 1px solid var(--c-border-strong);
+  border-radius: var(--radius-pill);
+}
+
+.segmented button {
+  padding: var(--sp-2) var(--sp-4);
+  font-size: var(--fs-label);
+  font-weight: var(--fw-semibold);
+  color: var(--c-ink-muted);
   white-space: nowrap;
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-pill);
+  transition:
+    color var(--dur-fast) var(--ease-out),
+    background-color var(--dur-fast) var(--ease-out);
 }
 
-.stat-value.good {
-  color: var(--mlb-accent-bright);
+.segmented button:hover {
+  color: var(--c-ink-secondary);
 }
 
-.stat-value.bad {
-  color: var(--mlb-hot);
+.segmented .active {
+  color: var(--c-ink);
+  background: var(--c-bg);
+  box-shadow: var(--shadow-xs);
 }
 
-/* --- Split table -------------------------------------------------------- */
+/* --- Split table (DESIGN.md §5.11) -------------------------------------- */
+/* Numeric columns are right-aligned with a uniform --sp-4 right pad so they
+   never hug the card edge; the first column keeps the shared left edge. */
+
 .split-table,
 .splits-table {
   display: block;
   width: 100%;
-  min-height: 0;
-  overflow: hidden;
+  min-width: 0;
   font-size: var(--fs-body);
-  table-layout: fixed;
 }
 
 .split-table table,
@@ -538,17 +999,20 @@
 
 .split-table th,
 .splits-table th {
-  height: 18px;
-  padding: 0 var(--sp-2);
-  overflow: hidden;
-  font-size: var(--fs-micro);
-  font-weight: 700;
-  color: var(--mlb-muted);
-  letter-spacing: 0.08em;
+  padding: var(--sp-2) var(--sp-4) var(--sp-2) 0;
+  font-size: var(--fs-label);
+  font-weight: var(--fw-semibold);
+  color: var(--c-ink-muted);
+  letter-spacing: var(--tracking-caps);
   text-align: right;
   text-transform: uppercase;
   white-space: nowrap;
-  background: var(--mlb-line-soft);
+  border-bottom: 1px solid var(--c-border);
+}
+
+.split-table th:last-child,
+.splits-table th:last-child {
+  padding-right: 0;
 }
 
 .split-table th:first-child,
@@ -558,22 +1022,29 @@
 
 .split-table td,
 .splits-table td {
-  height: 22px;
-  padding: 0 var(--sp-2);
+  padding: var(--sp-2) var(--sp-4) var(--sp-2) 0;
   overflow: hidden;
+  font-family: var(--font-num);
   font-size: var(--fs-data);
-  color: var(--mlb-text);
+  color: var(--c-ink);
   text-align: right;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: var(--tracking-tight);
   white-space: nowrap;
   text-overflow: ellipsis;
-  border-bottom: 1px solid var(--mlb-line-soft);
+  border-bottom: 1px solid var(--c-border);
+}
+
+.split-table td:last-child,
+.splits-table td:last-child {
+  padding-right: 0;
 }
 
 .split-table td:first-child,
 .splits-table td:first-child {
   font-family: var(--font-ui);
   font-size: var(--fs-body);
-  color: var(--mlb-muted);
+  color: var(--c-ink-secondary);
   text-align: left;
 }
 
@@ -582,491 +1053,82 @@
   border-bottom: 0;
 }
 
-/* --- Recent form / game log strip --------------------------------------- */
-.game-log {
-  display: flex;
-  flex: 1 1 auto;
-  flex-direction: column;
-  min-height: 0;
-  overflow: hidden;
-}
-
-.gamelog-entry {
-  display: flex;
-  flex: 0 0 22px;
-  gap: var(--sp-3);
-  align-items: center;
-  height: 22px;
-  padding: 0 var(--sp-3);
-  overflow: hidden;
-  border-bottom: 1px solid var(--mlb-line-soft);
-}
-
-.gamelog-date {
-  flex: 0 0 40px;
-  font-family: var(--font-num);
-  font-size: var(--fs-micro);
-  color: var(--mlb-muted);
-}
-
-.gamelog-opp {
-  flex: 0 0 44px;
-  font-size: var(--fs-label);
-  font-weight: 600;
-  color: var(--mlb-text);
-}
-
-.gamelog-summary {
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  font-family: var(--font-num);
-  font-size: var(--fs-data);
-  color: var(--mlb-text);
-  text-align: right;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-
-/* --- Timespan / scope toggles ------------------------------------------- */
-.segmented {
-  display: flex;
-  flex: 0 0 22px;
-  gap: 1px;
-  height: 22px;
-  overflow: hidden;
-  background: var(--mlb-line-soft);
-  border-radius: var(--radius);
-}
-
-.segmented button {
-  flex: 1 1 0;
-  height: 100%;
-  padding: 0 var(--sp-3);
-  overflow: hidden;
-  font-size: var(--fs-label);
-  font-weight: 600;
-  color: var(--mlb-muted);
-  letter-spacing: 0.04em;
-  white-space: nowrap;
-  cursor: pointer;
-  background: var(--mlb-surface);
-  border: 0;
-  transition:
-    color 0.14s ease,
-    background-color 0.14s ease;
-}
-
-.segmented .active {
-  color: var(--mlb-chalk);
-  background: var(--mlb-accent);
-}
-
-/* ==========================================================================
-   7. LIVE AT BAT
-   ========================================================================== */
-
-.matchup-info {
-  display: flex;
-  flex: 0 0 95px;
-  gap: var(--sp-2);
-  align-items: stretch;
-  height: 95px;
-  padding: var(--sp-3);
-  overflow: hidden;
-  background: linear-gradient(
-    150deg,
-    var(--mlb-primary) 0%,
-    var(--mlb-surface) 100%
-  );
-  border: 1px solid var(--mlb-line);
-  border-radius: var(--radius);
-}
-
-.matchup-player,
-.player-side {
-  display: flex;
-  flex: 1 1 0;
-  flex-direction: column;
-  gap: var(--sp-1);
-  min-width: 0;
-  overflow: hidden;
-}
-
-.matchup-player.batter {
-  text-align: right;
-}
-
-.matchup-vs {
-  display: flex;
-  flex: 0 0 22px;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-  font-size: var(--fs-micro);
-  font-weight: 700;
-  color: var(--mlb-muted);
-  letter-spacing: 0.06em;
-}
-
-.team-name,
-.matchup-player .stat-line {
-  font-size: var(--fs-label);
-  color: var(--mlb-muted);
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-
-.inning-info,
-.game-header {
-  display: flex;
-  flex: 0 0 40px;
-  gap: var(--sp-3);
-  align-items: center;
-  justify-content: space-between;
-  height: 40px;
-  padding: 0 var(--sp-3);
-  overflow: hidden;
-  background: var(--mlb-surface-raised);
-  border-bottom: 1px solid var(--mlb-line);
-}
-
-.counter {
-  display: inline-flex;
-  gap: var(--sp-2);
-  align-items: center;
-  height: 22px;
-  padding: 0 var(--sp-3);
-  overflow: hidden;
-  font-size: var(--fs-data);
-  font-weight: 700;
-  color: var(--mlb-chalk);
-  background: var(--mlb-accent);
-  border: 0;
-  border-radius: var(--radius);
-}
-
-.current-pitch-section {
-  display: flex;
-  flex: 0 0 172px;
-  gap: var(--sp-2);
-  height: 172px;
-  overflow: hidden;
-}
-
-.pitch-detail,
-.pitch-info-row {
-  display: flex;
-  gap: var(--sp-2);
-  align-items: center;
-  height: 22px;
-  overflow: hidden;
-  font-size: var(--fs-body);
-  white-space: nowrap;
-}
-
-.pitch-stats,
-.hit-data {
-  display: grid;
-  flex: 1 1 auto;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0 var(--sp-4);
-  align-content: start;
-  min-height: 0;
-  overflow: hidden;
-}
-
-.pitch-sequence {
-  display: flex;
-  flex: 0 0 55px;
-  flex-direction: column;
-  height: 55px;
-  overflow: hidden;
-}
-
-.sequence-strip {
-  display: flex;
-  flex: 1 1 auto;
-  gap: var(--sp-2);
-  align-items: center;
-  min-height: 0;
-  padding: 0 var(--sp-2);
-  overflow-x: auto;
-  overflow-y: hidden;
-  scrollbar-width: none;
-}
-
-.sequence-strip::-webkit-scrollbar {
-  display: none;
-}
-
+/* --- Pitch sequence chips ----------------------------------------------- */
 .sequence-pitch {
   display: flex;
   flex: 0 0 auto;
   flex-direction: column;
-  gap: 0;
   align-items: center;
   justify-content: center;
-  height: 40px;
-  padding: 0 var(--sp-3);
-  overflow: hidden;
-  background: var(--mlb-surface-raised);
-  border: 1px solid var(--mlb-line);
-  border-radius: var(--radius);
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--c-bg);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-sm);
 }
 
 .seq-type {
-  font-size: var(--fs-micro);
-  font-weight: 700;
-  color: var(--mlb-chalk);
-  letter-spacing: 0.04em;
+  font-size: var(--fs-label);
+  font-weight: var(--fw-bold);
+  letter-spacing: var(--tracking-caps);
 }
 
 .seq-velo {
-  font-size: var(--fs-micro);
-  color: var(--mlb-text);
+  font-family: var(--font-num);
+  font-size: var(--fs-data);
+  color: var(--c-ink);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: var(--tracking-tight);
 }
 
 .seq-call {
-  font-size: var(--fs-micro);
-  color: var(--mlb-muted);
+  font-size: var(--fs-label);
+  color: var(--c-ink-muted);
+  letter-spacing: var(--tracking-caps);
   text-transform: uppercase;
 }
 
-.play-result {
-  display: flex;
-  flex: 0 0 22px;
-  align-items: center;
-  height: 22px;
-  padding: 0 var(--sp-3);
-  overflow: hidden;
-  font-size: var(--fs-body);
-  font-weight: 600;
-  color: var(--mlb-chalk);
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  background: var(--mlb-accent);
-  border-radius: var(--radius);
+/* --- Tendency blocks ---------------------------------------------------- */
+.tendency-label {
+  font-size: var(--fs-label);
+  font-weight: var(--fw-medium);
+  color: var(--c-ink-muted);
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
 }
 
-.rbi {
-  margin-left: var(--sp-2);
+.tendency-value {
   font-family: var(--font-num);
-  color: var(--mlb-hot);
-}
-
-/* Baserunners / bases diamond */
-.bases {
-  display: flex;
-  flex: 0 0 40px;
-  align-items: center;
-  justify-content: center;
-  gap: var(--sp-1);
-  height: 40px;
-  overflow: hidden;
-}
-
-.base {
-  width: 10px;
-  aspect-ratio: 1;
-  background: transparent;
-  border: 1px solid var(--mlb-line);
-  border-radius: 2px;
-  transform: rotate(45deg);
-}
-
-.base.occupied {
-  background: var(--mlb-chalk);
-  border-color: var(--mlb-chalk);
-}
-
-/* Linescore */
-.team-row {
-  display: flex;
-  flex: 0 0 22px;
-  gap: var(--sp-3);
-  align-items: center;
-  height: 22px;
-  overflow: hidden;
-}
-
-.team-score,
-.game-score {
-  font-size: var(--fs-title);
-  font-weight: 700;
-  color: var(--mlb-chalk);
-}
-
-/* ==========================================================================
-   8. GAME SELECT — the pre-selection picker.
-   This is the ONLY container permitted to scroll vertically. Once a game is
-   chosen the main tabs take over and nothing scrolls again.
-   ========================================================================== */
-
-.game-select {
-  display: flex;
-  flex: 1 1 auto;
-  flex-direction: column;
-  min-height: 0;
-  overflow: hidden;
-}
-
-.date {
-  display: flex;
-  flex: 0 0 40px;
-  align-items: center;
-  height: 40px;
-  padding: 0 var(--sp-4);
-  overflow: hidden;
-  font-size: var(--fs-label);
-  font-weight: 700;
-  color: var(--mlb-muted);
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
-
-.game-group {
-  display: flex;
-  flex: 1 1 auto;
-  flex-direction: column;
-  gap: var(--sp-2);
-  min-height: 0;
-  padding: 0 var(--sp-3) var(--sp-4);
-  overflow-x: hidden;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
-}
-
-.group-title {
-  flex: 0 0 18px;
-  height: 18px;
-  overflow: hidden;
-  font-size: var(--fs-label);
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
-
-.group-title.live {
-  color: var(--mlb-live);
-}
-
-.group-title.preview {
-  color: var(--mlb-muted);
-}
-
-.group-title.final {
-  color: var(--mlb-accent-bright);
-}
-
-.game-card {
-  display: flex;
-  flex: 0 0 55px;
-  gap: var(--sp-3);
-  align-items: center;
-  justify-content: space-between;
-  height: 55px;
-  padding: 0 var(--sp-4);
-  overflow: hidden;
-  text-align: left;
-  cursor: pointer;
-  background: var(--mlb-surface);
-  border: 1px solid var(--mlb-line-soft);
-  border-radius: var(--radius);
-  transition:
-    border-color 0.16s ease,
-    background-color 0.16s ease;
-}
-
-.game-card:active {
-  background: var(--mlb-surface-raised);
-  border-color: var(--mlb-accent-bright);
-}
-
-.game-card-teams {
-  display: flex;
-  flex: 1 1 auto;
-  flex-direction: column;
-  gap: var(--sp-1);
-  min-width: 0;
-  overflow: hidden;
   font-size: var(--fs-data);
-  font-weight: 600;
-  color: var(--mlb-text);
-  white-space: nowrap;
-  text-overflow: ellipsis;
+  font-weight: var(--fw-semibold);
+  color: var(--c-ink);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: var(--tracking-tight);
 }
 
-.game-card-meta {
-  display: flex;
-  flex: 0 0 auto;
-  flex-direction: column;
-  gap: var(--sp-1);
-  align-items: flex-end;
-  overflow: hidden;
-  font-size: var(--fs-label);
-  color: var(--mlb-muted);
+/* --- §PvB breakpoints ---------------------------------------------------- */
+
+@media (min-width: 768px) {
+  .pvb-cards {
+    padding-inline: max(var(--sp-4), calc((100% - 720px) / 2));
+  }
 }
 
-.status-badge {
-  display: inline-flex;
-  flex: 0 0 18px;
-  align-items: center;
-  height: 18px;
-  padding: 0 var(--sp-3);
-  overflow: hidden;
-  font-size: var(--fs-micro);
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  border-radius: 9px;
-}
+@media (min-width: 1024px) {
+  /* Wide enough to show the whole matchup at once, so the swipe carousel
+     becomes a static grid and the paging dots have nothing left to report. */
+  .pvb-cards {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    padding-inline: max(var(--sp-4), calc((100% - 960px) / 2));
+    overflow-x: visible;
+    scroll-snap-type: none;
+  }
 
-.status-badge.live {
-  color: var(--mlb-chalk);
-  background: var(--mlb-live);
-}
+  .pvb-card {
+    scroll-snap-align: none;
+  }
 
-.status-badge.preview {
-  color: var(--mlb-muted);
-  background: var(--mlb-line-soft);
-}
-
-.status-badge.final {
-  color: var(--mlb-text);
-  background: var(--mlb-accent);
-}
-
-.btn-back {
-  display: inline-flex;
-  flex: 0 0 auto;
-  gap: var(--sp-2);
-  align-items: center;
-  height: 22px;
-  padding: 0 var(--sp-3);
-  overflow: hidden;
-  font-size: var(--fs-label);
-  font-weight: 600;
-  color: var(--mlb-muted);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  cursor: pointer;
-  background: transparent;
-  border: 1px solid var(--mlb-line);
-  border-radius: var(--radius);
-}
-
-.btn-back:active {
-  color: var(--mlb-chalk);
-  border-color: var(--mlb-accent-bright);
-}
-
-/* ==========================================================================
-   9. FOCUS VISIBILITY — keyboard/AT users must never lose the caret.
-   ========================================================================== */
-
-button:focus-visible,
-[tabindex]:focus-visible {
-  outline: 2px solid var(--mlb-accent-bright);
-  outline-offset: -2px;
+  .pvb-dots {
+    display: none;
+  }
 }

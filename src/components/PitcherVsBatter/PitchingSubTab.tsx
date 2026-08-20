@@ -154,7 +154,7 @@ export function PitchingSubTab(): ReactElement {
 
   return (
     <div>
-      <div className="panel-split h-190">
+      <div className="panel-split">
         <div className="arsenal-canvas">
           {pitchArsenal.length > 0 ? (
             <ArsenalBars
@@ -174,7 +174,7 @@ export function PitchingSubTab(): ReactElement {
         </div>
       </div>
 
-      <div className="subsection h-160">
+      <div className="subsection">
         <div className="section-title">
           <span>Splits</span>
           <span>{SEASON}</span>
@@ -208,7 +208,7 @@ export function PitchingSubTab(): ReactElement {
         </div>
       </div>
 
-      <div className="subsection h-120">
+      <div className="subsection">
         <div className="section-title">
           <span>Recent Form</span>
           <span>{`${String(form.games)} G`}</span>

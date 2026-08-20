@@ -207,25 +207,22 @@ export function BatterGameSubTab(): ReactElement {
   )
   const completedPlays = batterPlays.filter((play) => play.result.event !== '')
 
-  // Row 1 right column is 172px tall: title 18 + 5 x 22 + overflow 18 + gaps 4 = 150.
+  // Slices cap for glanceability, not for a height budget — the panel scrolls.
   const tallies = tallyPitchTypes(batterPitches)
   const shownTallies = tallies.slice(0, 5)
   const hiddenTallies = tallies.length - shownTallies.length
 
-  // Row 2 (`.h-160`) has 158px of content box: title 18 + 5 x 22 + overflow 18 + gaps 4 = 150.
-  // Seven rows would be 18 + 154 = 172 and clip. A batter takes at most six plate
-  // appearances in a nine-inning game, so the five most recent plus "+N more" is lossless.
+  // A batter takes at most six plate appearances in a nine-inning game, so the
+  // five most recent plus "+N more" is effectively lossless.
   const shownAtBats = completedPlays.slice(-5)
   const hiddenAtBats = completedPlays.length - shownAtBats.length
 
-  // Row 3 (`.h-120`) has 118px of content box: title 18 + 4 x 22 + gap 2 = 108. No room
-  // for a "+N more" line, so the section title carries the full batted-ball count instead.
   const swings = swingRowsFor(batterPlays, gameFeedPitches)
   const shownSwings = swings.slice(-4)
 
   return (
     <>
-      <div className="panel-split h-190" style={{ gap: 'var(--sp-4)' }}>
+      <div className="panel-split" style={{ gap: 'var(--sp-4)' }}>
         <div className="zone-canvas">
           <ZonePlot pitches={batterPitches} size={ZONE_PLOT_SIZE} />
         </div>
@@ -236,7 +233,7 @@ export function BatterGameSubTab(): ReactElement {
           </div>
           <div>
             {shownTallies.map((tally) => (
-              <div key={tally.code} className="stat-row h-22">
+              <div key={tally.code} className="stat-row">
                 <span
                   className="stat-label"
                   style={{ color: PITCH_COLORS[tally.code] ?? UNKNOWN_PITCH_COLOR }}
@@ -249,25 +246,25 @@ export function BatterGameSubTab(): ReactElement {
               </div>
             ))}
             {shownTallies.length === 0 ? (
-              <div className="stat-row h-22">
+              <div className="stat-row">
                 <span className="stat-label">No pitches seen yet</span>
               </div>
             ) : null}
           </div>
           {hiddenTallies > 0 ? (
-            <div className="canvas-caption h-18">+{hiddenTallies} more</div>
+            <div className="canvas-caption">+{hiddenTallies} more</div>
           ) : null}
         </div>
       </div>
 
-      <div className="panel-row h-160">
+      <div className="panel-row">
         <div className="section-title">
           <span>{matchup.batter.fullName}</span>
           <span>{formatGameLine(completedPlays)}</span>
         </div>
         <div>
           {shownAtBats.map((play) => (
-            <div key={play.about.atBatIndex} className="stat-row h-22">
+            <div key={play.about.atBatIndex} className="stat-row">
               <span className="stat-label">
                 {ordinal(play.about.inning)} · {play.count.balls}-{play.count.strikes}
               </span>
@@ -275,28 +272,28 @@ export function BatterGameSubTab(): ReactElement {
             </div>
           ))}
           {shownAtBats.length === 0 ? (
-            <div className="stat-row h-22">
+            <div className="stat-row">
               <span className="stat-label">First plate appearance in progress</span>
             </div>
           ) : null}
         </div>
-        {hiddenAtBats > 0 ? <div className="canvas-caption h-18">+{hiddenAtBats} more</div> : null}
+        {hiddenAtBats > 0 ? <div className="canvas-caption">+{hiddenAtBats} more</div> : null}
       </div>
 
-      <div className="panel-row h-120">
+      <div className="panel-row">
         <div className="section-title">
           <span>Batted Balls · {swings.length}</span>
           <span>Swing tilt {NO_VALUE} · not available live</span>
         </div>
         <div>
           {shownSwings.map((swing) => (
-            <div key={swing.key} className="stat-row h-22">
+            <div key={swing.key} className="stat-row">
               <span className="stat-label">{swing.inning}</span>
               <span className="stat-value">{swing.detail}</span>
             </div>
           ))}
           {shownSwings.length === 0 ? (
-            <div className="stat-row h-22">
+            <div className="stat-row">
               <span className="stat-label">No balls in play yet</span>
             </div>
           ) : null}

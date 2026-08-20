@@ -4,6 +4,7 @@ import { fetchCareerStats } from '../../api/mlb'
 import { BattingSubTab } from './BattingSubTab'
 import { MatchupSubTab } from './MatchupSubTab'
 import { PitchingSubTab } from './PitchingSubTab'
+import { SubTabNav } from '../ui'
 import type {
   CareerBatterStat,
   CareerPitcherStat,
@@ -35,11 +36,16 @@ import {
 
 type SubTab = 'matchup' | 'pitching' | 'batting'
 
-const SUB_TABS: { id: SubTab; label: string }[] = [
+const SUB_TABS: readonly { readonly id: SubTab; readonly label: string }[] = [
   { id: 'matchup', label: 'Matchup' },
   { id: 'pitching', label: 'Pitching' },
   { id: 'batting', label: 'Batting' },
 ]
+
+/** SubTabNav reports a plain `string`; this narrows it back without a cast. */
+function isSubTab(value: string): value is SubTab {
+  return SUB_TABS.some((tab) => tab.id === value)
+}
 
 function renderSubTab(tab: SubTab): ReactElement {
   switch (tab) {
@@ -341,17 +347,13 @@ export function PitcherVsBatter() {
         </div>
       </div>
 
-      <div className="sub-tab-nav">
-        {SUB_TABS.map((tab) => (
-          <button
-            key={tab.id}
-            className={activeSubTab === tab.id ? 'active' : ''}
-            onClick={() => setActiveSubTab(tab.id)}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
+      <SubTabNav
+        tabs={SUB_TABS}
+        activeId={activeSubTab}
+        onSelect={(id) => {
+          if (isSubTab(id)) setActiveSubTab(id)
+        }}
+      />
 
       <div className="pvb-panel">{renderSubTab(activeSubTab)}</div>
     </div>

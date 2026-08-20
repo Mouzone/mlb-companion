@@ -161,7 +161,7 @@ export function BattingSubTab(): JSX.Element {
   if (batterId === null) {
     return (
       <div>
-        <div className="h-190 panel-row">
+        <div className="panel-row">
           <div className="section-title">
             <span>Batting</span>
           </div>
@@ -175,7 +175,7 @@ export function BattingSubTab(): JSX.Element {
 
   return (
     <div>
-      <div className="h-190 panel-split">
+      <div className="panel-split">
         <div className="panel-row">
           <div className="section-title">
             <span>Hot / Cold</span>
@@ -204,7 +204,7 @@ export function BattingSubTab(): JSX.Element {
         </div>
       </div>
 
-      <div className="h-160 panel-row">
+      <div className="panel-row">
         <div className="section-title">
           <span>Splits</span>
           <span>vl · vr · risp</span>
@@ -235,7 +235,7 @@ export function BattingSubTab(): JSX.Element {
         </div>
       </div>
 
-      <div className="h-120 panel-row">
+      <div className="panel-row">
         <div className="section-title">
           <span>Recent Form</span>
           <span>{form.games} G</span>
