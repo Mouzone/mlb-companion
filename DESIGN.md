@@ -335,9 +335,11 @@ is clipped instead of scrolled.
 |---|---|
 | `--tab-bar-h` | `48px` |
 | `--sub-tab-h` | `44px` |
-| `--content-h` | `calc(100dvh - var(--tab-bar-h) - var(--sub-tab-h) - env(safe-area-inset-top) - env(safe-area-inset-bottom))` |
 
-`--content-h` already subtracts **both** bars. Never write `calc(var(--content-h) - var(--sub-tab-h))`.
+Those two bars are the only heights the shell names. The panel below them is **not** a token: it
+claims whatever is left via `flex: 1 1 auto; min-height: 0; overflow-y: auto`. An earlier draft of
+this spec defined a `--content-h` calc for it; that token was removed once every consumer was
+converted to flex, because a computed height re-introduces the clipping this section forbids.
 
 ### 6.3 The dead-space doctrine
 

@@ -13,17 +13,16 @@
      vite.config.ts  PWA manifest theme_color / background_color
 
    SHELL ARITHMETIC (DESIGN.md §6.2):
-     100dvh
-      - env(safe-area-inset-top) - env(safe-area-inset-bottom)
-      - var(--tab-bar-h)   48px   .tab-bar        ← fixed chrome
-      = --tab-content-h           .tab-content
-      - var(--sub-tab-h)   44px   .sub-tab-nav    ← fixed chrome
-      = --content-h               .panel          ← THE scroll owner
+     .app is 100dvh minus the safe-area insets, divided by flexbox:
+       var(--tab-bar-h)   48px   .tab-bar        ← fixed chrome
+       var(--sub-tab-h)   44px   .sub-tab-nav    ← fixed chrome
+       the remainder             .panel          ← THE scroll owner
 
-   --content-h ALREADY subtracts BOTH bars. The .sub-tab-nav is always a
-   SIBLING ABOVE the --content-h box; never subtract --sub-tab-h from it a
-   second time. Panels scroll — no panel carries a fixed vertical budget
-   (DESIGN.md §6.3, the dead-space doctrine).
+   The remainder is deliberately NOT a token. The panel claims it with
+   `flex: 1 1 auto; min-height: 0; overflow-y: auto`, so changing either bar
+   height re-flows the layout with no arithmetic to re-derive. Panels scroll —
+   no panel carries a fixed vertical budget (DESIGN.md §6.3, the dead-space
+   doctrine).
    ========================================================================= */
 
 /* --- Reset -------------------------------------------------------------- */
@@ -198,18 +197,6 @@ table {
   /* Shell heights — fixed chrome only (§6.2) */
   --tab-bar-h: 48px;
   --sub-tab-h: 44px;
-
-  /* The flex root sitting directly under the tab bar */
-  --tab-content-h: calc(
-    100dvh - var(--tab-bar-h) - env(safe-area-inset-top) -
-      env(safe-area-inset-bottom)
-  );
-
-  /* The scrolling panel box — tab bar AND sub-tab nav already removed */
-  --content-h: calc(
-    100dvh - var(--tab-bar-h) - var(--sub-tab-h) - env(safe-area-inset-top) -
-      env(safe-area-inset-bottom)
-  );
 
   color-scheme: light;
   font-family: var(--font-ui);

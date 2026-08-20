@@ -79,27 +79,27 @@ src/
     GameSelect/GameSelect.tsx             Pre-game picker. Fetches fetchSchedule(todayStr()) on mount, groups
                                            games into Live / Upcoming (Preview) / Final by
                                            status.abstractGameState, renders GameCard buttons that call
-                                           gameStore.selectGame on click. THE ONLY component in the app whose
-                                           container (`.game-group`) is allowed to scroll vertically. Imported by
-                                           App.tsx.
-    LiveGame/LiveGameTab.tsx              Live Game tab wrapper. Exports LiveGameTab. Owns the `.tab-content`
-                                           flex root (719px) directly under `.tab-bar`; renders the 40px
-                                           `.sub-tab-nav` (At Bat / Batter Game / Pitcher Game) as a sibling above
-                                           `.sub-tab-panel` (679px = var(--content-h)). Calls useLiveFeed() for
+                                            gameStore.selectGame on click. Its `.game-select` container is this
+                                            screen's single scroll owner (see section 8). Imported by App.tsx.
+     LiveGame/LiveGameTab.tsx              Live Game tab wrapper. Exports LiveGameTab. Owns the `.tab-content`
+                                            flex root directly under the 48px `.tab-bar`; renders the 44px
+                                            `.sub-tab-nav` (At Bat / Batter Game / Pitcher Game) as a sibling above
+                                            `.sub-tab-panel`, which is the scroll owner and takes whatever height
+                                            is left over (no fixed budget -- see section 8). Calls useLiveFeed() for
                                            its polling side effect. Dispatches to LiveAtBat, BatterGameSubTab, or
                                            PitcherGameSubTab based on gameStore.liveSubTab. Imported by App.tsx.
     LiveGame/BatterGameSubTab.tsx         "Batter Game" sub-tab. Derives everything from
                                            liveFeed.liveData.plays.allPlays and gameStore.gameFeedPitches already
                                            in the store; issues no network requests itself. Renders a pitch-type
-                                           tally + ZonePlot (h-190), a per-plate-appearance game log (h-160), and
-                                           a batted-ball list with joined bat speed (h-120). Imported by
+                                            tally + ZonePlot, a per-plate-appearance game log, and a batted-ball
+                                            list with joined bat speed. Declares no heights. Imported by
                                            LiveGameTab.
     LiveGame/PitcherGameSubTab.tsx        "Pitcher Game" sub-tab. Derives an in-game PitcherGame summary
                                            (pitches, arsenal, strikes/balls, battersFaced, outs, by-inning pitch
                                            counts, first-pitch-strike rate) purely from allPlays, bounded to
                                            plays at or before the current at-bat index. Renders ArsenalBars +
-                                           ZonePlot (h-190), a workload stat grid + by-inning strip (h-160), and
-                                           an efficiency stat grid (h-120). Imported by LiveGameTab.
+                                            ZonePlot, a workload stat grid + by-inning strip, and an efficiency
+                                            stat grid. Declares no heights. Imported by LiveGameTab.
     LiveAtBat/LiveAtBat.tsx               The "At Bat" sub-tab (the default liveSubTab). Renders the full live
                                            at-bat view: back button + score + baserunner diamond + inning
                                            indicator, per-team linescore rows, batter-vs-pitcher matchup header,
@@ -109,10 +109,11 @@ src/
                                            distance, hardness, joined bat speed), and the play result banner.
                                            Imported by LiveGameTab.
     PitcherVsBatter/PitcherVsBatter.tsx   Exports PitcherVsBatter (the Pitcher-vs-Batter tab root). Owns
-                                           `.tab-content`; renders the 200px `.pvb-cards-wrap` swipeable card
-                                           strip (pitcher season, pitcher career, batter season, batter career),
-                                           the 40px `.sub-tab-nav` (Matchup / Pitching / Batting), and the 479px
-                                           `.pvb-panel`. Calls usePlayerStats(batterId, pitcherId) and
+                                            `.tab-content`; renders the `.pvb-cards-wrap` card strip (pitcher
+                                            season, pitcher career, batter season, batter career -- horizontally
+                                            swipeable below 1024px, a two-column grid at or above it), the 44px
+                                            `.sub-tab-nav` (Matchup / Pitching / Batting), and `.pvb-panel`, which
+                                            is the scroll owner. Calls usePlayerStats(batterId, pitcherId) and
                                            fetchCareerStats independently for pitcher and batter career rows.
                                            Computes park-adjusted sabermetric cells for the swipe cards using
                                            utils/sabermetrics.ts and utils/leagueConstants.ts. Dispatches to
@@ -122,8 +123,8 @@ src/
                                            'career' | 'series'). Career mode calls fetchCareerVsPlayer once per
                                            batter/pitcher pair. Series mode calls fetchSeriesSchedule +
                                            fetchPlayByPlayBatch to find the current consecutive-games series and
-                                           lists each shared at-bat (h-55 rows, max 7 shown via MAX_AT_BAT_ROWS)
-                                           with a joined pitch-sequence strip. Imported by PitcherVsBatter.
+                                            lists every shared at-bat with a joined pitch-sequence strip (no row
+                                            cap -- the panel scrolls). Imported by PitcherVsBatter.
     PitcherVsBatter/PitchingSubTab.tsx    Pitcher arsenal + hot/cold heatmap + situational splits (vs L / vs R /
                                            RISP) + recent-form aggregation (7/15/30-game spans from one cached
                                            season game log, so switching spans never refetches). Renders
@@ -318,50 +319,63 @@ Supporting utilities in the same file:
 
 ## 8. Layout Constraints
 
-Target device: iPhone 13 in PWA standalone mode, 390x844 CSS px. `index.html`'s viewport meta tag includes `viewport-fit=cover`, which is required for `env(safe-area-inset-*)` to resolve to a non-zero value; without it the entire height budget below collapses because the insets read as 0.
+Target device: iPhone 13 in PWA standalone mode, 390x844 CSS px. `index.html`'s viewport meta tag includes `viewport-fit=cover`, which is required for `env(safe-area-inset-*)` to resolve to a non-zero value.
 
-Vertical arithmetic (from `src/index.css`):
+**There are no fixed vertical budgets.** An earlier revision divided the viewport into hardcoded pixel allotments (`--content-h`, `--tab-content-h`, `--pvb-content-h`, and a sanctioned `.h-*` utility ladder). That system is gone — every one of those tokens, classes, and raw budget numbers has been deleted, and `scripts/design-checks.mjs` fails if the names reappear. Layout is now flexbox plus one scroll owner per screen.
 
-```
-844 total (iPhone 13)
- -47 env(safe-area-inset-top)
- -34 env(safe-area-inset-bottom)
- = 763 usable
- -44 .tab-bar
- = 719 .tab-content            (--tab-content-h)
- -40 .sub-tab-nav
- = 679 --content-h             <- ALREADY excludes BOTH the tab bar and the sub-tab nav
-```
-
-Structural nesting contract (must not be violated):
+Shell contract:
 
 ```
-.app            100dvh, overflow hidden, flex column, safe-area padding
-  .tab-bar      44px
-  .tab-content  719px (flex:1, min-height:0, overflow:hidden)
-    .sub-tab-nav   40px   <- ALWAYS a SIBLING ABOVE the content box, never nested inside it
-    .sub-tab-panel 679px  = var(--content-h)                     [Live Game tab]
-  -- or, for the Pitcher-vs-Batter tab --
-    .sub-tab-nav       40px
-    .pvb-cards-wrap    200px
-    .pvb-panel         479px  = var(--content-h) - 200px  (--pvb-content-h)
+html, body, #root    height:100%, overflow:hidden                  index.css
+  .app               100dvh, flex column, overflow:hidden,
+                     padding = all four safe-area insets           App.css
+    .tab-bar         var(--tab-bar-h) = 48px   <- fixed chrome     ui.css
+    .tab-content     flex:1, min-height:0, overflow:hidden         App.css
+      .sub-tab-nav   var(--sub-tab-h) = 44px   <- fixed chrome     ui.css
+                     ALWAYS a SIBLING ABOVE the panel, never inside it
+      .sub-tab-panel flex:1 1 auto, min-height:0,
+      / .pvb-panel   overflow-y:auto           <- THE scroll owner App.css
 ```
 
-`--content-h` already subtracts both the 44px tab bar and the 40px sub-tab nav from the safe-area-adjusted viewport height. **Never write `calc(var(--content-h) - 40px)`** anywhere — that double-subtracts the sub-tab nav. `639` (679 - 40) must never appear as a height value in this codebase.
+The panel's height is never computed. It claims the remainder with `flex: 1 1 auto; min-height: 0; overflow-y: auto`, so changing either bar height re-flows the layout with no arithmetic to re-derive. `min-height: 0` on every flex ancestor of a scroll owner is a hard requirement — without it the box refuses to shrink and clips instead of scrolling.
 
-Allowed vertical px values (the `.h-*` utility classes in `App.css`), each `flex: 0 0 Npx; height: Npx; overflow: hidden`: `190 186 172 160 150 120 95 55 44 40 22 18`. Section-level components also reference the raw budget numbers `719 679 479 470 200`. Never invent a height outside this set; every section must justify its allotment against one of these tokens (see the inline budget comments in `BatterGameSubTab.tsx`, `PitcherGameSubTab.tsx`, `LiveAtBat.tsx`, and `MatchupSubTab.tsx`).
+**Exactly one vertical scroll owner per screen.** On the Live Game and Pitcher-vs-Batter tabs that is `.sub-tab-panel` / `.pvb-panel`; on the GameSelect screen — which has no sub-tab nav — it is `.game-select`. Everything above them is `overflow: hidden`. The only other scrollable box is `.pvb-cards`, which scrolls **horizontally** (`overflow-x: auto` with scroll-snap) below 1024px and becomes a static two-column grid above it. Every remaining `overflow: hidden` in the codebase is a text-truncation or clipping wrapper, not a layout container.
 
-Canvas-specific clamp: `ArsenalBars` renders `<canvas style={{ width }}>` with no `className` and no CSS height, so its intrinsic canvas height (5 pitch types x 2 DPR scaling = up to 372px) becomes its rendered CSS height unless constrained. `App.css` fixes this with a required descendant selector, `.arsenal-canvas > canvas { max-height: 186px }`, since the wrapper's own `height`/`max-height` alone would only clip, not resize, the canvas.
+Breakpoints are literal `min-width` px values — there is no `--bp-*` custom property, and no `max-width` query exists anywhere:
 
-Theme tokens (`src/index.css`, must match `vite.config.ts`'s PWA manifest `theme_color`/`background_color`):
+| Breakpoint | What changes |
+|---|---|
+| `480px` | Stat grids go 3-up (`.stat-grid`, `.tendencies-grid`, `.season-lines`), `.stat-grid-3` goes 4-up; `.matchup__grid`/`.atbat__grid` gaps and linescore type scale up |
+| `768px` | Content capped at **720px** and centered via `padding-inline: max(var(--sp-4), calc((100% - 720px) / 2))` on `.sub-tab-panel`, `.pvb-panel`, and `.game-select`; canvas wrappers gain block padding |
+| `1024px` | Same mechanism capped at **960px**; `.pvb-cards` becomes a two-column grid with `overflow-x: visible` and scroll-snap disabled |
 
-- `--mlb-primary: #1b3a2f`
-- `--mlb-bg: #0d1b12`
-- `--mlb-accent: #2d5a3f`
-- `--mlb-text: #e0e0e0`
-- `--mlb-muted: #888888`
+Centering uses `padding-inline`, not `max-width`, so the scroll owner keeps its full-bleed scrollbar gutter while its content stays within the cap.
 
-`GameSelect`'s `.game-group` is the only container in the entire app with `overflow-y: auto`; every other panel is `overflow: hidden` by design.
+**Known divergence from DESIGN.md §6.4.** The spec calls for a three-up game grid at `--bp-lg`. It is deliberately not implemented: three tracks of the §6.5 320px card floor plus two gaps need 976px, exceeding the 960px content cap by 16px. `repeat(3, ...)` was tried and produced 314.7px cards that ellipsis-truncated venue and pitcher names. The grid stays two-up — see the comment in `App.css` and DESIGN.md's change protocol before revisiting.
+
+Surviving hardcoded heights. This is the complete list; additions need justification:
+
+- `--tab-bar-h: 48px` and `--sub-tab-h: 44px` (`src/index.css`), applied by `.ui-tab-bar` / `.ui-sub-tab-nav`. Fixed chrome is the only thing permitted to declare `height`, and it lives in `ui.css`.
+- `.arsenal-canvas > canvas { max-height: 186px }` — the canvas clamp described below.
+- `.a11y-only { width: 1px; height: 1px }` and the 1px `.matchup-head__vs` hairline pseudo-elements.
+- `Skeleton height="44px" / "32px"` placeholders in `GameSelect.tsx`, and `SprayChart`'s `height = 200` default (passed explicitly as `height={200}` from `BattingPanels.tsx`).
+
+Canvas sizing. All four canvases (`ArsenalBars`, `HeatMap`, `SprayChart`, `ZonePlot`) size their own backing store in JS from `window.devicePixelRatio` and set matching CSS pixel dimensions inline. There is no `ResizeObserver` in the codebase — a canvas keeps its intrinsic size inside a `width: 100%` centered slot rather than reacting to it. Call sites: `ZonePlot size={172}` in both live sub-tabs (`LEGEND_MIN_SIZE = 172` gates whether the legend draws), `HeatMap size={150}` in `PvbPanels`, `SprayChart 264x200` in `BattingPanels`. `ArsenalBars` is the exception: it computes its height from the number of pitch types and returns `<canvas style={{ width }}>` with **no** CSS height, so a tall arsenal would render at its raw pixel height. `App.css` constrains it with the descendant selector `.arsenal-canvas > canvas { max-height: 186px }` — the wrapper's own `height`/`max-height` would only clip, not resize, the canvas.
+
+Theme tokens. `src/index.css` declares a white-first system: `--c-bg`, `--c-surface-*`, `--c-border*`, `--c-ink*`, `--c-brand-*`, semantic `--c-live`/`--c-positive`/`--c-negative`/`--c-warn`/`--c-neutral-badge`, chart `--c-heat-*`/`--c-chart-*`, 14 `--c-pitch-*` identity colors and 4 `--c-call-*` markers, plus `--sp-1..8`, `--radius-sm|base|lg|pill`, and `--font-ui`/`--font-num`. Note the spacing scale is `--sp-*`, not `--space-*`. The old dark-green `--mlb-primary`/`--mlb-bg`/`--mlb-accent`/`--mlb-text`/`--mlb-muted` tokens no longer exist.
+
+Three files must move together, and the `theme-lockstep` guard enforces it: `--c-brand-900` (`#041e42`) must equal `index.html`'s `<meta name="theme-color">` and `vite.config.ts`'s manifest `theme_color`; `--c-bg` (`#ffffff`) must equal the manifest `background_color`.
+
+Design guard: `npm run check:design` (`scripts/design-checks.mjs`) runs four checks and exits non-zero on any failure.
+
+| Check | What it actually enforces |
+|---|---|
+| `no-canvas-hex` | No hex literal may appear in the four `src/components/Canvas/*.tsx` files or `src/utils/pitchConstants.ts`. Canvas colors must be read from tokens. |
+| `theme-lockstep` | The token ↔ `theme-color` ↔ manifest agreement above. Fails on a missing value as well as a mismatch. |
+| `no-fixed-budgets` | Scans every `.ts`/`.tsx`/`.css` under `src` for the deleted names `h-190 h-172 h-160 h-120 h-55 h-44 h-40 h-22 h-18` and `--pvb-content-h`. The pattern does **not** cover `h-186`, `h-150`, or `h-95`. |
+| `tabular-nums` | Asserts only that the literal string `tabular-nums` appears in `src/index.css`; it does not verify that every numeric readout uses it. |
+
+The guard is deliberately **not** wired into `npm run build`: Vercel runs `tsc -b && vite build` directly via `vercel.json`'s `buildCommand` and would bypass an npm-script gate, making the enforcement illusory. Run it manually alongside `tsc -b` and `lint`.
 
 ## 9. Maintenance Guide
 
@@ -369,9 +383,9 @@ Theme tokens (`src/index.css`, must match `vite.config.ts`'s PWA manifest `theme
 
 **Adding a new stat.** 1) Add the field to the relevant interface in `src/api/types.ts` if the API response includes it but the type doesn't yet declare it. 2) If it needs a fetcher, add it to `src/api/mlb.ts` or `src/api/savant.ts` following the existing `fetch...` pattern (throw on `!res.ok`, return the parsed/narrowed shape). 3) If it needs computation, add a pure function to `src/utils/sabermetrics.ts` following the `isValidStat`/`roundStat` null-safety pattern used by the existing `compute*` functions. 4) Wire it into the consuming component's stat-cell array (e.g. `pitcherSeasonStats` in `PitcherVsBatter.tsx`, or the `StatCell` lists in `LiveAtBat.tsx`/`PitcherGameSubTab.tsx`).
 
-**Adding a new canvas component.** Follow the pattern in `src/components/Canvas/*.tsx`: a `useRef<HTMLCanvasElement>` plus a `useEffect` that gets the 2D context, scales for `window.devicePixelRatio`, and draws. Accept a `size`/`width`/`height` prop with a default. If the component does not set an explicit CSS height on its `<canvas>` (as `ArsenalBars` does not), add a descendant clamp in `App.css` under section 5 ("CANVAS WRAPPERS") following the `.arsenal-canvas > canvas` pattern, or the canvas will render at its raw pixel height and blow the layout budget.
+**Adding a new canvas component.** Follow the pattern in `src/components/Canvas/*.tsx`: a `useRef<HTMLCanvasElement>` plus a `useEffect` that gets the 2D context, scales for `window.devicePixelRatio`, and draws. Accept a `size`/`width`/`height` prop with a default. If the component does not set an explicit CSS height on its `<canvas>` (as `ArsenalBars` does not), add a descendant clamp in `App.css` following the `.arsenal-canvas > canvas { max-height: 186px }` pattern, or the canvas will render at its raw pixel height. Read colors from the chart theme, never as hex literals — the `no-canvas-hex` guard scans `src/components/Canvas/*.tsx`.
 
-**Adding a new sub-tab.** Add the id to the relevant union type in `gameStore.ts` (`LiveSubTab` or the `ActiveSubTab`/`SubTab` type used by `PitcherVsBatter.tsx`/`LiveGameTab.tsx`), add a descriptor to that file's `SUB_TABS` array, add a `case` to its `renderSubTab` switch, and add a new component file under the matching `src/components/<Tab>/` directory. Budget the new component's sections against the surrounding panel's fixed height (`679` for Live Game sub-tabs, `--pvb-content-h` / `479` for Pitcher-vs-Batter sub-tabs) using only the sanctioned `.h-*` values from section 8.
+**Adding a new sub-tab.** Add the id to the relevant union type in `gameStore.ts` (`LiveSubTab` or the `ActiveSubTab`/`SubTab` type used by `PitcherVsBatter.tsx`/`LiveGameTab.tsx`), add a descriptor to that file's `SUB_TABS` array, add a `case` to its `renderSubTab` switch, and add a new component file under the matching `src/components/<Tab>/` directory. Do not give the new component a height — the surrounding panel is the scroll owner and content sizes to content (see section 8). Run `npm run check:design` afterwards.
 
 ## 10. Build & Deploy
 
@@ -380,9 +394,10 @@ Scripts (`package.json`):
 - `npm run dev` — `vite` dev server.
 - `npm run build` — `tsc -b && vite build`. Type-checks via project references (`tsconfig.json` → `tsconfig.app.json`, `tsconfig.node.json`), then builds with Vite.
 - `npm run lint` — `oxlint`.
+- `npm run check:design` — `node scripts/design-checks.mjs`, the four layout/theme guards described in section 8. Not wired into `build` on purpose (see section 8).
 - `npm run preview` — `vite preview`, serves the built `dist/`.
 
-There is no test framework in this project and none may be added; verification is `npx tsc -b` (judge by empty stdout — it can misleadingly report exit 0 when piped through another command), `npm run build`, `npm run lint`, and manual Playwright QA at the 390x844 viewport. Zero new npm dependencies is a hard project constraint.
+There is no test framework in this project and none may be added; verification is `npx tsc -b` (judge by empty stdout — it can misleadingly report exit 0 when piped through another command), `npm run build`, `npm run lint`, `npm run check:design`, and manual Playwright QA at the 390x844 viewport. Zero new npm dependencies is a hard project constraint.
 
 Deterministic QA entry point: `http://localhost:5173/?gamePk=746352` — a completed 2024 game whose Savant `gf` feed is still served, useful when no live game exists.
 
@@ -397,15 +412,15 @@ PWA behavior is configured in `vite.config.ts` via `vite-plugin-pwa`: `registerT
 3. **The `statcast_search` CSV lags roughly a day** and returns zero rows for today's game. In-game bat speed therefore comes from the Savant **game feed** (`GET /gf?game_pk=N`, camelCase `batSpeed`), stored in `gameStore.gameFeedPitches`, never from the CSV endpoint.
 4. **Savant-to-live-feed join key is `play_id` alone** (`savantRow.play_id === playEvent.playId`, read defensively via `playIdOf` since `PlayEvent` doesn't declare `playId`). Joining on `at_bat_number` additionally would mismatch every row by one at-bat, because the live feed's `about.atBatIndex` is 0-based while Savant's `ab_number` is 1-based.
 5. **`swing_path_tilt` is absent from the game feed** (it's CSV-only and day-lagged), so the Live tab renders `—` for it by design — not a bug.
-6. **Balls in play are neither `isStrike` nor `isBall`.** `PitcherGameSubTab.countsAsStrike` explicitly folds in `details.isInPlay`; omitting it undercounts strike rate substantially (documented empirically at ~46% vs. a true ~63% on one sampled game, gamePk 746352).
+6. **Balls in play are neither `isStrike` nor `isBall`.** Pitch classification lives in `GameSubTabShared.outcomeOf`, shared by both live sub-tabs: it tests `details.isInPlay` **first** and returns `'inplay'` before any ball/strike check, and `splitPitches` then counts every non-`ball` outcome as a strike, balls in play included. Omitting the in-play case undercounts strike rate substantially (measured at ~46% vs. a true ~63% on gamePk 746352 before this was centralized). Two related deliberate choices in the same module: fouls are classified **by elimination** — anything that is not in play, a ball, a called strike, or a member of the `MISS_CALLS` set — so no Gameday call code has to be guessed; and `inStrikeZone` returns `null` when `pitchData.zone` is absent, so those pitches are excluded from the zone/chase denominators entirely rather than counted as out-of-zone.
 7. **`fetchHotColdZones` splits arrive in a fixed but undocumented order, and `value` is a string.** The fetcher selects by `stat?.name === 'battingAverage'` (falling back to `splits[0]`), never by index.
-8. **`fetchPitchArsenal` percentages are multiplied by 100** inside the fetcher (raw API values are fractional); `ArsenalBars`/`buildArsenal` expect a 0-100 scale.
+8. **`fetchPitchArsenal` percentages are multiplied by 100** inside the fetcher (raw API values are fractional), so `ArsenalBars` consumes a 0-100 scale. Do not confuse this with `PitcherGameModel.buildArsenal`, which is unrelated: it derives an *in-game* pitch mix from live `PlayEvent`s grouped by `details.type.code` and emits its own `share` rate.
 9. **MLB API field casing is inconsistent.** Pitchers return `strikeOuts` (capital O) and `avg` (which for pitchers is opponent batting average) — there is no `strikeouts` or `oppAvg` field.
 10. **Career ERA+ and career wRC+ are structurally uncomputable** and render `—` by design: there is no park-adjusted career ERA endpoint, and the Savant CSV (needed for career wOBA) is single-season only. **Career FIP IS computable**, because the career pitching endpoint does return `hitBatsmen` and `homeRuns`.
 11. **`babip_denom` is not present in the Savant CSV.** BABIP comes from the MLB Stats API's `SeasonStat.babip` field, parsed with `parseStat()`.
 12. **The play-by-play endpoint is `/v1/game/{gamePk}/playByPlay` — v1, not v1.1.** `fetchPlayByPlayBatch` caps concurrency at 5 requests via `chunk(gamePks, 5)`.
 13. **ERA+/wRC+ park factor uses the current game's home park** (`PARK_FACTORS[selectedGame.teams.home.team.abbreviation] ?? 1.00`) as an approximation of the player's own home park; it is not looked up per-player.
-14. **`env(safe-area-inset-*)` resolves to 0 in headless Chrome.** QA there will measure `--content-h` as 760px and `.pvb-panel` as 560px rather than the real-device 679px/479px. The layout arithmetic still holds — these larger numbers are not a layout violation, just a headless-browser artifact.
-15. **`usePlayerStats` is called independently by three components** (`PitcherVsBatter`, `PitchingSubTab`, `BattingSubTab`) with no shared cache, so switching between the Pitcher vs Batter tab's card strip and its sub-tabs triggers redundant network requests for the same batter/pitcher pair.
-16. **`gameStore.setRecentFormGames`/`recentFormGames` are declared on the store but the recent-form span toggle in `PitchingSubTab`/`BattingSubTab` currently keeps its own local component state instead of dispatching this action** — the store field exists but is effectively unused for that purpose today.
+14. **`env(safe-area-inset-*)` resolves to 0 in headless Chrome**, so QA there renders a marginally taller `.app` than a real iPhone does. Because the layout is flex-based with no fixed budgets (section 8), this only changes how much of the panel is visible before scrolling begins — it is a headless-browser artifact, not a layout violation.
+15. **`usePlayerStats` is called independently by four components** (`PitcherVsBatter`, `MatchupSubTab`, `PitchingSubTab`, `BattingSubTab`) with no shared cache. It is a plain `useState`/`useEffect` firing a ten-way `Promise.all`, each request individually `.catch()`-defaulted, so switching between the Pitcher vs Batter card strip and its sub-tabs re-requests the same batter/pitcher pair from scratch.
+16. **The recent-form span is global, not per-tab.** `recentFormGames` is a single `gameStore` field (default `7`) and both `PitchingSubTab` and `BattingSubTab` dispatch `setRecentFormGames` against it, so changing the span in one sub-tab silently changes it in the other.
 17. **No test framework, no client-side router, and no backend exist in this project**, by design; do not introduce any of the three without updating this document and `vercel.json`'s SPA rewrite assumption.

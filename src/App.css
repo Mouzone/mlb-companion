@@ -30,9 +30,6 @@
    centred slot. A panel that still looks empty needs more data, not more
    padding.
 
-   `--content-h` in index.css already subtracts BOTH bars. Never write
-   `calc(var(--content-h) - var(--sub-tab-h))` — that double-subtracts.
-
    ── OWNERSHIP MAP ───────────────────────────────────────────────────────────
 
    The file is partitioned into five banner sections so follow-up work can
