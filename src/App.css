@@ -330,19 +330,37 @@ button:focus-visible,
   text-transform: uppercase;
 }
 
+/* A plain grid, NOT a second scroll container. The inner `min()` lets a track
+   fall below the 320px floor when the viewport is narrower — that is what
+   stops the grid overflowing. Column count is intrinsic: no breakpoint pins
+   it, so a card is never squeezed under 320px. */
+
 .game-group {
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 1fr));
   gap: var(--sp-3);
+  align-items: start;
   min-width: 0;
 }
 
 .group-title {
+  display: flex;
   grid-column: 1 / -1;
+  gap: var(--sp-3);
+  align-items: baseline;
   font-size: var(--fs-label);
   font-weight: var(--fw-bold);
   letter-spacing: var(--tracking-caps);
   text-transform: uppercase;
+}
+
+.group-count {
+  font-family: var(--font-num);
+  font-size: var(--fs-label);
+  font-weight: var(--fw-semibold);
+  color: var(--c-ink-muted);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: normal;
 }
 
 .group-title.live {
@@ -357,47 +375,194 @@ button:focus-visible,
   color: var(--c-ink-secondary);
 }
 
-.game-card {
+/* --- Game card (DESIGN.md §6.5) ----------------------------------------- */
+/* Three stacked bands, and NO height at any level: the card is exactly as tall
+   as the data the schedule returned. The skeleton shares the chrome selector
+   so load reserves an identical box; only the button gets the affordances. */
+
+.game-card,
+.gc-skeleton {
   display: flex;
+  flex-direction: column;
   gap: var(--sp-4);
-  align-items: center;
-  justify-content: space-between;
   min-width: 0;
   padding: var(--sp-4);
   text-align: left;
-  cursor: pointer;
   background: var(--c-bg);
   border: 1px solid var(--c-border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-xs);
+}
+
+.game-card {
+  cursor: pointer;
   transition:
     border-color var(--dur-fast) var(--ease-out),
-    background-color var(--dur-fast) var(--ease-out);
+    background-color var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out);
 }
 
 .game-card:hover {
   background: var(--c-surface-hover);
+  border-color: var(--c-border-strong);
 }
 
 .game-card:active {
   background: var(--c-surface-hover);
   border-color: var(--c-brand-600);
+  transform: scale(0.995);
 }
 
-.game-card-teams {
+/* --- Band 1: one row per team ------------------------------------------- */
+
+.gc-teams {
   display: flex;
-  flex: 1 1 auto;
   flex-direction: column;
-  gap: var(--sp-2);
+  gap: var(--sp-3);
   min-width: 0;
 }
 
-.game-card-meta {
+.gc-team {
   display: flex;
-  flex: 0 0 auto;
+  gap: var(--sp-4);
+  align-items: center;
+  min-width: 0;
+}
+
+.gc-identity {
+  display: flex;
+  flex: 1 1 auto;
   flex-direction: column;
-  gap: var(--sp-2);
-  align-items: flex-end;
+  gap: var(--sp-1);
+  min-width: 0;
+}
+
+.gc-name {
+  overflow: hidden;
+  font-size: var(--fs-body);
+  font-weight: var(--fw-semibold);
+  line-height: var(--lh-snug);
+  color: var(--c-ink);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.gc-record {
+  font-family: var(--font-num);
+  font-size: var(--fs-label);
+  font-weight: var(--fw-medium);
+  line-height: var(--lh-snug);
+  color: var(--c-ink-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.gc-score {
+  flex: 0 0 auto;
+  font-family: var(--font-num);
+  font-size: var(--fs-hero);
+  font-weight: var(--fw-bold);
+  line-height: var(--lh-tight);
+  color: var(--c-ink);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: var(--tracking-tight);
+}
+
+/* Weight ranks the two rows at a glance. Never the sole channel (§7): the
+   numerals themselves state the margin, and the badge prints the status. */
+.gc-score--trail {
+  font-weight: var(--fw-medium);
+  color: var(--c-ink-muted);
+}
+
+/* --- Band 2: status strip ------------------------------------------------ */
+
+.gc-footer {
+  display: flex;
+  gap: var(--sp-3);
+  align-items: center;
+  min-width: 0;
+  padding-top: var(--sp-3);
+  border-top: 1px solid var(--c-border);
+}
+
+.gc-detail {
+  flex: 0 0 auto;
+  font-family: var(--font-num);
+  font-size: var(--fs-label);
+  font-weight: var(--fw-semibold);
+  color: var(--c-ink-secondary);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.gc-venue {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  font-size: var(--fs-label);
+  font-weight: var(--fw-medium);
+  color: var(--c-ink-muted);
+  text-align: right;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* --- Band 3: probable pitchers, away vs home ----------------------------- */
+
+.gc-probables {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  min-width: 0;
+  padding-top: var(--sp-3);
+  border-top: 1px solid var(--c-border);
+}
+
+.gc-probable {
+  display: flex;
+  gap: var(--sp-3);
+  align-items: center;
+  min-width: 0;
+}
+
+.gc-probable + .gc-probable {
+  padding-left: var(--sp-3);
+  margin-left: var(--sp-3);
+  border-left: 1px solid var(--c-border);
+}
+
+.gc-probable-text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  min-width: 0;
+}
+
+.gc-probable-name {
+  overflow: hidden;
+  font-size: var(--fs-body);
+  font-weight: var(--fw-semibold);
+  line-height: var(--lh-snug);
+  color: var(--c-ink-secondary);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* --fs-label, not --fs-micro: uppercase + tracking below 11px is banned
+   by §3.3, and this line is both. */
+.gc-probable-role {
+  font-size: var(--fs-label);
+  font-weight: var(--fw-medium);
+  line-height: var(--lh-snug);
+  color: var(--c-ink-muted);
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+}
+
+/* Skeleton bars carry their own explicit box; flex must not resize them. */
+.gc-skeleton .ui-skeleton {
+  flex: 0 0 auto;
 }
 
 .team-row {
@@ -419,53 +584,13 @@ button:focus-visible,
   text-overflow: ellipsis;
 }
 
-.team-score {
-  flex: 0 0 auto;
-  font-family: var(--font-num);
-  font-size: var(--fs-hero);
-  font-weight: var(--fw-semibold);
-  line-height: var(--lh-tight);
-  color: var(--c-ink);
-  font-variant-numeric: tabular-nums;
-  letter-spacing: var(--tracking-tight);
-}
-
-.status-badge {
-  display: inline-flex;
-  align-items: center;
-  padding: var(--sp-1) var(--sp-3);
-  font-size: var(--fs-label);
-  font-weight: var(--fw-bold);
-  letter-spacing: var(--tracking-caps);
-  text-transform: uppercase;
-  white-space: nowrap;
-  border-radius: var(--radius-pill);
-}
-
-.status-badge.live {
-  color: var(--c-live);
-  background: var(--c-live-bg);
-}
-
-.status-badge.preview {
-  color: var(--c-brand-700);
-  background: var(--c-brand-100);
-}
-
-.status-badge.final {
-  color: var(--c-neutral-badge);
-  background: var(--c-neutral-badge-bg);
-}
-
 /* --- §GameSelect breakpoints -------------------------------------------- */
 /* Declared here, not in §Shell: source order decides ties, so a `.game-*`
-   override placed above these base rules would never apply. */
+   override placed above these base rules would never apply.
 
-@media (min-width: 480px) {
-  .game-group {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
+   Only the gutter is keyed to width. Column count is left to `auto-fill`,
+   which already adds a track the moment two 320px cards fit; pinning
+   `repeat(2)` here would instead squeeze cards below that floor. */
 
 @media (min-width: 768px) {
   .game-select {
@@ -477,26 +602,46 @@ button:focus-visible,
   .game-select {
     padding-inline: max(var(--sp-4), calc((100% - 960px) / 2));
   }
-
-  .game-group {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
 }
 
 /* ===== §LiveAtBat ===== */
-/* Owner: todo 9 — game-header, game-score, bases, base, counter, matchup-*,
-   play-result, rbi, zone-canvas, btn-back, player-name, pitch detail. */
+/* Owner: todo 9 — a11y-only, scoreboard (game-header, bases, base, counter,
+   btn-back, linescore-*), matchup-*, atbat-*, zone-canvas, play-result, rbi. */
 
-/* Back button, score, base diamond and inning pill share ONE centre axis. */
-.inning-info,
+/* Canvas is not accessible (§7): every chart is preceded by a text summary
+   that is removed from flow but left in the accessibility tree. 1px is the
+   hairline unit this file already uses for every border. */
+.a11y-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  white-space: nowrap;
+  clip-path: inset(50%);
+}
+
+/* --- Scoreboard --------------------------------------------------------- */
+.scoreboard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  min-width: 0;
+  padding: var(--sp-4);
+  background: var(--c-bg);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius);
+}
+
+/* Back button, base diamond, status badge and inning pill share ONE centre
+   axis — a single flex row with `align-items: center` makes that structural
+   rather than a coincidence of four separately padded boxes. */
 .game-header {
   display: flex;
-  gap: var(--sp-4);
+  flex-wrap: wrap;
+  gap: var(--sp-3);
   align-items: center;
   justify-content: space-between;
   min-width: 0;
-  padding: var(--sp-3) 0;
-  border-bottom: 1px solid var(--c-border);
 }
 
 .btn-back {
@@ -504,7 +649,10 @@ button:focus-visible,
   flex: 0 0 auto;
   gap: var(--sp-2);
   align-items: center;
-  padding: var(--sp-2) var(--sp-3);
+  justify-content: center;
+  /* 44px — the §7 touch-target floor, expressed in grid tokens. */
+  min-height: calc(var(--sp-8) + var(--sp-4));
+  padding: var(--sp-2) var(--sp-4);
   font-size: var(--fs-label);
   font-weight: var(--fw-semibold);
   color: var(--c-ink-secondary);
@@ -524,18 +672,82 @@ button:focus-visible,
   border-color: var(--c-brand-600);
 }
 
-.game-score {
-  flex: 1 1 auto;
+/* --- Line score --------------------------------------------------------- */
+/* `table-layout: fixed` is the whole point: it makes every column edge
+   structural instead of a by-product of glyph widths, which is what the old
+   two-row R/H/E flex pair could never do. Only the team column is sized; the
+   remaining tracks split what is left in equal fractions. */
+
+.linescore {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.linescore__team {
+  width: calc(var(--sp-8) * 2);
+  padding: var(--sp-2) var(--sp-2) var(--sp-2) 0;
+  text-align: left;
+}
+
+.linescore__team-inner {
+  display: flex;
+  gap: var(--sp-2);
+  align-items: center;
   min-width: 0;
-  font-family: var(--font-num);
-  font-size: var(--fs-hero);
+}
+
+.linescore__abbr {
+  min-width: 0;
+  overflow: hidden;
+  font-size: var(--fs-label);
   font-weight: var(--fw-semibold);
-  line-height: var(--lh-tight);
   color: var(--c-ink);
+  letter-spacing: var(--tracking-caps);
+  white-space: nowrap;
+}
+
+.linescore__inning,
+.linescore__total {
+  padding: var(--sp-2) var(--sp-1);
+  font-family: var(--font-num);
+  font-size: var(--fs-body);
+  font-weight: var(--fw-medium);
+  line-height: var(--lh-snug);
+  color: var(--c-ink-secondary);
   text-align: center;
   font-variant-numeric: tabular-nums;
-  letter-spacing: var(--tracking-tight);
-  white-space: nowrap;
+}
+
+/* The R column carries the divider that turns "innings" and "totals" into two
+   readable groups instead of one ragged twelve-column run. */
+.linescore__total {
+  font-weight: var(--fw-semibold);
+  color: var(--c-ink);
+}
+
+.linescore__total--runs {
+  font-size: var(--fs-data);
+  font-weight: var(--fw-bold);
+  border-left: 1px solid var(--c-border);
+}
+
+.linescore__head {
+  font-size: var(--fs-label);
+  font-weight: var(--fw-semibold);
+  color: var(--c-ink-muted);
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--c-border);
+}
+
+.linescore__row > * {
+  border-top: 1px solid var(--c-border);
+}
+
+.linescore__row--batting .linescore__abbr {
+  font-weight: var(--fw-bold);
+  color: var(--c-brand-700);
 }
 
 /* Count / inning pill: white on saturated brand, the one place a filled
@@ -586,35 +798,37 @@ button:focus-visible,
 }
 
 /* --- Matchup header ----------------------------------------------------- */
-.matchup-info {
-  display: flex;
+/* `1fr auto 1fr` makes the two player columns mathematically identical and
+   puts VS exactly between them. The old flex version let the batter start at
+   x=12 and the pitcher at x=210, so neither side nor the divider was centred. */
+
+.matchup__grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   gap: var(--sp-4);
-  align-items: stretch;
+  align-items: start;
   min-width: 0;
-  padding: var(--sp-4);
-  background: var(--c-surface-sunken);
-  border: 1px solid var(--c-border);
-  border-radius: var(--radius);
 }
 
-.matchup-player,
-.player-side {
+.matchup__side {
   display: flex;
-  flex: 1 1 0;
   flex-direction: column;
-  gap: var(--sp-1);
+  gap: var(--sp-2);
   min-width: 0;
 }
 
-.matchup-player.batter {
+.matchup__side--start {
+  align-items: flex-start;
+  text-align: left;
+}
+
+.matchup__side--end {
+  align-items: flex-end;
   text-align: right;
 }
 
 .matchup-vs {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: center;
+  align-self: center;
   font-size: var(--fs-label);
   font-weight: var(--fw-bold);
   color: var(--c-ink-muted);
@@ -623,6 +837,7 @@ button:focus-visible,
 
 /* Player identity is never the same size as a stat value (§3.3). */
 .player-name {
+  max-width: 100%;
   min-width: 0;
   overflow: hidden;
   font-size: var(--fs-lg);
@@ -633,60 +848,251 @@ button:focus-visible,
   text-overflow: ellipsis;
 }
 
-.matchup-player .stat-line {
-  padding: 0;
+.matchup__meta {
+  display: flex;
+  gap: var(--sp-2);
+  align-items: center;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.matchup__side--end .matchup__meta {
+  flex-direction: row-reverse;
+}
+
+.matchup__affiliation {
+  min-width: 0;
+  overflow: hidden;
   font-size: var(--fs-label);
+  font-weight: var(--fw-medium);
+  line-height: var(--lh-snug);
   color: var(--c-ink-muted);
   white-space: nowrap;
-  border-bottom: 0;
+  text-overflow: ellipsis;
 }
 
-/* --- Pitch detail ------------------------------------------------------- */
-.current-pitch-section {
-  display: flex;
-  gap: var(--sp-4);
+.matchup__role {
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  font-size: var(--fs-label);
+  font-weight: var(--fw-semibold);
+  line-height: var(--lh-snug);
+  color: var(--c-ink-muted);
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* Platoon advantage prints the word as well as the hue (§7). */
+.matchup__edge {
+  font-weight: var(--fw-bold);
+  color: var(--c-positive);
+}
+
+.matchup__line {
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  font-family: var(--font-num);
+  font-size: var(--fs-body);
+  font-weight: var(--fw-semibold);
+  line-height: var(--lh-snug);
+  color: var(--c-ink-secondary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* --- At-bat region ------------------------------------------------------ */
+/* Three columns at every width. The canvas keeps its intrinsic size in the
+   `auto` track while the two `1fr` tracks carry the situation readout and the
+   pitch sequence — the outer thirds of the viewport used to be empty. */
+
+.atbat__grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: var(--sp-3);
+  align-items: start;
   min-width: 0;
 }
 
-.pitch-detail,
-.pitch-info-row {
+.atbat__col {
   display: flex;
+  flex-direction: column;
   gap: var(--sp-3);
+  min-width: 0;
+}
+
+.atbat__col--zone {
+  gap: var(--sp-2);
+  align-items: center;
+}
+
+.atbat__col-title {
+  font-size: var(--fs-label);
+  font-weight: var(--fw-semibold);
+  line-height: var(--lh-snug);
+  color: var(--c-ink-muted);
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+}
+
+.atbat__bases {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  min-width: 0;
+}
+
+.atbat__base {
+  display: flex;
+  gap: var(--sp-2);
+  align-items: baseline;
+  min-width: 0;
+}
+
+.atbat__base-tag {
+  flex: 0 0 auto;
+  font-family: var(--font-num);
+  font-size: var(--fs-label);
+  font-weight: var(--fw-semibold);
+  color: var(--c-ink-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.atbat__base-name {
+  min-width: 0;
+  overflow: hidden;
+  font-size: var(--fs-label);
+  font-weight: var(--fw-medium);
+  line-height: var(--lh-snug);
+  color: var(--c-ink-muted);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.atbat__base--on .atbat__base-tag,
+.atbat__base--on .atbat__base-name {
+  font-weight: var(--fw-semibold);
+  color: var(--c-brand-700);
+}
+
+.atbat__seq {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  min-width: 0;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.atbat__seq-row {
+  display: flex;
+  gap: var(--sp-2);
   align-items: center;
   min-width: 0;
-  font-size: var(--fs-body);
+}
+
+/* The dot is the same call palette ZonePlot paints; the pitch code beside it
+   is what keeps the row readable without colour (§7). */
+.atbat__seq-dot {
+  flex: 0 0 auto;
+  width: var(--sp-3);
+  height: var(--sp-3);
+  background: var(--c-ink-subtle);
+  border-radius: var(--radius-pill);
+}
+
+.atbat__seq-dot--ball {
+  background: var(--c-call-ball);
+}
+
+.atbat__seq-dot--strike {
+  background: var(--c-call-strike);
+}
+
+.atbat__seq-dot--foul {
+  background: var(--c-call-foul);
+}
+
+.atbat__seq-dot--inplay {
+  background: var(--c-call-inplay);
+}
+
+.atbat__seq-no {
+  flex: 0 0 auto;
+  font-family: var(--font-num);
+  font-size: var(--fs-label);
+  font-weight: var(--fw-medium);
+  color: var(--c-ink-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.atbat__seq-code {
+  flex: 0 0 auto;
+  font-size: var(--fs-label);
+  font-weight: var(--fw-semibold);
+  color: var(--c-ink);
+  letter-spacing: var(--tracking-caps);
+}
+
+.atbat__seq-velo {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  font-family: var(--font-num);
+  font-size: var(--fs-label);
+  font-weight: var(--fw-medium);
+  color: var(--c-ink-secondary);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: var(--tracking-tight);
   white-space: nowrap;
 }
 
-.pitch-stats,
-.hit-data {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0 var(--sp-5);
-  align-content: start;
-  min-width: 0;
+.atbat__seq-empty {
+  font-size: var(--fs-label);
+  font-weight: var(--fw-medium);
+  color: var(--c-ink-muted);
 }
 
-.pitch-sequence {
+.atbat__deck {
   display: flex;
-  flex-direction: column;
-  gap: var(--sp-2);
+  flex-wrap: wrap;
+  gap: var(--sp-2) var(--sp-5);
+  align-items: baseline;
   min-width: 0;
+  padding-top: var(--sp-3);
+  border-top: 1px solid var(--c-border);
 }
 
-/* Horizontal pan only — this is NOT a vertical scroll owner. */
-.sequence-strip {
+.atbat__deck-item {
   display: flex;
   gap: var(--sp-2);
-  align-items: center;
+  align-items: baseline;
   min-width: 0;
-  overflow-x: auto;
-  overflow-y: hidden;
-  scrollbar-width: none;
 }
 
-.sequence-strip::-webkit-scrollbar {
-  display: none;
+.atbat__deck-label {
+  flex: 0 0 auto;
+  font-size: var(--fs-label);
+  font-weight: var(--fw-semibold);
+  color: var(--c-ink-muted);
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+}
+
+.atbat__deck-name {
+  min-width: 0;
+  overflow: hidden;
+  font-size: var(--fs-body);
+  font-weight: var(--fw-medium);
+  color: var(--c-ink);
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 /* --- Zone plot ---------------------------------------------------------- */
@@ -700,9 +1106,12 @@ button:focus-visible,
 }
 
 /* --- Play result -------------------------------------------------------- */
+/* Deliberately NOT wrapped: the event, the separator and the description are
+   one sentence, so the description has to wrap inside its own track rather
+   than pushing the separator onto a line by itself. */
 .play-result {
   display: flex;
-  gap: var(--sp-3);
+  gap: var(--sp-2);
   align-items: baseline;
   min-width: 0;
   padding: var(--sp-3) var(--sp-4);
@@ -713,12 +1122,73 @@ button:focus-visible,
   border-radius: var(--radius);
 }
 
+.play-result__event {
+  flex: 0 0 auto;
+  font-size: var(--fs-title);
+  font-weight: var(--fw-bold);
+  line-height: var(--lh-snug);
+  color: var(--c-bg);
+}
+
+.play-result__sep {
+  flex: 0 0 auto;
+  color: var(--c-brand-100);
+}
+
+.play-result__detail {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: var(--fs-body);
+  font-weight: var(--fw-regular);
+  line-height: var(--lh-normal);
+  color: var(--c-brand-100);
+}
+
 .rbi {
+  flex: 0 0 auto;
   margin-left: var(--sp-2);
   font-family: var(--font-num);
   font-weight: var(--fw-bold);
   color: var(--c-bg);
   font-variant-numeric: tabular-nums;
+}
+
+/* ==========================================================================
+   §LiveAtBat — breakpoints. Source order decides between a media query and a
+   base rule of equal specificity, so these MUST stay last in this section:
+   moved above, they would silently stop overriding.
+   ========================================================================== */
+
+@media (min-width: 480px) {
+  .matchup__grid {
+    gap: var(--sp-6);
+  }
+
+  .atbat__grid {
+    gap: var(--sp-5);
+  }
+
+  .linescore__inning,
+  .linescore__total {
+    font-size: var(--fs-data);
+  }
+
+  .linescore__team {
+    width: calc(var(--sp-8) * 3);
+  }
+}
+
+@media (min-width: 768px) {
+  .atbat__grid {
+    gap: var(--sp-6);
+  }
+
+  .atbat__base-name,
+  .atbat__seq-velo,
+  .atbat__seq-code,
+  .atbat__seq-no {
+    font-size: var(--fs-body);
+  }
 }
 
 /* ===== §GameSubTabs ===== */

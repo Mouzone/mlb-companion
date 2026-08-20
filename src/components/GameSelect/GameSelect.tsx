@@ -1,108 +1,140 @@
 import { useState, useEffect } from 'react'
+import type { ReactElement } from 'react'
 import { fetchSchedule } from '../../api/mlb'
 import { useGameStore } from '../../store/gameStore'
 import type { ScheduledGame } from '../../api/types'
+import { EmptyPanel, Skeleton } from '../ui'
+import { GameCard } from './GameCard'
+
+type GroupTone = 'live' | 'preview' | 'final'
+
+interface Group {
+  readonly tone: GroupTone
+  readonly title: string
+  readonly games: ScheduledGame[]
+}
 
 function todayStr(): string {
   const d = new Date()
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
-export function GameSelect() {
+function groupsOf(games: ScheduledGame[]): Group[] {
+  const all: Group[] = [
+    { tone: 'live', title: 'Live', games: games.filter((g) => g.status.abstractGameState === 'Live') },
+    { tone: 'preview', title: 'Upcoming', games: games.filter((g) => g.status.abstractGameState === 'Preview') },
+    { tone: 'final', title: 'Final', games: games.filter((g) => g.status.abstractGameState === 'Final') },
+  ]
+  return all.filter((group) => group.games.length > 0)
+}
+
+/** Mirrors the real card box exactly (DESIGN.md §5.12) so load shifts nothing. */
+function GameCardSkeleton(): ReactElement {
+  return (
+    <span className="gc-skeleton" aria-hidden="true">
+      <span className="gc-teams">
+        <span className="gc-team">
+          <Skeleton width="44px" height="44px" radius="var(--radius-sm)" />
+          <span className="gc-identity">
+            <Skeleton width="70%" height="var(--sp-5)" />
+            <Skeleton width="30%" height="var(--sp-4)" />
+          </span>
+        </span>
+        <span className="gc-team">
+          <Skeleton width="44px" height="44px" radius="var(--radius-sm)" />
+          <span className="gc-identity">
+            <Skeleton width="60%" height="var(--sp-5)" />
+            <Skeleton width="30%" height="var(--sp-4)" />
+          </span>
+        </span>
+      </span>
+      <span className="gc-footer">
+        <Skeleton width="30%" height="var(--sp-5)" radius="var(--radius-pill)" />
+        <Skeleton width="40%" height="var(--sp-4)" />
+      </span>
+      <span className="gc-probables">
+        <span className="gc-probable">
+          <Skeleton width="32px" height="32px" radius="var(--radius-pill)" />
+          <Skeleton width="60%" height="var(--sp-4)" />
+        </span>
+        <span className="gc-probable">
+          <Skeleton width="32px" height="32px" radius="var(--radius-pill)" />
+          <Skeleton width="60%" height="var(--sp-4)" />
+        </span>
+      </span>
+    </span>
+  )
+}
+
+export function GameSelect(): ReactElement {
   const [games, setGames] = useState<ScheduledGame[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const selectGame = useGameStore((s) => s.selectGame)
 
   useEffect(() => {
+    let cancelled = false
     async function load() {
       try {
         setLoading(true)
-        const today = todayStr()
-        const scheduled = await fetchSchedule(today)
-        setGames(scheduled)
+        const scheduled = await fetchSchedule(todayStr())
+        if (!cancelled) setGames(scheduled)
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load schedule')
+        if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load schedule')
       } finally {
-        setLoading(false)
+        if (!cancelled) setLoading(false)
       }
     }
     load()
+    return () => {
+      cancelled = true
+    }
   }, [])
 
-  if (loading) return <div className="loading">Loading today's games...</div>
-  if (error) return <div className="error">{error}</div>
-  if (games.length === 0) return <div className="empty">No games today.</div>
+  const today = new Date().toLocaleDateString('en-US', {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+  })
 
-  const liveGames = games.filter((g) => g.status.abstractGameState === 'Live')
-  const previewGames = games.filter((g) => g.status.abstractGameState === 'Preview')
-  const finalGames = games.filter((g) => g.status.abstractGameState === 'Final')
+  const groups = groupsOf(games)
 
   return (
     <div className="game-select">
       <h1>MLB Companion</h1>
-      <p className="date">{new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</p>
+      <p className="date">{today}</p>
 
-      {liveGames.length > 0 && (
-        <div className="game-group">
-          <h2 className="group-title live">Live</h2>
-          {liveGames.map((game) => (
+      {loading ? (
+        <div className="game-group" aria-busy="true">
+          <h2 className="group-title preview">Loading today&rsquo;s games</h2>
+          <GameCardSkeleton />
+          <GameCardSkeleton />
+          <GameCardSkeleton />
+        </div>
+      ) : null}
+
+      {!loading && error !== null ? (
+        <EmptyPanel message="Could not load today&rsquo;s schedule." hint={error} />
+      ) : null}
+
+      {!loading && error === null && groups.length === 0 ? (
+        <EmptyPanel
+          message="No games scheduled today."
+          hint="Check back on the next game day, or open a game directly with ?gamePk=<id>."
+        />
+      ) : null}
+
+      {groups.map((group) => (
+        <div className="game-group" key={group.tone}>
+          <h2 className={`group-title ${group.tone}`}>
+            {group.title}
+            <span className="group-count">{group.games.length}</span>
+          </h2>
+          {group.games.map((game) => (
             <GameCard key={game.gamePk} game={game} onSelect={selectGame} />
           ))}
         </div>
-      )}
-
-      {previewGames.length > 0 && (
-        <div className="game-group">
-          <h2 className="group-title preview">Upcoming</h2>
-          {previewGames.map((game) => (
-            <GameCard key={game.gamePk} game={game} onSelect={selectGame} />
-          ))}
-        </div>
-      )}
-
-      {finalGames.length > 0 && (
-        <div className="game-group">
-          <h2 className="group-title final">Final</h2>
-          {finalGames.map((game) => (
-            <GameCard key={game.gamePk} game={game} onSelect={selectGame} />
-          ))}
-        </div>
-      )}
+      ))}
     </div>
-  )
-}
-
-function GameCard({ game, onSelect }: { game: ScheduledGame; onSelect: (g: ScheduledGame) => void }) {
-  const isLive = game.status.abstractGameState === 'Live'
-  const awayScore = game.teams.away.score ?? 0
-  const homeScore = game.teams.home.score ?? 0
-
-  return (
-    <button className="game-card" onClick={() => onSelect(game)}>
-      <div className="game-card-teams">
-        <div className="team-row">
-          <span className="team-name">{game.teams.away.team.teamName}</span>
-          {isLive || game.status.abstractGameState === 'Final' ? (
-            <span className="team-score">{awayScore}</span>
-          ) : null}
-        </div>
-        <div className="team-row">
-          <span className="team-name">{game.teams.home.team.teamName}</span>
-          {isLive || game.status.abstractGameState === 'Final' ? (
-            <span className="team-score">{homeScore}</span>
-          ) : null}
-        </div>
-      </div>
-      <div className="game-card-meta">
-        {isLive && <span className="status-badge live">LIVE</span>}
-        {game.status.abstractGameState === 'Preview' && (
-          <span className="status-badge preview">
-            {new Date(game.gameDate).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
-          </span>
-        )}
-        {game.status.abstractGameState === 'Final' && <span className="status-badge final">FINAL</span>}
-      </div>
-    </button>
   )
 }
