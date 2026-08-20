@@ -7,6 +7,7 @@ import { fetchLiveFeed } from './api/mlb'
 import { fetchSavantGameFeed } from './api/savant'
 import type { LiveFeed, ScheduledGame } from './api/types'
 import { TabBar } from './components/ui'
+import { StatsGuide } from './components/StatsGuide/StatsGuide'
 import './App.css'
 
 /** `as const` keeps the literal ids, so `isTabId` can narrow TabBar's `string`
@@ -96,6 +97,7 @@ function App() {
     return (
       <div className="app">
         <GameSelect />
+        <StatsGuide />
       </div>
     )
   }
@@ -110,6 +112,7 @@ function App() {
         }}
       />
       {activeTab === 'live' ? <LiveGameTab /> : <PitcherVsBatter />}
+      <StatsGuide />
     </div>
   )
 }
