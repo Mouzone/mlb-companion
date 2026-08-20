@@ -316,7 +316,7 @@ export function PitcherVsBatter() {
                 <span className="card-scope">{slide.scope}</span>
               </div>
               {slide.stats.length > 0 ? (
-                <div className="stat-grid-3">
+                <div className="stat-grid stat-grid-3">
                   {slide.stats.map((cell) => (
                     <div key={cell.label} className="stat-row">
                       <span className="stat-label">{cell.label}</span>
