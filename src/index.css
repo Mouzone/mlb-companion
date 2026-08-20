@@ -1,24 +1,29 @@
 /* ============================================================================
    MLB Companion — Global tokens, reset, base typography
    Target device: iPhone 13 PWA standalone — 390 x 844 CSS px
-   Palette matches vite.config.ts PWA manifest (theme #1b3a2f / bg #0d1b12).
 
-   HEIGHT BUDGET (the only vertical px values allowed in this codebase):
-     719 679 479 470 200 190 186 172 160 150 120 95 55 44 40 22 18
+   White-first token system. Every colour, size, space, radius, shadow and
+   duration used in src/ resolves to a token declared below, and every token
+   below is specified in DESIGN.md. New value needed → DESIGN.md first, then
+   here, then use it (DESIGN.md §9).
 
-   Vertical arithmetic on iPhone 13 standalone:
-     844 total
-      -47 env(safe-area-inset-top)
-      -34 env(safe-area-inset-bottom)
-      = 763 usable
-      -44 .tab-bar
-      = 719 .tab-content
-      -40 .sub-tab-nav
-      = 679 --content-h   <-- ALREADY excludes BOTH the tab bar and the nav
+   Theme colour is mirrored in three files and they must move together:
+     src/index.css   --c-brand-900 / --c-bg
+     index.html      <meta name="theme-color">
+     vite.config.ts  PWA manifest theme_color / background_color
 
-   The 40px .sub-tab-nav is ALWAYS a SIBLING ABOVE the --content-h box.
-   Never nest the nav inside it, and never subtract 40px from --content-h
-   a second time — that double-subtraction is the classic overflow bug.
+   SHELL ARITHMETIC (DESIGN.md §6.2):
+     100dvh
+      - env(safe-area-inset-top) - env(safe-area-inset-bottom)
+      - var(--tab-bar-h)   48px   .tab-bar        ← fixed chrome
+      = --tab-content-h           .tab-content
+      - var(--sub-tab-h)   44px   .sub-tab-nav    ← fixed chrome
+      = --content-h               .panel          ← THE scroll owner
+
+   --content-h ALREADY subtracts BOTH bars. The .sub-tab-nav is always a
+   SIBLING ABOVE the --content-h box; never subtract --sub-tab-h from it a
+   second time. Panels scroll — no panel carries a fixed vertical budget
+   (DESIGN.md §6.3, the dead-space doctrine).
    ========================================================================= */
 
 /* --- Reset -------------------------------------------------------------- */
@@ -68,89 +73,190 @@ table {
 
 /* --- Design tokens ------------------------------------------------------ */
 :root {
-  /* Core palette (locked — matches the PWA manifest) */
-  --mlb-primary: #1b3a2f;
-  --mlb-bg: #0d1b12;
-  --mlb-accent: #2d5a3f;
-  --mlb-text: #e0e0e0;
-  --mlb-muted: #888888;
+  /* Neutrals — the ink ramp (DESIGN.md §2.1) */
+  --c-bg: #ffffff;
+  --c-surface-sunken: #f6f8fa;
+  --c-surface-hover: #eef2f6;
+  --c-border: #e3e8ee;
+  --c-border-strong: #cdd5df;
+  --c-ink: #0a2540;
+  --c-ink-secondary: #425466;
+  --c-ink-muted: #697386;
+  --c-ink-subtle: #8792a2;
 
-  /* Derived surfaces */
-  --mlb-surface: #12241a;
-  --mlb-surface-raised: #17301f;
-  --mlb-line: #25422f;
-  --mlb-line-soft: #1c3325;
-  --mlb-accent-bright: #3d7a55;
+  /* Brand — MLB navy ramp (§2.2) */
+  --c-brand-900: #041e42;
+  --c-brand-700: #0b3d7b;
+  --c-brand-600: #1258a8;
+  --c-brand-500: #2075d4;
+  --c-brand-100: #e4eefb;
+  --c-brand-050: #f2f7fe;
 
-  /* Signal accents — sharp, used sparingly */
-  --mlb-live: #d94f3d;
-  --mlb-hot: #e05a3a;
-  --mlb-cold: #4a90c2;
-  --mlb-chalk: #f2f0e6;
+  /* Semantic signals — meaning only, never decoration (§2.3) */
+  --c-live: #c8102e;
+  --c-live-bg: #fdecef;
+  --c-positive: #0f7b4f;
+  --c-positive-bg: #e7f5ee;
+  --c-negative: #c8102e;
+  --c-negative-bg: #fdecef;
+  --c-warn: #b25e09;
+  --c-neutral-badge: #697386;
+  --c-neutral-badge-bg: #f0f3f6;
 
-  /* --- Height budget, tokenised --- */
-  --tab-bar-h: 44px;
-  --sub-tab-h: 40px;
-  --cards-h: 200px;
+  /* Data visualisation — heat ramp + canvas chrome (§2.4) */
+  --c-heat-5: #c8102e;
+  --c-heat-4: #e8590c;
+  --c-heat-3: #f4b942;
+  --c-heat-2: #7fa8d4;
+  --c-heat-1: #1864ab;
+  --c-heat-empty: #f1f4f7;
+  --c-chart-grid: #e3e8ee;
+  --c-chart-axis: #cdd5df;
+  --c-chart-bg: #ffffff;
+  --c-chart-label: #697386;
 
-  /* 719px on iPhone 13 — the flex root that sits directly under the tab bar */
-  --tab-content-h: calc(
-    100dvh - 44px - env(safe-area-inset-top) - env(safe-area-inset-bottom)
-  );
+  /* Pitch-type identity — 13 fixed hues, each ≥3:1 on white (§2.4) */
+  --c-pitch-ff: #d1342f;
+  --c-pitch-si: #e2662a;
+  --c-pitch-fc: #b8452f;
+  --c-pitch-sl: #1b6fb5;
+  --c-pitch-st: #2b93c9;
+  --c-pitch-cu: #5b3fa8;
+  --c-pitch-kc: #7a4fc0;
+  --c-pitch-sv: #3f5fc0;
+  --c-pitch-ch: #1a8a5e;
+  --c-pitch-fs: #3a9e6f;
+  --c-pitch-fo: #57a86b;
+  --c-pitch-kn: #8a7a2f;
+  --c-pitch-ep: #9b6a1f;
+  --c-pitch-unknown: #8792a2;
 
-  /* 679px on iPhone 13 — tab bar AND sub-tab nav are already removed here */
-  --content-h: calc(
-    100dvh - 44px - 40px - env(safe-area-inset-top) - env(safe-area-inset-bottom)
-  );
+  /* Pitch-call markers — ZonePlot (§2.4) */
+  --c-call-ball: #1b6fb5;
+  --c-call-strike: #c8102e;
+  --c-call-foul: #b25e09;
+  --c-call-inplay: #0f7b4f;
 
-  /* 479px — the Pitcher-vs-Batter sub-tab box (679 minus 200 of stat cards) */
-  --pvb-content-h: calc(var(--content-h) - 200px);
-
-  /* Type scale — dense scoreboard readout */
-  --fs-micro: 9px;
-  --fs-label: 10px;
-  --fs-body: 11px;
-  --fs-data: 12px;
-  --fs-title: 13px;
-  --fs-hero: 17px;
-
-  /* Rhythm */
-  --sp-1: 2px;
-  --sp-2: 4px;
-  --sp-3: 6px;
-  --sp-4: 8px;
-  --sp-5: 12px;
-  --radius: 6px;
-  --radius-lg: 10px;
-
+  /* Type families (§3) */
   --font-ui:
     -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue",
     system-ui, sans-serif;
   --font-num: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
 
-  color-scheme: dark;
+  /* Type scale — 10px floor, 4px minimum step label→value (§3.1) */
+  --fs-micro: 10px;
+  --fs-label: 11px;
+  --fs-body: 13px;
+  --fs-data: 15px;
+  --fs-title: 15px;
+  --fs-lg: 18px;
+  --fs-hero: 22px;
+  --fs-display: 28px;
+
+  /* Weight, leading, tracking (§3.2) */
+  --fw-regular: 400;
+  --fw-medium: 500;
+  --fw-semibold: 600;
+  --fw-bold: 700;
+  --lh-tight: 1.15;
+  --lh-snug: 1.3;
+  --lh-normal: 1.45;
+  --tracking-caps: 0.06em;
+  --tracking-tight: -0.01em;
+
+  /* Rhythm — strict 4px grid, no off-grid 6px (§4.1) */
+  --sp-1: 2px;
+  --sp-2: 4px;
+  --sp-3: 8px;
+  --sp-4: 12px;
+  --sp-5: 16px;
+  --sp-6: 20px;
+  --sp-7: 24px;
+  --sp-8: 32px;
+
+  /* Radius (§4.2) */
+  --radius-sm: 6px;
+  --radius: 10px;
+  --radius-lg: 14px;
+  --radius-pill: 999px;
+
+  /* Elevation — borders first, shadow only for floating layers (§4.3) */
+  --shadow-xs: 0 1px 2px rgba(16, 24, 40, 0.04);
+  --shadow-sm:
+    0 1px 3px rgba(16, 24, 40, 0.06), 0 1px 2px rgba(16, 24, 40, 0.04);
+  --shadow-md:
+    0 2px 6px rgba(16, 24, 40, 0.06), 0 4px 12px rgba(16, 24, 40, 0.05);
+  --shadow-focus: 0 0 0 3px rgba(32, 117, 212, 0.28);
+
+  /* Motion — feedback only, transform/opacity/filter (§4.4) */
+  --dur-fast: 120ms;
+  --dur-base: 180ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* Shell heights — fixed chrome only (§6.2) */
+  --tab-bar-h: 48px;
+  --sub-tab-h: 44px;
+
+  /* The flex root sitting directly under the tab bar */
+  --tab-content-h: calc(
+    100dvh - var(--tab-bar-h) - env(safe-area-inset-top) -
+      env(safe-area-inset-bottom)
+  );
+
+  /* The scrolling panel box — tab bar AND sub-tab nav already removed */
+  --content-h: calc(
+    100dvh - var(--tab-bar-h) - var(--sub-tab-h) - env(safe-area-inset-top) -
+      env(safe-area-inset-bottom)
+  );
+
+  color-scheme: light;
   font-family: var(--font-ui);
   font-size: var(--fs-body);
-  line-height: 1.3;
-  color: var(--mlb-text);
-  background-color: var(--mlb-bg);
+  line-height: var(--lh-snug);
+  color: var(--c-ink);
+  background-color: var(--c-bg);
+  font-variant-numeric: tabular-nums;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   -webkit-text-size-adjust: 100%;
   -webkit-tap-highlight-color: transparent;
+
+  /* ===== Legacy alias shims — removed in todo 7 =========================
+     src/App.css still consumes the old dark-theme --mlb-* names. These
+     aliases keep the app renderable until App.css is rewritten against the
+     white-first tokens; delete this entire block with that rewrite.
+
+     Deviation from the brief, deliberate: --mlb-chalk maps to --c-ink, not
+     to --c-surface-sunken. App.css uses --mlb-chalk as a TEXT colour in ten
+     places, so a near-white value would render that text invisible on the
+     white canvas — the opposite of "keep it renderable".
+     ==================================================================== */
+  --mlb-bg: var(--c-bg);
+  --mlb-surface: var(--c-surface-sunken);
+  --mlb-surface-raised: var(--c-bg);
+  --mlb-line: var(--c-border);
+  --mlb-line-soft: var(--c-border);
+  --mlb-primary: var(--c-brand-900);
+  --mlb-accent: var(--c-brand-600);
+  --mlb-accent-bright: var(--c-brand-500);
+  --mlb-text: var(--c-ink);
+  --mlb-muted: var(--c-ink-muted);
+  --mlb-live: var(--c-live);
+  --mlb-hot: var(--c-heat-4);
+  --mlb-cold: var(--c-heat-1);
+  --mlb-chalk: var(--c-ink);
+  --cards-h: 200px;
+}
+
+body,
+#root {
+  background: var(--c-bg);
+  color: var(--c-ink);
 }
 
 body {
-  background:
-    radial-gradient(
-      130% 62% at 50% 0%,
-      rgba(45, 90, 63, 0.24) 0%,
-      rgba(13, 27, 18, 0) 72%
-    ),
-    var(--mlb-bg);
-  color: var(--mlb-text);
   font-family: var(--font-ui);
   touch-action: manipulation;
   user-select: none;
@@ -163,13 +269,14 @@ h2,
 h3,
 h4 {
   margin: 0;
-  font-weight: 700;
-  color: var(--mlb-chalk);
-  letter-spacing: 0.01em;
+  font-weight: var(--fw-bold);
+  color: var(--c-ink);
 }
 
 h1 {
   font-size: var(--fs-hero);
+  line-height: var(--lh-tight);
+  letter-spacing: var(--tracking-tight);
 }
 
 h2 {
@@ -178,14 +285,15 @@ h2 {
 
 h3,
 h4 {
-  font-size: var(--fs-data);
+  font-size: var(--fs-body);
 }
 
 p {
   margin: 0;
 }
 
-/* Every numeric readout is tabular so columns never jitter between polls. */
+/* Every numeric readout is tabular so columns terminate on one edge and
+   never jitter between polls (DESIGN.md §1.4, §3). */
 .num,
 .stat-value,
 .team-score,
@@ -195,7 +303,7 @@ p {
 .stat-grid .stat-value {
   font-family: var(--font-num);
   font-variant-numeric: tabular-nums;
-  letter-spacing: -0.01em;
+  letter-spacing: var(--tracking-tight);
 }
 
 /* --- Shared state utilities (centred, muted, zero layout shift) --------- */
@@ -214,22 +322,22 @@ p {
   padding: var(--sp-4);
   overflow: hidden;
   font-size: var(--fs-body);
-  color: var(--mlb-muted);
+  color: var(--c-ink-muted);
   text-align: center;
 }
 
 .error {
-  color: var(--mlb-live);
+  color: var(--c-live);
 }
 
 .loading::after {
   content: "";
-  width: 18px;
-  height: 18px;
+  width: var(--sp-5);
+  height: var(--sp-5);
   margin-left: var(--sp-3);
-  border: 2px solid var(--mlb-line);
-  border-top-color: var(--mlb-accent-bright);
-  border-radius: 50%;
+  border: var(--sp-1) solid var(--c-border);
+  border-top-color: var(--c-brand-500);
+  border-radius: var(--radius-pill);
   animation: mlb-spin 0.8s linear infinite;
 }
 
@@ -242,11 +350,11 @@ p {
   justify-content: center;
   overflow: hidden;
   font-size: var(--fs-label);
-  color: var(--mlb-muted);
-  letter-spacing: 0.08em;
+  color: var(--c-ink-muted);
+  letter-spacing: var(--tracking-caps);
   text-transform: uppercase;
-  background: rgba(13, 27, 18, 0.72);
-  backdrop-filter: blur(2px);
+  background: color-mix(in srgb, var(--c-bg) 82%, transparent);
+  backdrop-filter: blur(var(--sp-1));
 }
 
 @keyframes mlb-spin {
