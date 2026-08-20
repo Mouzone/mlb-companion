@@ -26,3 +26,4 @@ dist-ssr
 # Plan/orchestration artifacts
 .omo/
 .playwright-mcp/
+.vercel
