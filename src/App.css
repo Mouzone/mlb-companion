@@ -590,7 +590,18 @@ button:focus-visible,
 
    Only the gutter is keyed to width. Column count is left to `auto-fill`,
    which already adds a track the moment two 320px cards fit; pinning
-   `repeat(2)` here would instead squeeze cards below that floor. */
+   `repeat(2)` here would instead squeeze cards below that floor.
+
+   NOTE: DESIGN.md §6.4's breakpoint table also lists "Game grid three-up"
+   for --bp-lg, but at the 960px content budget this section pins (§6.4's
+   own number), 3 tracks of the §6.5 320px floor plus 2 gaps need 976px —
+   16px more than is available. Three-up and the 320px floor cannot both
+   hold at 960px; pinning `repeat(3)` here was tried and produces 314.7px
+   cards (under the floor) that ellipsis-truncate venue names and pitcher
+   names that fit fine at two-up. Two-up + no truncation wins over matching
+   the aspirational three-up line; see DESIGN.md change-protocol before
+   revisiting (would need a wider content budget or a narrower card floor,
+   both cross-screen changes). */
 
 @media (min-width: 768px) {
   .game-select {

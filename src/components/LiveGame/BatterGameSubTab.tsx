@@ -157,7 +157,7 @@ export function BatterGameSubTab(): ReactElement {
           <StatGrid minColumnWidth={64}>
             <Stat label="Swing %" value={percent(swingPct)} />
             <Stat label="Whiff %" value={percent(whiffPct)} />
-            <Stat label="Contact %" value={percent(contactPct)} />
+            <Stat label="Cont %" value={percent(contactPct)} />
             <Stat label="Chase %" value={percent(chasePct)} />
             <Stat label="Zone %" value={percent(zonePct)} />
             <Stat label="Taken %" value={percent(takenStrikePct)} />

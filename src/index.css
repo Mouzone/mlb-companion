@@ -100,7 +100,9 @@ table {
   --c-negative: #c8102e;
   --c-negative-bg: #fdecef;
   --c-warn: #b25e09;
-  --c-neutral-badge: #697386;
+  /* #697386 (matches --c-ink-muted) only clears 4.29:1 on --c-neutral-badge-bg,
+     below the §7 4.5:1 floor for label text. Darkened to clear it (4.87:1). */
+  --c-neutral-badge: #5c6b80;
   --c-neutral-badge-bg: #f0f3f6;
 
   /* Data visualisation — heat ramp + canvas chrome (§2.4) */
