@@ -5,7 +5,11 @@ import { NO_VALUE } from './liveAtBatFormat'
 /**
  * Matchup header. The grid is `1fr auto 1fr`, so the two player columns are
  * mathematically equal and "VS" is exactly between them — the old flex layout
- * let the batter start at x≈12 while the pitcher started at x≈210.
+ * let one side start at x≈12 while the other started at x≈210.
+ *
+ * The pitcher takes the leading column here and in every other pitcher/batter
+ * pair in the app: he sets the terms of the plate appearance, so he is what
+ * you read first.
  *
  * Each side renders the SAME four rows (avatar · name · affiliation · game
  * line), which is what keeps the two columns the same height and fills the
@@ -63,11 +67,11 @@ export function MatchupCard({ batter, pitcher, meta }: MatchupCardProps): ReactE
     <section className="panel-row matchup" aria-label="Matchup">
       <SectionTitle meta={meta}>Matchup</SectionTitle>
       <div className="matchup__grid">
-        <Side side={batter} align="start" role="At bat" />
+        <Side side={pitcher} align="start" role="Pitching" />
         <span className="matchup-vs" aria-hidden="true">
           VS
         </span>
-        <Side side={pitcher} align="end" role="Pitching" />
+        <Side side={batter} align="end" role="At bat" />
       </div>
     </section>
   )

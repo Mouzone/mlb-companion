@@ -879,8 +879,10 @@ button:focus-visible,
 
 /* --- Matchup header ----------------------------------------------------- */
 /* `1fr auto 1fr` makes the two player columns mathematically identical and
-   puts VS exactly between them. The old flex version let the batter start at
-   x=12 and the pitcher at x=210, so neither side nor the divider was centred. */
+   puts VS exactly between them. The old flex version let one side start at
+   x=12 and the other at x=210, so neither side nor the divider was centred.
+   The modifiers are positional, not role-based: the pitcher holds `--start`
+   because he leads every pitcher/batter pair in the app. */
 
 .matchup__grid {
   display: grid;
