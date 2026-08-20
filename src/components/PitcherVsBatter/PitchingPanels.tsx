@@ -1,22 +1,13 @@
 import type { ReactElement } from 'react'
-import type { GameLogEntry, PitchArsenalItem, PitcherSeasonStat, StatSplit } from '../../api/types'
-import { LEAGUE_ERA } from '../../utils/leagueConstants'
-import {
-  computeBBpct,
-  computeERAplus,
-  computeFIP,
-  computeHR9,
-  computeKpct,
-  ipToDecimal,
-  parseStat,
-} from '../../utils/sabermetrics'
+import type { GameLogEntry, PitchArsenalItem, StatSplit } from '../../api/types'
+import { ipToDecimal } from '../../utils/sabermetrics'
 import { ArsenalBars } from '../Canvas/ArsenalBars'
 import type { DataTableColumn, DataTableRow } from '../ui'
-import { EmptyPanel, Stat, StatGrid } from '../ui'
+import { EmptyPanel } from '../ui'
 import { Panel, SkeletonRows, TablePanel } from './PvbPanels'
-import { compareTo, fixed, percent, rate3, rateText, ratio, sumOptional, whole } from './PvbShared'
+import { fixed, percent, rate3, rateText, ratio, sumOptional, whole } from './PvbShared'
 
-/** Pitching aggregation, table shapes, and the two pitcher-only panels. */
+/** Pitching aggregation, table shapes, and the arsenal panel. */
 
 export const SPLIT_COLUMNS: ReadonlyArray<DataTableColumn> = [
   { key: 'split', label: 'Split' },
@@ -166,54 +157,3 @@ export function ArsenalPanel({ arsenal, loading }: ArsenalPanelProps): ReactElem
   )
 }
 
-export interface SeasonRatesPanelProps {
-  readonly season: PitcherSeasonStat | null
-  readonly parkFactor: number
-}
-
-/**
- * Derived season rates. FIP and ERA+ are the only coloured values here because
- * they are the only ones measured against a stated benchmark — league ERA and
- * the 100 baseline — and both print that benchmark in the neighbouring cell.
- */
-export function SeasonRatesPanel({ season, parkFactor }: SeasonRatesPanelProps): ReactElement {
-  const innings = season ? ipToDecimal(season.inningsPitched) : null
-  const battersFaced = season?.battersFaced ?? null
-  const fip = computeFIP(
-    season?.homeRuns ?? null,
-    season?.baseOnBalls ?? null,
-    season?.hitBatsmen ?? null,
-    season?.strikeOuts ?? null,
-    innings,
-  )
-  const eraPlus = computeERAplus(parseStat(season?.era ?? ''), LEAGUE_ERA, parkFactor)
-  const fipVerdict = compareTo(fip, LEAGUE_ERA, true)
-  const eraPlusVerdict = compareTo(eraPlus, 100, false)
-
-  return (
-    <Panel title="Season Rates" meta={`park ${parkFactor.toFixed(2)}`}>
-      {season === null ? (
-        <EmptyPanel message="No season line published for this pitcher" />
-      ) : (
-        <StatGrid>
-          <Stat label="FIP" value={`${fixed(fip, 2)}${fipVerdict.mark}`} tone={fipVerdict.tone} />
-          <Stat label="Lg ERA" value={LEAGUE_ERA.toFixed(2)} />
-          <Stat
-            label="ERA+"
-            value={`${whole(eraPlus)}${eraPlusVerdict.mark}`}
-            tone={eraPlusVerdict.tone}
-          />
-          <Stat label="Lg ERA+" value="100" />
-          <Stat label="K%" value={percent(computeKpct(season.strikeOuts, battersFaced))} />
-          <Stat label="BB%" value={percent(computeBBpct(season.baseOnBalls, battersFaced))} />
-          <Stat label="HR/9" value={fixed(computeHR9(season.homeRuns, innings), 2)} />
-          <Stat label="Opp AVG" value={rateText(season.avg)} />
-          <Stat label="BF" value={whole(battersFaced)} />
-          <Stat label="HBP" value={whole(season.hitBatsmen ?? null)} />
-          <Stat label="H" value={whole(season.hits)} />
-          <Stat label="G" value={whole(season.gamesPlayed)} />
-        </StatGrid>
-      )}
-    </Panel>
-  )
-}

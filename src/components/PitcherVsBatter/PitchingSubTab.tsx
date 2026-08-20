@@ -3,7 +3,6 @@ import { fetchCachedGameLog } from '../../api/playerStatsCache'
 import type { GameLogEntry, StatSplit } from '../../api/types'
 import { usePlayerStats } from '../../hooks/usePlayerStats'
 import { useGameStore } from '../../store/gameStore'
-import { PARK_FACTORS } from '../../utils/leagueConstants'
 import { parseStat } from '../../utils/sabermetrics'
 import type { DataTableRow } from '../ui'
 import { EmptyPanel, Segmented, Stat, StatGrid } from '../ui'
@@ -11,7 +10,6 @@ import {
   ArsenalPanel,
   LOG_COLUMNS,
   SPLIT_COLUMNS,
-  SeasonRatesPanel,
   aggregate,
   lineRow,
   situationRow,
@@ -158,27 +156,6 @@ export function PitchingSubTab(): ReactElement {
         </StatGrid>
       </PlayerIdentity>
 
-      <ArsenalPanel arsenal={pitchArsenal} loading={loading} />
-
-      <ZonePanel
-        title="Zone Profile"
-        caption="Opponent batting average by strike-zone cell"
-        zones={pitcherHotCold}
-        loading={loading}
-        emptyMessage="No zone data for this season"
-      />
-
-      <TablePanel
-        title="Opponent Splits"
-        meta={SEASON}
-        columns={SPLIT_COLUMNS}
-        rows={splitRows}
-        loading={loading || logLoading}
-        emptyMessage="No situational splits published yet"
-        emptyHint="Splits appear after the pitcher faces enough batters."
-        skeletonRows={6}
-      />
-
       <Panel title="Recent Form" meta={`${String(form.games)} of ${String(log.length)} G`}>
         <Segmented
           options={SPAN_OPTIONS}
@@ -208,9 +185,25 @@ export function PitchingSubTab(): ReactElement {
         )}
       </Panel>
 
-      <SeasonRatesPanel
-        season={pitcherSeason}
-        parkFactor={PARK_FACTORS[selectedGame?.teams.home.team.abbreviation ?? ''] ?? 1.0}
+      <ArsenalPanel arsenal={pitchArsenal} loading={loading} />
+
+      <ZonePanel
+        title="Zone Profile"
+        caption="Opponent batting average by strike-zone cell"
+        zones={pitcherHotCold}
+        loading={loading}
+        emptyMessage="No zone data for this season"
+      />
+
+      <TablePanel
+        title="Opponent Splits"
+        meta={SEASON}
+        columns={SPLIT_COLUMNS}
+        rows={splitRows}
+        loading={loading || logLoading}
+        emptyMessage="No situational splits published yet"
+        emptyHint="Splits appear after the pitcher faces enough batters."
+        skeletonRows={6}
       />
 
       <TablePanel

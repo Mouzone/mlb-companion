@@ -224,14 +224,14 @@ export function LiveAtBat(): ReactElement {
         )}
       </section>
 
-      <section className="panel-row" aria-label="Batter game line">
-        <SectionTitle meta={matchup.batter.fullName}>Batter · This Game</SectionTitle>
-        <StatGrid>{statCells(batterCells)}</StatGrid>
-      </section>
-
       <section className="panel-row" aria-label="Pitcher workload">
         <SectionTitle meta={matchup.pitcher.fullName}>Pitcher · Workload</SectionTitle>
         <StatGrid>{statCells(pitcherCells)}</StatGrid>
+      </section>
+
+      <section className="panel-row" aria-label="Batter game line">
+        <SectionTitle meta={matchup.batter.fullName}>Batter · This Game</SectionTitle>
+        <StatGrid>{statCells(batterCells)}</StatGrid>
       </section>
 
       <div className="play-result">

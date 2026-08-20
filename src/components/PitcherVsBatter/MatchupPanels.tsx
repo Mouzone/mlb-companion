@@ -1,6 +1,6 @@
 import type { ReactElement } from 'react'
 import type { HotColdZone, PitchArsenalItem, VsPlayerStat } from '../../api/types'
-import { computeISO, computeKpct, parseStat } from '../../utils/sabermetrics'
+import { parseStat } from '../../utils/sabermetrics'
 import type { DataTableColumn, DataTableRow, StatTone } from '../ui'
 import { EmptyPanel, PlayerAvatar, Stat, StatGrid } from '../ui'
 import { extraStat, extraText } from './PvbCards'
@@ -130,17 +130,14 @@ export function H2HPanel({
     <Panel title={title} meta={meta ?? `${String(pa)} PA`}>
       <StatGrid>
         <Stat label="PA" value={whole(pa)} />
-        <Stat label="G" value={whole(stat.gamesPlayed)} />
-        <Stat label="H" value={whole(stat.hits)} />
         <Stat label="AVG" value={`${rateText(stat.avg)}${verdict.mark}`} tone={tone} />
-        <Stat label="OBP" value={rateText(stat.obp)} />
-        <Stat label="SLG" value={rateText(stat.slg)} />
         <Stat label="OPS" value={rateText(stat.ops)} />
-        <Stat label="ISO" value={rate3(computeISO(parseStat(stat.avg), parseStat(stat.slg)))} />
+        <Stat label="H" value={whole(stat.hits)} />
         <Stat label="HR" value={whole(stat.homeRuns)} />
         <Stat label="K" value={whole(stat.strikeOuts)} />
+        <Stat label="OBP" value={rateText(stat.obp)} />
+        <Stat label="SLG" value={rateText(stat.slg)} />
         <Stat label="BB" value={whole(stat.baseOnBalls)} />
-        <Stat label="K%" value={percent(computeKpct(stat.strikeOuts, pa))} />
       </StatGrid>
     </Panel>
   )
