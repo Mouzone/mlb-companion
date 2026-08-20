@@ -15,6 +15,7 @@ import type {
   StatSplit,
   VsPlayerStat,
 } from './types'
+import type { WinProbabilityPlay } from '../utils/watchability'
 
 const BASE = 'https://statsapi.mlb.com/api'
 
@@ -40,6 +41,45 @@ export async function fetchDiffPatch(
   )
   if (!res.ok) throw new Error(`DiffPatch fetch failed: ${res.status}`)
   return res.json()
+}
+
+/**
+ * Per-play win-probability feed, the input to the live half of the watchability
+ * score. This is a separate endpoint from the live feed on purpose: the live
+ * feed carries `about.captivatingIndex` but omits `leverageIndex`, win
+ * probability, and `dramaIndex`, so there is no way to derive excitement from
+ * it alone. One call returns the whole game (~75 plays for nine innings).
+ *
+ * Fields are read through guards rather than a declared response type because
+ * `dramaIndex` and `captivatingIndex` are undocumented, so a schema change
+ * degrades to a null component instead of throwing.
+ */
+export async function fetchWinProbability(gamePk: number): Promise<WinProbabilityPlay[]> {
+  const res = await fetch(`${BASE}/v1/game/${gamePk}/winProbability`)
+  if (!res.ok) throw new Error(`Win probability fetch failed: ${res.status}`)
+  const data: unknown = await res.json()
+  if (!Array.isArray(data)) return []
+
+  return data.map((raw): WinProbabilityPlay => {
+    const play = isRecord(raw) ? raw : {}
+    const about = isRecord(play.about) ? play.about : {}
+    return {
+      homeTeamWinProbability: numberOrNull(play.homeTeamWinProbability),
+      homeTeamWinProbabilityAdded: numberOrNull(play.homeTeamWinProbabilityAdded),
+      leverageIndex: numberOrNull(play.leverageIndex),
+      dramaIndex: numberOrNull(play.dramaIndex),
+      inning: numberOrNull(about.inning),
+      captivatingIndex: numberOrNull(about.captivatingIndex),
+    }
+  })
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
+}
+
+function numberOrNull(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
 }
 
 export async function fetchPlayer(personId: number): Promise<PlayerInfo> {
