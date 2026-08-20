@@ -126,18 +126,18 @@ src/
                                            GameCard.
      LiveGame/LiveGameTab.tsx              Live Game tab wrapper. Exports LiveGameTab. Owns the `.tab-content`
                                             flex root directly under the 48px `.tab-bar`; renders the 44px
-                                            `.sub-tab-nav` (At Bat / Batter Game / Pitcher Game) as a sibling above
+                                            `.sub-tab-nav` (At Bat / Pitcher / Batter) as a sibling above
                                             `.sub-tab-panel`, which is the scroll owner and takes whatever height
                                             is left over (no fixed budget -- see section 8). Calls useLiveFeed() for
                                            its polling side effect. Dispatches to LiveAtBat, BatterGameSubTab, or
                                            PitcherGameSubTab based on gameStore.liveSubTab. Imported by App.tsx.
-    LiveGame/BatterGameSubTab.tsx         "Batter Game" sub-tab. Derives everything from
+    LiveGame/BatterGameSubTab.tsx         "Batter" sub-tab. Derives everything from
                                            liveFeed.liveData.plays.allPlays and gameStore.gameFeedPitches already
                                            in the store; issues no network requests itself. Renders a pitch-type
                                             tally + ZonePlot, a per-plate-appearance game log, and a batted-ball
                                             list with joined bat speed. Declares no heights. Imported by
                                            LiveGameTab.
-    LiveGame/PitcherGameSubTab.tsx        "Pitcher Game" sub-tab. Derives an in-game PitcherGame summary
+    LiveGame/PitcherGameSubTab.tsx        "Pitcher" sub-tab. Derives an in-game PitcherGame summary
                                            (pitches, arsenal, strikes/balls, battersFaced, outs, by-inning pitch
                                            counts, first-pitch-strike rate) purely from allPlays, bounded to
                                            plays at or before the current at-bat index. Renders ArsenalBars +
@@ -184,7 +184,7 @@ src/
     Canvas/HeatMap.tsx                    HeatMap({ zones: HotColdZone[], size = 150 }). Draws a 3x3 hot/cold
                                            grid on canvas, colored via the local TEMP_COLORS map (hot/cold/warm/
                                            lukewarm). Imported by PitchingSubTab, BattingSubTab.
-    Canvas/SprayChart.tsx                 SprayChart({ data: SavantBattedBall[], width = 240, height = 200 }).
+    Canvas/SprayChart.tsx                 SprayChart({ data: ReadonlyArray<SavantBattedBall>, width = 304, height = 274 }).
                                            Plots batted-ball landing spots from hc_x/hc_y, colored via the local
                                            EVENT_COLORS map. Imported by BattingSubTab.
     Canvas/ZonePlot.tsx                   ZonePlot({ zone?, size?, pitchType?, callCode?, pitches? }). Draws the
@@ -308,17 +308,17 @@ main.tsx
       tab-bar (Live Game | Pitcher vs Batter buttons)
       activeTab === 'live'
         LiveGameTab
-          sub-tab-nav (At Bat | Batter Game | Pitcher Game)
-          liveSubTab === 'atBat'       -> LiveAtBat        -> ZonePlot
-          liveSubTab === 'batterGame'  -> BatterGameSubTab  -> ZonePlot
+          sub-tab-nav (At Bat | Pitcher | Batter)
+          liveSubTab === 'atBat'       -> LiveAtBat         -> ZonePlot
           liveSubTab === 'pitcherGame' -> PitcherGameSubTab -> ArsenalBars, ZonePlot
+          liveSubTab === 'batterGame'  -> BatterGameSubTab  -> ZonePlot
       activeTab === 'pitcherVsBatter'
         PitcherVsBatter
           pvb-cards-wrap (pitcher season / pitcher career / batter season / batter career swipe cards)
-          sub-tab-nav (Matchup | Pitching | Batting)
-          activeSubTab === 'matchup'  -> MatchupSubTab
+          sub-tab-nav (Pitching | Batting | Matchup)
           activeSubTab === 'pitching' -> PitchingSubTab -> ArsenalBars, HeatMap
           activeSubTab === 'batting'  -> BattingSubTab  -> HeatMap, SprayChart
+          activeSubTab === 'matchup'  -> MatchupSubTab
 ```
 
 ## 6. State Management
@@ -347,7 +347,7 @@ interface GameState {
 }
 ```
 
-Defaults: `activeTab: 'live'`, `activeSubTab: 'matchup'`, `liveSubTab: 'atBat'`, `recentFormGames: 7`, everything else `null`/`false`/`[]`.
+Defaults: `activeTab: 'live'`, `activeSubTab: 'pitching'`, `liveSubTab: 'atBat'`, `recentFormGames: 7`, everything else `null`/`false`/`[]`.
 
 Actions and when each is dispatched:
 
@@ -429,9 +429,9 @@ Surviving hardcoded heights. This is the complete list; additions need justifica
 - `--tab-bar-h: 48px` and `--sub-tab-h: 44px` (`src/index.css`), applied by `.ui-tab-bar` / `.ui-sub-tab-nav`. Fixed chrome is the only thing permitted to declare `height`, and it lives in `ui.css`.
 - `.arsenal-canvas > canvas { max-height: 186px }` — the canvas clamp described below.
 - `.a11y-only { width: 1px; height: 1px }` and the 1px `.matchup-head__vs` hairline pseudo-elements.
-- `Skeleton height="44px" / "32px"` placeholders in `GameSelect.tsx`, and `SprayChart`'s `height = 200` default (passed explicitly as `height={200}` from `BattingPanels.tsx`).
+- `Skeleton height="44px" / "32px"` placeholders in `GameSelect.tsx`, and `SprayChart`'s `height = 274` default (`BattingPanels.tsx` passes no size, so the chart owns its own aspect).
 
-Canvas sizing. All four canvases (`ArsenalBars`, `HeatMap`, `SprayChart`, `ZonePlot`) size their own backing store in JS from `window.devicePixelRatio` and set matching CSS pixel dimensions inline. There is no `ResizeObserver` in the codebase — a canvas keeps its intrinsic size inside a `width: 100%` centered slot rather than reacting to it. Call sites: `ZonePlot size={172}` in both live sub-tabs (`LEGEND_MIN_SIZE = 172` gates whether the legend draws), `HeatMap size={150}` in `PvbPanels`, `SprayChart 264x200` in `BattingPanels`. `ArsenalBars` is the exception: it computes its height from the number of pitch types and returns `<canvas style={{ width }}>` with **no** CSS height, so a tall arsenal would render at its raw pixel height. `App.css` constrains it with the descendant selector `.arsenal-canvas > canvas { max-height: 186px }` — the wrapper's own `height`/`max-height` would only clip, not resize, the canvas.
+Canvas sizing. All four canvases (`ArsenalBars`, `HeatMap`, `SprayChart`, `ZonePlot`) size their own backing store in JS from `window.devicePixelRatio` and set matching CSS pixel dimensions inline. There is no `ResizeObserver` in the codebase — a canvas keeps its intrinsic size inside a `width: 100%` centered slot rather than reacting to it. Call sites: `ZonePlot size={172}` in both live sub-tabs (`LEGEND_MIN_SIZE = 172` gates whether the legend draws), `HeatMap size={150}` in `PvbPanels`, `SprayChart 304x274` from its own defaults. `ArsenalBars` is the exception: it computes its height from the number of pitch types and returns `<canvas style={{ width }}>` with **no** CSS height, so a tall arsenal would render at its raw pixel height. `App.css` constrains it with the descendant selector `.arsenal-canvas > canvas { max-height: 186px }` — the wrapper's own `height`/`max-height` would only clip, not resize, the canvas.
 
 Theme tokens. `src/index.css` declares a white-first system: `--c-bg`, `--c-surface-*`, `--c-border*`, `--c-ink*`, `--c-brand-*`, semantic `--c-live`/`--c-positive`/`--c-negative`/`--c-warn`/`--c-neutral-badge`, chart `--c-heat-*`/`--c-chart-*`, 14 `--c-pitch-*` identity colors and 4 `--c-call-*` markers, plus `--sp-1..8`, `--radius-sm|base|lg|pill`, and `--font-ui`/`--font-num`. Note the spacing scale is `--sp-*`, not `--space-*`. The old dark-green `--mlb-primary`/`--mlb-bg`/`--mlb-accent`/`--mlb-text`/`--mlb-muted` tokens no longer exist.
 
