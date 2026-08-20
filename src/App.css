@@ -1194,8 +1194,12 @@ button:focus-visible,
 /* ===== §GameSubTabs ===== */
 /* Owner: todo 10 — rules shared by BatterGameSubTab + PitcherGameSubTab:
    canvas-slot, canvas-caption, arsenal-canvas, heatmap-canvas, spray-canvas,
-   gamelog-*. The PvB chart sub-tabs consume the same slots, which is why they
-   live here rather than under §PvB. */
+   gamelog-*, game-identity-*, mix-*. The PvB chart sub-tabs consume the same
+   slots, which is why they live here rather than under §PvB.
+
+   Nothing here declares `height`. The two sub-tabs render a stack of
+   content-sized sections into `.sub-tab-panel`, which is the screen's only
+   scroll owner (§Shell) — no rule below may introduce a second one. */
 
 /* ArsenalBars renders a bare <canvas> with NO className and NO CSS height, so
    its intrinsic height attribute (up to 372px at 2x DPR) becomes its rendered
@@ -1225,6 +1229,24 @@ button:focus-visible,
 .spray-canvas > canvas,
 .zone-canvas > canvas,
 .canvas-slot > canvas {
+  display: block;
+  max-width: 100%;
+}
+
+/* Chart plus its caption as ONE labelled figure (§7). Grouping them means the
+   `role="img"` box carries real text, so it is a described chart rather than a
+   mute 172px block; only the bare <canvas> inside it can be textless. */
+.zone-figure {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+}
+
+.zone-figure > canvas {
   display: block;
   max-width: 100%;
 }
@@ -1286,10 +1308,112 @@ button:focus-visible,
   text-overflow: ellipsis;
 }
 
+/* --- Player identity header --------------------------------------------- */
+/* DESIGN.md §3.3 — identity is --fs-lg, a full step above the --fs-title a
+   section heading gets, so a player name never reads like a section label. */
+
+.game-identity {
+  display: flex;
+  gap: var(--sp-4);
+  align-items: center;
+  min-width: 0;
+}
+
+.game-identity__text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  min-width: 0;
+}
+
+.game-identity__name {
+  overflow: hidden;
+  font-size: var(--fs-lg);
+  font-weight: var(--fw-semibold);
+  line-height: var(--lh-snug);
+  color: var(--c-ink);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.game-identity__role {
+  overflow: hidden;
+  font-size: var(--fs-label);
+  font-weight: var(--fw-medium);
+  line-height: var(--lh-snug);
+  color: var(--c-ink-muted);
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* --- Pitch-mix cells ----------------------------------------------------- */
+/* DESIGN.md §7 — a pitch type never relies on hue alone, so the swatch always
+   sits beside the printed code. --mix-color is supplied per row by the
+   component as a `var(--c-pitch-*)` reference; no hex reaches this file. */
+
+.mix-code {
+  display: inline-flex;
+  gap: var(--sp-3);
+  align-items: center;
+  font-family: var(--font-num);
+  font-size: var(--fs-body);
+  font-weight: var(--fw-semibold);
+  color: var(--c-ink);
+  letter-spacing: var(--tracking-caps);
+}
+
+.mix-swatch {
+  flex: 0 0 auto;
+  width: var(--sp-3);
+  height: var(--sp-3);
+  background: var(--mix-color, var(--c-pitch-unknown));
+  border-radius: var(--radius-sm);
+}
+
+/* Share reads as a number first; the meter under it is a redundant channel. */
+.mix-share {
+  display: inline-flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  align-items: flex-end;
+  min-width: 0;
+}
+
+.mix-share__value {
+  font-variant-numeric: tabular-nums;
+}
+
+.mix-share__meter {
+  position: relative;
+  width: var(--sp-8);
+  height: var(--sp-1);
+  overflow: hidden;
+  background: var(--c-surface-sunken);
+  border-radius: var(--radius-pill);
+}
+
+.mix-share__meter::after {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  width: var(--mix-share, 0%);
+  content: "";
+  background: var(--mix-color, var(--c-pitch-unknown));
+  border-radius: var(--radius-pill);
+}
+
 /* --- §GameSubTabs breakpoints ------------------------------------------- */
 /* Charts keep their intrinsic pixel size; the extra room goes to breathing
    space around them rather than to a stretched canvas. Covers §LiveAtBat's
    `.zone-canvas` too, which is declared above this point. */
+
+@media (min-width: 480px) {
+  .mix-share__meter {
+    width: calc(var(--sp-8) * 2);
+  }
+}
 
 @media (min-width: 768px) {
   .arsenal-canvas,
@@ -1302,29 +1426,37 @@ button:focus-visible,
 }
 
 /* ===== §PvB ===== */
-/* Owner: todo 11 — pvb-cards*, pvb-card, pitcher-card, batter-card,
-   card-title, card-scope, pvb-dots, pvb-panel, segmented, split-table,
-   sequence-pitch, seq-*, subsection, tendency-*. `.subsection` /
-   `.tendency-section` inherit the generic card in §Shell, and
-   `.tendencies-grid` / `.season-lines` inherit the generic grid there too. */
+/* Owner: todo 11 — pvb-cards*, pvb-scope, pvb-card*, pvb-name, pvb-strap,
+   card-title, pvb-panel, matchup-*, sequence-pitch, seq-*, subsection.
+   `.subsection` inherits the generic card in §Shell. */
 
 /* --- Stat card strip ---------------------------------------------------- */
 /* No height budget: the cards size to their stat grid and the strip sizes to
-   the cards. `align-items: stretch` (the flex default) keeps all four the
-   same height so the snap points line up. */
+   the cards. The strip holds exactly TWO structurally identical cards — the
+   pitcher and the batter for the selected scope — so `align-items: stretch`
+   (the flex default) makes them the same height with no interior void, and a
+   labelled scope switcher replaces the anonymous paging dots that used to
+   reserve a band of their own. */
 
 .pvb-cards-wrap {
-  position: relative;
+  display: flex;
   flex: 0 0 auto;
+  flex-direction: column;
   min-width: 0;
+}
+
+/* Row, so the inline-flex control keeps its intrinsic width instead of
+   stretching across the viewport the way it would in a column. */
+.pvb-scope {
+  display: flex;
+  padding: var(--sp-4) var(--sp-4) 0;
 }
 
 .pvb-cards {
   display: flex;
   gap: var(--sp-3);
   min-width: 0;
-  /* Bottom pad reserves the paging-dot band the dots are absolutely placed in. */
-  padding: var(--sp-4) var(--sp-4) var(--sp-6);
+  padding: var(--sp-4);
   overflow-x: auto;
   overflow-y: hidden;
   scroll-snap-type: x mandatory;
@@ -1336,29 +1468,74 @@ button:focus-visible,
   display: none;
 }
 
-.pvb-card,
-.season-card {
-  display: flex;
+/* Layers the strip-only deltas onto the `.ui-card` primitive; equal
+   specificity, and App.css is cascaded after ui.css. */
+.pvb-card {
   flex: 0 0 100%;
-  flex-direction: column;
-  gap: var(--sp-3);
-  min-width: 0;
-  padding: var(--sp-4);
+  gap: var(--sp-4);
   scroll-snap-align: center;
   scroll-snap-stop: always;
-  background: var(--c-bg);
-  border: 1px solid var(--c-border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-xs);
 }
 
-/* Role is carried by a 3px edge rule, not by a filled surface. */
-.pitcher-card {
-  border-left: 3px solid var(--c-brand-600);
+/* Role is carried by an edge rule, not by a filled surface. */
+.pvb-card--pitcher {
+  border-left: var(--sp-1) solid var(--c-brand-600);
 }
 
-.batter-card {
-  border-left: 3px solid var(--c-heat-4);
+.pvb-card--batter {
+  border-left: var(--sp-1) solid var(--c-heat-4);
+}
+
+.pvb-card__id {
+  display: flex;
+  gap: var(--sp-3);
+  align-items: center;
+  min-width: 0;
+}
+
+.pvb-card__ident {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: var(--sp-1);
+  min-width: 0;
+}
+
+.pvb-card__platoon {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding-top: var(--sp-3);
+  border-top: 1px solid var(--c-border);
+}
+
+/* Player identity is a full step above a section title (DESIGN.md §3.3), so it
+   can never be mistaken for a stat value at the same size. */
+.pvb-name {
+  min-width: 0;
+  overflow: hidden;
+  font-size: var(--fs-lg);
+  font-weight: var(--fw-semibold);
+  line-height: var(--lh-snug);
+  color: var(--c-ink);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.pvb-strap {
+  min-width: 0;
+  overflow: hidden;
+  font-size: var(--fs-label);
+  font-weight: var(--fw-medium);
+  line-height: var(--lh-snug);
+  color: var(--c-ink-muted);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .card-title {
@@ -1376,154 +1553,125 @@ button:focus-visible,
   text-overflow: ellipsis;
 }
 
-.card-scope {
-  flex: 0 0 auto;
-  font-size: var(--fs-label);
-  font-weight: var(--fw-semibold);
-  color: var(--c-ink-muted);
-  letter-spacing: var(--tracking-caps);
-  text-transform: uppercase;
-}
+/* --- Matchup sub-tab ----------------------------------------------------- */
+/* Both players, both headshots, stacked so a 390px column never has to shrink
+   a name to fit two side by side. */
 
-.pvb-dots {
-  position: absolute;
-  right: 0;
-  bottom: var(--sp-2);
-  left: 0;
+.matchup-head {
   display: flex;
+  flex-direction: column;
   gap: var(--sp-3);
-  align-items: center;
-  justify-content: center;
-  pointer-events: none;
-}
-
-.pvb-dots span {
-  width: var(--sp-3);
-  aspect-ratio: 1;
-  background: var(--c-border-strong);
-  border-radius: var(--radius-pill);
-  transition: background-color var(--dur-fast) var(--ease-out);
-}
-
-.pvb-dots .active {
-  background: var(--c-brand-600);
-}
-
-/* --- Scope switcher (DESIGN.md §5.7) ------------------------------------ */
-/* Track + white thumb, sized by padding rather than a fixed height so the
-   control grows with the text instead of clipping it. */
-
-.segmented {
-  display: inline-flex;
-  flex: 0 0 auto;
-  gap: var(--sp-1);
-  align-self: flex-start;
-  padding: var(--sp-1);
-  background: var(--c-surface-sunken);
-  border: 1px solid var(--c-border-strong);
-  border-radius: var(--radius-pill);
-}
-
-.segmented button {
-  padding: var(--sp-2) var(--sp-4);
-  font-size: var(--fs-label);
-  font-weight: var(--fw-semibold);
-  color: var(--c-ink-muted);
-  white-space: nowrap;
-  cursor: pointer;
-  background: transparent;
-  border: 0;
-  border-radius: var(--radius-pill);
-  transition:
-    color var(--dur-fast) var(--ease-out),
-    background-color var(--dur-fast) var(--ease-out);
-}
-
-.segmented button:hover {
-  color: var(--c-ink-secondary);
-}
-
-.segmented .active {
-  color: var(--c-ink);
-  background: var(--c-bg);
-  box-shadow: var(--shadow-xs);
-}
-
-/* --- Split table (DESIGN.md §5.11) -------------------------------------- */
-/* Numeric columns are right-aligned with a uniform --sp-4 right pad so they
-   never hug the card edge; the first column keeps the shared left edge. */
-
-.split-table,
-.splits-table {
-  display: block;
-  width: 100%;
   min-width: 0;
-  font-size: var(--fs-body);
+  padding: var(--sp-4);
+  background: var(--c-bg);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius);
 }
 
-.split-table table,
-.splits-table table {
-  width: 100%;
-  table-layout: fixed;
+.matchup-head__side {
+  display: flex;
+  gap: var(--sp-4);
+  align-items: center;
+  min-width: 0;
 }
 
-.split-table th,
-.splits-table th {
-  padding: var(--sp-2) var(--sp-4) var(--sp-2) 0;
-  font-size: var(--fs-label);
-  font-weight: var(--fw-semibold);
-  color: var(--c-ink-muted);
-  letter-spacing: var(--tracking-caps);
-  text-align: right;
-  text-transform: uppercase;
-  white-space: nowrap;
-  border-bottom: 1px solid var(--c-border);
+.matchup-head__ident {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: var(--sp-1);
+  min-width: 0;
 }
 
-.split-table th:last-child,
-.splits-table th:last-child {
-  padding-right: 0;
-}
-
-.split-table th:first-child,
-.splits-table th:first-child {
-  text-align: left;
-}
-
-.split-table td,
-.splits-table td {
-  padding: var(--sp-2) var(--sp-4) var(--sp-2) 0;
+.matchup-head__line {
+  min-width: 0;
   overflow: hidden;
   font-family: var(--font-num);
-  font-size: var(--fs-data);
-  color: var(--c-ink);
-  text-align: right;
+  font-size: var(--fs-body);
+  color: var(--c-ink-secondary);
   font-variant-numeric: tabular-nums;
   letter-spacing: var(--tracking-tight);
   white-space: nowrap;
   text-overflow: ellipsis;
+}
+
+/* Rules to both edges so the divider reads as a separator, not a label. */
+.matchup-head__vs {
+  display: flex;
+  gap: var(--sp-3);
+  align-items: center;
+  font-size: var(--fs-label);
+  font-weight: var(--fw-semibold);
+  color: var(--c-ink-subtle);
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+}
+
+.matchup-head__vs::before,
+.matchup-head__vs::after {
+  flex: 1 1 0;
+  height: 1px;
+  background: var(--c-border);
+  content: "";
+}
+
+/* --- Series at-bat rows -------------------------------------------------- */
+/* One row per shared plate appearance, uncapped: the panel scrolls, so a long
+   series lengthens the list instead of truncating it. */
+
+.matchup-ab {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  min-width: 0;
+  padding: var(--sp-3) 0;
   border-bottom: 1px solid var(--c-border);
 }
 
-.split-table td:last-child,
-.splits-table td:last-child {
-  padding-right: 0;
-}
-
-.split-table td:first-child,
-.splits-table td:first-child {
-  font-family: var(--font-ui);
-  font-size: var(--fs-body);
-  color: var(--c-ink-secondary);
-  text-align: left;
-}
-
-.split-table tr:last-child td,
-.splits-table tr:last-child td {
+.matchup-ab:last-child {
+  padding-bottom: 0;
   border-bottom: 0;
 }
 
+.matchup-ab__head {
+  display: flex;
+  gap: var(--sp-4);
+  align-items: baseline;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.matchup-ab__when {
+  min-width: 0;
+  overflow: hidden;
+  font-size: var(--fs-label);
+  font-weight: var(--fw-medium);
+  color: var(--c-ink-muted);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.matchup-ab__event {
+  flex: 0 0 auto;
+  font-size: var(--fs-body);
+  font-weight: var(--fw-semibold);
+  color: var(--c-ink);
+}
+
+.matchup-ab__seq {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  align-items: center;
+  min-width: 0;
+}
+
 /* --- Pitch sequence chips ----------------------------------------------- */
+/* Shared with the Live Game pitcher sub-tab, which stacks a label over a
+   number in the same chip — the column direction belongs to both callers. */
 .sequence-pitch {
   display: flex;
   flex: 0 0 auto;
@@ -1557,48 +1705,31 @@ button:focus-visible,
   text-transform: uppercase;
 }
 
-/* --- Tendency blocks ---------------------------------------------------- */
-.tendency-label {
-  font-size: var(--fs-label);
-  font-weight: var(--fw-medium);
-  color: var(--c-ink-muted);
-  letter-spacing: var(--tracking-caps);
-  text-transform: uppercase;
-}
-
-.tendency-value {
-  font-family: var(--font-num);
-  font-size: var(--fs-data);
-  font-weight: var(--fw-semibold);
-  color: var(--c-ink);
-  font-variant-numeric: tabular-nums;
-  letter-spacing: var(--tracking-tight);
-}
-
 /* --- §PvB breakpoints ---------------------------------------------------- */
 
 @media (min-width: 768px) {
-  .pvb-cards {
+  .pvb-cards,
+  .pvb-scope {
     padding-inline: max(var(--sp-4), calc((100% - 720px) / 2));
   }
 }
 
 @media (min-width: 1024px) {
   /* Wide enough to show the whole matchup at once, so the swipe carousel
-     becomes a static grid and the paging dots have nothing left to report. */
+     becomes a static two-up grid and nothing has to be paged. */
   .pvb-cards {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    padding-inline: max(var(--sp-4), calc((100% - 960px) / 2));
     overflow-x: visible;
     scroll-snap-type: none;
   }
 
-  .pvb-card {
-    scroll-snap-align: none;
+  .pvb-cards,
+  .pvb-scope {
+    padding-inline: max(var(--sp-4), calc((100% - 960px) / 2));
   }
 
-  .pvb-dots {
-    display: none;
+  .pvb-card {
+    scroll-snap-align: none;
   }
 }
