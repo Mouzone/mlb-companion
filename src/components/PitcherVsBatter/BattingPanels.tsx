@@ -4,7 +4,7 @@ import { computeGBpct, parseStat } from '../../utils/sabermetrics'
 import { SprayChart } from '../Canvas/SprayChart'
 import { EmptyPanel, Stat, StatGrid } from '../ui'
 import { Panel, SkeletonRows } from './PvbPanels'
-import { fixed, percent, rate3, whole } from './PvbShared'
+import { fixed, percent, rate3 } from './PvbShared'
 
 /**
  * Statcast read-out for the batted balls the spray chart plots. Every number
@@ -57,21 +57,21 @@ export function SprayPanel({ data, loading }: SprayPanelProps): ReactElement {
   return (
     <Panel title="Batted Balls" meta={`${String(data.length)} tracked`}>
       <div className="spray-canvas">
-        <SprayChart data={[...data]} width={264} height={200} />
+        <SprayChart data={data} />
       </div>
-      <p className="canvas-caption">Landing spots for every tracked batted ball</p>
+      <p className="canvas-caption">
+        Landing spot for every tracked batted ball, sized and coloured by bases earned
+      </p>
       <StatGrid>
-        <Stat label="Avg EV" value={fixed(mean(exitVelos), 1)} />
-        <Stat label="Max EV" value={fixed(exitVelos.length > 0 ? Math.max(...exitVelos) : null, 1)} />
-        <Stat label="Avg LA" value={fixed(mean(column(data, 'launch_angle')), 1)} />
         <Stat
           label="Hard hit"
           value={percent(exitVelos.length > 0 ? (barrels / exitVelos.length) * 100 : null, 0)}
         />
-        <Stat label="GB%" value={percent(computeGBpct(groundBalls, data.length), 0)} />
-        <Stat label="Avg dist" value={whole(mean(column(data, 'hit_distance_sc')))} />
+        <Stat label="Avg EV" value={fixed(mean(exitVelos), 1)} />
+        <Stat label="Max EV" value={fixed(exitVelos.length > 0 ? Math.max(...exitVelos) : null, 1)} />
         <Stat label="xwOBAcon" value={rate3(mean(column(data, 'estimated_woba_using_speedangle')))} />
-        <Stat label="BBE" value={String(data.length)} />
+        <Stat label="Avg LA" value={fixed(mean(column(data, 'launch_angle')), 1)} />
+        <Stat label="GB%" value={percent(computeGBpct(groundBalls, data.length), 0)} />
       </StatGrid>
     </Panel>
   )

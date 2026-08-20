@@ -13,10 +13,14 @@ interface SubTabDescriptor {
   readonly label: string
 }
 
+/**
+ * `atBat` leads because it is the live moment; the pitcher precedes the batter
+ * everywhere in the app because he sets the terms of every plate appearance.
+ */
 const SUB_TABS: readonly SubTabDescriptor[] = [
   { id: 'atBat', label: 'At Bat' },
-  { id: 'batterGame', label: 'Batter Game' },
-  { id: 'pitcherGame', label: 'Pitcher Game' },
+  { id: 'pitcherGame', label: 'Pitcher' },
+  { id: 'batterGame', label: 'Batter' },
 ]
 
 /** SubTabNav reports a plain `string`; this narrows it back without a cast. */

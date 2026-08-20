@@ -122,6 +122,32 @@ export const CHART = {
   markerStroke: '#ffffff',
 } as const;
 
+/**
+ * Ballpark surfaces for the spray chart. Deliberately desaturated so a full
+ * green-and-tan field still reads as part of a white-first UI instead of
+ * fighting the surrounding panels for attention.
+ */
+export const FIELD = {
+  grass: '#e9f1e6',
+  grassAlt: '#dfeada',
+  dirt: '#f2e6d6',
+  warningTrack: '#ecdcc6',
+  chalk: '#ffffff',
+  fence: '#b9c2cc',
+} as const;
+
+/**
+ * Ordinal ramp for total bases on a batted ball: cool for outs and singles,
+ * hot for extra-base hits, so damage reads at a glance without the legend.
+ */
+export const BASE_VALUE_COLORS = {
+  out: '#9aa5b1',
+  single: '#1b6fb5',
+  double: '#0f7b4f',
+  triple: '#b25e09',
+  home_run: '#c8102e',
+} as const;
+
 function channelLuminance(channel: number): number {
   const srgb = channel / 255;
   return srgb <= 0.04045 ? srgb / 12.92 : ((srgb + 0.055) / 1.055) ** 2.4;

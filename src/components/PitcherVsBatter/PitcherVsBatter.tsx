@@ -28,10 +28,14 @@ import { benchmarkBatterCells, benchmarkPitcherCells } from './PvbBenchmarks'
 type SubTab = 'matchup' | 'pitching' | 'batting'
 type Scope = 'season' | 'career'
 
+/**
+ * Pitcher-first mirrors the card row above. `matchup` trails because its
+ * head-to-head history is the least used panel and the most expensive to fetch.
+ */
 const SUB_TABS: readonly { readonly id: SubTab; readonly label: string }[] = [
-  { id: 'matchup', label: 'Matchup' },
   { id: 'pitching', label: 'Pitching' },
   { id: 'batting', label: 'Batting' },
+  { id: 'matchup', label: 'Matchup' },
 ]
 
 const SCOPES = [

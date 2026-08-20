@@ -141,12 +141,12 @@ export function MatchupSubTab(): ReactElement {
     const pitcherVs = findSplit(pitcherSplits, side === 'L' ? 'vl' : 'vr')
     const pitcherRisp = findSplit(pitcherSplits, 'risp')
 
-    if (batterSeason !== null) rows.push(splitRow('Batter season', batterSeason))
-    if (batterVs) rows.push(splitRow(`Batter vs ${hand}HP`, batterVs.stat))
-    if (batterRisp) rows.push(splitRow('Batter RISP', batterRisp.stat))
     if (pitcherSeason !== null) rows.push(splitRow('Pitcher season', pitcherSeason))
     if (pitcherVs) rows.push(splitRow(`Pitcher vs ${side}HB`, pitcherVs.stat))
     if (pitcherRisp) rows.push(splitRow('Pitcher RISP', pitcherRisp.stat))
+    if (batterSeason !== null) rows.push(splitRow('Batter season', batterSeason))
+    if (batterVs) rows.push(splitRow(`Batter vs ${hand}HP`, batterVs.stat))
+    if (batterRisp) rows.push(splitRow('Batter RISP', batterRisp.stat))
     return rows
   }, [batterSplits, pitcherSplits, batterSeason, pitcherSeason, hand, side])
 

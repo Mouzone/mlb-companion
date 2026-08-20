@@ -41,7 +41,7 @@ export const useGameStore = create<GameState>((set) => ({
   lastTimecode: null,
   isPolling: false,
   activeTab: 'live',
-  activeSubTab: 'matchup',
+  activeSubTab: 'pitching',
   liveSubTab: 'atBat',
   recentFormGames: 7,
   gameFeedPitches: [],
