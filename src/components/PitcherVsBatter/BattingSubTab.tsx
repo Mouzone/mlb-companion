@@ -1,284 +1,283 @@
-import { useMemo } from 'react'
-import type { JSX } from 'react'
+import { useMemo, type ReactElement } from 'react'
 import type { GameLogEntry, StatSplit } from '../../api/types'
 import { usePlayerStats } from '../../hooks/usePlayerStats'
 import { useGameStore } from '../../store/gameStore'
-import { HeatMap } from '../Canvas/HeatMap'
-import { SprayChart } from '../Canvas/SprayChart'
-import { computeKpct, parseStat } from '../../utils/sabermetrics'
+import { computeBBpct, computeISO, computeKpct, parseStat } from '../../utils/sabermetrics'
+import type { DataTableColumn, DataTableRow } from '../ui'
+import { EmptyPanel, Segmented, Stat, StatGrid } from '../ui'
+import { SprayPanel } from './BattingPanels'
+import { Panel, SkeletonRows, TablePanel, ZonePanel } from './PvbPanels'
+import {
+  PlayerIdentity,
+  compareTo,
+  monthDay,
+  percent,
+  rate3,
+  rateText,
+  ratio,
+  signedRate3,
+  splitCode,
+  sumOptional,
+  whole,
+} from './PvbShared'
 
-const EM_DASH = '—'
+const SEASON = new Date().getFullYear().toString()
 
-/** The three spans the segmented control offers; all are served from the season log already in memory. */
-const FORM_SPANS: readonly number[] = [7, 15, 30]
+const SPAN_OPTIONS = [
+  { id: '7', label: '7 G' },
+  { id: '15', label: '15 G' },
+  { id: '30', label: '30 G' },
+]
 
-/** Structural shape shared by a situational split stat and the season stat line. */
-interface RateSource {
-  avg: string
-  ops: string
-  strikeOuts: number
-  plateAppearances: number
-  atBats: number
+const SITUATIONS: ReadonlyArray<{ code: string; label: string }> = [
+  { code: 'vl', label: 'vs LHP' },
+  { code: 'vr', label: 'vs RHP' },
+  { code: 'risp', label: 'RISP' },
+]
+
+const SPLIT_COLUMNS: ReadonlyArray<DataTableColumn> = [
+  { key: 'split', label: 'Split' },
+  { key: 'pa', label: 'PA', align: 'right' },
+  { key: 'avg', label: 'AVG', align: 'right' },
+  { key: 'ops', label: 'OPS', align: 'right' },
+  { key: 'hr', label: 'HR', align: 'right' },
+  { key: 'k', label: 'K', align: 'right' },
+]
+
+const LOG_COLUMNS: ReadonlyArray<DataTableColumn> = [
+  { key: 'date', label: 'Date' },
+  { key: 'ab', label: 'AB', align: 'right' },
+  { key: 'h', label: 'H', align: 'right' },
+  { key: 'db', label: '2B', align: 'right' },
+  { key: 'hr', label: 'HR', align: 'right' },
+  { key: 'rbi', label: 'RBI', align: 'right' },
+  { key: 'k', label: 'K', align: 'right' },
+]
+
+/** The shape every split source shares: situational, season, and head-to-head. */
+interface SplitSource {
+  readonly avg: string
+  readonly ops: string
+  readonly homeRuns: number
+  readonly strikeOuts: number
+  readonly plateAppearances: number
 }
 
-interface SplitRow {
-  key: string
-  label: string
-  avg: string
-  ops: string
-  pa: string
-  kPct: string
+function splitRow(label: string, stat: SplitSource | null): DataTableRow | null {
+  if (stat === null) return null
+  return {
+    split: label,
+    pa: String(stat.plateAppearances),
+    avg: rateText(stat.avg),
+    ops: rateText(stat.ops),
+    hr: String(stat.homeRuns),
+    k: String(stat.strikeOuts),
+  }
 }
 
 interface FormLine {
   games: number
   hits: number
-  atBats: number
+  atBats: number | null
+  doubles: number
   homeRuns: number
   rbi: number
   strikeOuts: number
+  baseOnBalls: number
   plateAppearances: number
 }
 
-/**
- * statSplits answers carry the situation as either the bare code or a `{ code, description }`
- * object depending on the endpoint revision, so both shapes are read without widening the type.
- */
-function splitCode(split: StatSplit): string {
-  const raw: unknown = split.split
-  if (typeof raw === 'string') return raw.toLowerCase()
-  if (typeof raw === 'object' && raw !== null && 'code' in raw) {
-    const { code } = raw
-    return typeof code === 'string' ? code.toLowerCase() : ''
+function aggregate(entries: readonly GameLogEntry[]): FormLine {
+  const line: FormLine = {
+    games: entries.length,
+    hits: 0,
+    atBats: sumOptional(entries, 'atBats'),
+    doubles: 0,
+    homeRuns: 0,
+    rbi: 0,
+    strikeOuts: 0,
+    baseOnBalls: 0,
+    plateAppearances: 0,
   }
-  return ''
-}
-
-/** The game log ships at-bats that GameLogEntry does not declare; read it defensively, never as `any`. */
-function optionalCount(stat: GameLogEntry['stat'], key: string): number | null {
-  const record: Record<string, unknown> = stat
-  const raw = record[key]
-  if (typeof raw === 'number' || typeof raw === 'string') return parseStat(raw)
-  return null
-}
-
-function atBatsOf(entry: GameLogEntry): number {
-  const declared = optionalCount(entry.stat, 'atBats')
-  if (declared !== null) return declared
-  return Math.max(entry.stat.plateAppearances - (entry.stat.baseOnBalls ?? 0), 0)
-}
-
-function toSplitRow(key: string, label: string, stat: RateSource | null): SplitRow {
-  if (stat === null) {
-    return { key, label, avg: EM_DASH, ops: EM_DASH, pa: EM_DASH, kPct: EM_DASH }
+  for (const entry of entries) {
+    line.hits += entry.stat.hits
+    line.doubles += entry.stat.doubles
+    line.homeRuns += entry.stat.homeRuns
+    line.rbi += entry.stat.rbi
+    line.strikeOuts += entry.stat.strikeOuts
+    line.baseOnBalls += entry.stat.baseOnBalls ?? 0
+    line.plateAppearances += entry.stat.plateAppearances
   }
-  const denominator = stat.plateAppearances > 0 ? stat.plateAppearances : stat.atBats
-  const kPct = computeKpct(stat.strikeOuts, denominator)
-  return {
-    key,
-    label,
-    avg: stat.avg,
-    ops: stat.ops,
-    pa: String(denominator),
-    kPct: kPct === null ? EM_DASH : `${kPct.toFixed(0)}%`,
-  }
+  return line
 }
 
-function aggregateForm(entries: GameLogEntry[]): FormLine {
-  return entries.reduce<FormLine>(
-    (total, entry) => ({
-      games: total.games + 1,
-      hits: total.hits + entry.stat.hits,
-      atBats: total.atBats + atBatsOf(entry),
-      homeRuns: total.homeRuns + entry.stat.homeRuns,
-      rbi: total.rbi + entry.stat.rbi,
-      strikeOuts: total.strikeOuts + entry.stat.strikeOuts,
-      plateAppearances: total.plateAppearances + entry.stat.plateAppearances,
-    }),
-    { games: 0, hits: 0, atBats: 0, homeRuns: 0, rbi: 0, strikeOuts: 0, plateAppearances: 0 },
-  )
-}
+const HANDEDNESS: Record<string, string> = { L: 'LH batter', R: 'RH batter', S: 'Switch hitter' }
 
-/** Baseball averages print without the leading zero, matching every other surface in the app. */
-function formatAvg(value: number | null): string {
-  if (value === null) return EM_DASH
-  return value.toFixed(3).replace(/^0/, '')
-}
-
-function formatDelta(value: number | null): string {
-  if (value === null) return EM_DASH
-  const sign = value >= 0 ? '+' : '-'
-  return `${sign}${Math.abs(value).toFixed(3).replace(/^0/, '')}`
-}
-
-function trendClass(delta: number | null): string {
-  if (delta === null || delta === 0) return 'stat-value'
-  return delta > 0 ? 'stat-value good' : 'stat-value bad'
-}
-
-export function BattingSubTab(): JSX.Element {
+export function BattingSubTab(): ReactElement {
   const selectedGame = useGameStore((s) => s.selectedGame)
   const currentPlay = useGameStore((s) => s.currentPlay)
   const recentFormGames = useGameStore((s) => s.recentFormGames)
   const setRecentFormGames = useGameStore((s) => s.setRecentFormGames)
 
-  const batterId = currentPlay?.matchup?.batter.id ?? null
-  // The stats hook keys every batter fetch on having a pitcher too; it is never rendered here.
+  const matchup = currentPlay?.matchup ?? null
+  const batter = matchup?.batter ?? null
+  const batterId = batter?.id ?? null
+  // The stats hook keys every batter fetch on having a pitcher too.
   const pitcherId =
-    currentPlay?.matchup?.pitcher.id ??
+    matchup?.pitcher.id ??
     selectedGame?.teams.home.probablePitcher?.id ??
     selectedGame?.teams.away.probablePitcher?.id ??
     null
 
-  const { batterSeason, batterHotCold, batterSplits, gameLog, savantData, loading } =
+  const { batterSeason, batterHotCold, batterSplits, gameLog, vsPlayer, savantData, loading } =
     usePlayerStats(batterId, pitcherId)
 
-  // Memoised so the canvas keeps a stable data identity and only redraws when the rows change.
-  const sprayData = useMemo(() => savantData.filter((r) => r.hc_x && r.hc_y), [savantData])
-
-  const splitRows = useMemo<SplitRow[]>(() => {
+  const splitRows = useMemo<DataTableRow[]>(() => {
     const byCode = new Map<string, StatSplit>()
     for (const split of batterSplits) byCode.set(splitCode(split), split)
-    return [
-      toSplitRow('vl', 'vs L', byCode.get('vl')?.stat ?? null),
-      toSplitRow('vr', 'vs R', byCode.get('vr')?.stat ?? null),
-      toSplitRow('risp', 'RISP', byCode.get('risp')?.stat ?? null),
-      toSplitRow('season', 'Season', batterSeason),
+    const candidates = [
+      ...SITUATIONS.map(({ code, label }) => splitRow(label, byCode.get(code)?.stat ?? null)),
+      splitRow('Season', batterSeason),
+      splitRow('vs Pitcher', vsPlayer),
     ]
-  }, [batterSplits, batterSeason])
+    return candidates.filter((row): row is DataTableRow => row !== null)
+  }, [batterSplits, batterSeason, vsPlayer])
 
-  // Date-ascending log: the newest games are at the tail, so slice from the end and flip.
+  // Date-ascending log: the newest entries are at the tail, so slice from the end.
   const form = useMemo(
-    () => aggregateForm(gameLog.slice(-recentFormGames).reverse()),
+    () => aggregate(gameLog.slice(-recentFormGames)),
     [gameLog, recentFormGames],
   )
 
-  const spanAvg = form.atBats > 0 ? form.hits / form.atBats : null
-  const seasonAvg = parseStat(batterSeason?.avg ?? '')
-  const delta = spanAvg !== null && seasonAvg !== null ? spanAvg - seasonAvg : null
-  const spanKpct = computeKpct(form.strikeOuts, form.plateAppearances)
+  const logRows = useMemo<DataTableRow[]>(
+    () =>
+      [...gameLog].reverse().map((entry) => ({
+        date: `${entry.isHome ? 'vs' : '@'} ${monthDay(entry.date)}`,
+        ab: whole(sumOptional([entry], 'atBats')),
+        h: String(entry.stat.hits),
+        db: String(entry.stat.doubles),
+        hr: String(entry.stat.homeRuns),
+        rbi: String(entry.stat.rbi),
+        k: String(entry.stat.strikeOuts),
+      })),
+    [gameLog],
+  )
 
-  if (batterId === null) {
+  if (batterId === null || batter === null) {
     return (
       <div>
-        <div className="panel-row">
-          <div className="section-title">
-            <span>Batting</span>
-          </div>
-          <div className="stat-row">
-            <span className="stat-label">Waiting for a batter…</span>
-          </div>
-        </div>
+        <Panel title="Batting">
+          <EmptyPanel
+            message="No batter at the plate yet"
+            hint="Batting data appears once the first at-bat begins."
+          />
+        </Panel>
       </div>
     )
   }
 
+  const seasonAvg = parseStat(batterSeason?.avg ?? '')
+  const spanAvg = ratio(form.hits, form.atBats)
+  const delta = spanAvg !== null && seasonAvg !== null ? spanAvg - seasonAvg : null
+  const verdict = compareTo(spanAvg, seasonAvg, false)
+  const plateAppearances = batterSeason?.plateAppearances ?? null
+  const iso = computeISO(seasonAvg, parseStat(batterSeason?.slg ?? ''))
+  const side = matchup?.batSide.code
+  const logSpan =
+    gameLog.length > 0
+      ? `${monthDay(gameLog[0]?.date ?? '')}\u2013${monthDay(gameLog[gameLog.length - 1]?.date ?? '')}`
+      : undefined
+
   return (
     <div>
-      <div className="panel-split">
-        <div className="panel-row">
-          <div className="section-title">
-            <span>Hot / Cold</span>
-          </div>
-          <div className="heatmap-canvas">
-            <HeatMap zones={batterHotCold} size={172} />
-          </div>
-        </div>
+      <PlayerIdentity
+        personId={batter.id}
+        name={batter.fullName}
+        role={`${(side === undefined ? undefined : HANDEDNESS[side]) ?? 'Batter'} · ${SEASON} season`}
+      >
+        <StatGrid>
+          <Stat label="AVG" value={rateText(batterSeason?.avg)} />
+          <Stat label="OBP" value={rateText(batterSeason?.obp)} />
+          <Stat label="SLG" value={rateText(batterSeason?.slg)} />
+          <Stat label="OPS" value={rateText(batterSeason?.ops)} />
+        </StatGrid>
+      </PlayerIdentity>
 
-        <div className="panel-row">
-          <div className="section-title">
-            <span>Spray</span>
-            <span>{sprayData.length}</span>
-          </div>
-          {sprayData.length > 0 ? (
-            <div className="spray-canvas">
-              <SprayChart data={sprayData} width={172} height={150} />
-            </div>
-          ) : (
-            <div className="stat-row">
-              <span className="stat-label">
-                {loading ? 'Loading batted balls…' : 'No batted-ball data'}
-              </span>
-            </div>
-          )}
-        </div>
-      </div>
+      <ZonePanel
+        title="Hot / Cold"
+        caption="Batting average by strike-zone cell"
+        zones={batterHotCold}
+        loading={loading}
+        emptyMessage="No zone data for this season"
+      />
 
-      <div className="panel-row">
-        <div className="section-title">
-          <span>Splits</span>
-          <span>vl · vr · risp</span>
-        </div>
-        <div className="split-table">
-          <table>
-            <thead>
-              <tr>
-                <th>Split</th>
-                <th>AVG</th>
-                <th>OPS</th>
-                <th>PA</th>
-                <th>K%</th>
-              </tr>
-            </thead>
-            <tbody>
-              {splitRows.map((row) => (
-                <tr key={row.key}>
-                  <td>{row.label}</td>
-                  <td>{row.avg}</td>
-                  <td>{row.ops}</td>
-                  <td>{row.pa}</td>
-                  <td>{row.kPct}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      <SprayPanel data={savantData} loading={loading} />
 
-      <div className="panel-row">
-        <div className="section-title">
-          <span>Recent Form</span>
-          <span>{form.games} G</span>
-        </div>
-        <div className="segmented">
-          {FORM_SPANS.map((span) => (
-            <button
-              key={span}
-              type="button"
-              className={recentFormGames === span ? 'active' : ''}
-              onClick={() => setRecentFormGames(span)}
-            >
-              {span}G
-            </button>
-          ))}
-        </div>
-        <div className="stat-grid">
-          <div className="stat-row">
-            <span className="stat-label">AVG</span>
-            <span className={trendClass(delta)}>{formatAvg(spanAvg)}</span>
-          </div>
-          <div className="stat-row">
-            <span className="stat-label">vs Szn</span>
-            <span className={trendClass(delta)}>{formatDelta(delta)}</span>
-          </div>
-          <div className="stat-row">
-            <span className="stat-label">H-AB</span>
-            <span className="stat-value">
-              {form.games > 0 ? `${form.hits}-${form.atBats}` : EM_DASH}
-            </span>
-          </div>
-          <div className="stat-row">
-            <span className="stat-label">HR·RBI·K%</span>
-            <span className="stat-value">
-              {form.games > 0
-                ? `${form.homeRuns}·${form.rbi}·${spanKpct === null ? EM_DASH : `${spanKpct.toFixed(0)}%`}`
-                : loading
-                  ? 'Loading…'
-                  : EM_DASH}
-            </span>
-          </div>
-        </div>
-      </div>
+      <TablePanel
+        title="Splits"
+        meta={SEASON}
+        columns={SPLIT_COLUMNS}
+        rows={splitRows}
+        loading={loading}
+        emptyMessage="No situational splits published yet"
+        emptyHint="Splits appear once the batter records enough plate appearances."
+        skeletonRows={5}
+      />
+
+      <Panel title="Recent Form" meta={`${String(form.games)} of ${String(gameLog.length)} G`}>
+        <Segmented
+          options={SPAN_OPTIONS}
+          activeId={String(recentFormGames)}
+          onSelect={(id) => setRecentFormGames(Number(id))}
+        />
+        {form.games > 0 ? (
+          <StatGrid>
+            <Stat label="AVG" value={`${rate3(spanAvg)}${verdict.mark}`} tone={verdict.tone} />
+            <Stat label="Szn AVG" value={rateText(batterSeason?.avg)} />
+            <Stat label="vs Szn" value={signedRate3(delta)} tone={verdict.tone} />
+            <Stat label="H / AB" value={`${String(form.hits)}-${whole(form.atBats)}`} />
+            <Stat label="PA" value={String(form.plateAppearances)} />
+            <Stat label="2B" value={String(form.doubles)} />
+            <Stat label="HR" value={String(form.homeRuns)} />
+            <Stat label="RBI" value={String(form.rbi)} />
+            <Stat label="BB" value={String(form.baseOnBalls)} />
+            <Stat label="K" value={String(form.strikeOuts)} />
+            <Stat label="K%" value={percent(computeKpct(form.strikeOuts, form.plateAppearances), 0)} />
+            <Stat label="BB%" value={percent(computeBBpct(form.baseOnBalls, form.plateAppearances), 0)} />
+          </StatGrid>
+        ) : loading ? (
+          <SkeletonRows rows={4} />
+        ) : (
+          <EmptyPanel message="No games logged this season" />
+        )}
+      </Panel>
+
+      <Panel title="Season Rates" meta={SEASON}>
+        <StatGrid>
+          <Stat label="ISO" value={rate3(iso)} />
+          <Stat label="BABIP" value={rateText(batterSeason?.babip)} />
+          <Stat label="K%" value={percent(computeKpct(batterSeason?.strikeOuts ?? null, plateAppearances))} />
+          <Stat label="BB%" value={percent(computeBBpct(batterSeason?.baseOnBalls ?? null, plateAppearances))} />
+          <Stat label="PA" value={whole(plateAppearances)} />
+          <Stat label="AB" value={whole(batterSeason?.atBats ?? null)} />
+          <Stat label="H" value={whole(batterSeason?.hits ?? null)} />
+          <Stat label="HR" value={whole(batterSeason?.homeRuns ?? null)} />
+          <Stat label="RBI" value={whole(batterSeason?.rbi ?? null)} />
+          <Stat label="BB" value={whole(batterSeason?.baseOnBalls ?? null)} />
+          <Stat label="SO" value={whole(batterSeason?.strikeOuts ?? null)} />
+          <Stat label="OPS" value={rateText(batterSeason?.ops)} />
+        </StatGrid>
+      </Panel>
+
+      <TablePanel
+        title="Game Log"
+        meta={logSpan}
+        columns={LOG_COLUMNS}
+        rows={logRows}
+        loading={loading}
+        emptyMessage="No games logged this season"
+        skeletonRows={5}
+      />
     </div>
   )
 }

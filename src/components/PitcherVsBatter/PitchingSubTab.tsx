@@ -1,96 +1,48 @@
-import { useEffect, useState, type ReactElement } from 'react'
+import { useEffect, useMemo, useState, type ReactElement } from 'react'
 import { fetchGameLog } from '../../api/mlb'
 import type { GameLogEntry, StatSplit } from '../../api/types'
 import { usePlayerStats } from '../../hooks/usePlayerStats'
 import { useGameStore } from '../../store/gameStore'
-import { ipToDecimal, parseStat } from '../../utils/sabermetrics'
-import { ArsenalBars } from '../Canvas/ArsenalBars'
-import { HeatMap } from '../Canvas/HeatMap'
+import { PARK_FACTORS } from '../../utils/leagueConstants'
+import { parseStat } from '../../utils/sabermetrics'
+import type { DataTableRow } from '../ui'
+import { EmptyPanel, Segmented, Stat, StatGrid } from '../ui'
+import {
+  ArsenalPanel,
+  LOG_COLUMNS,
+  SPLIT_COLUMNS,
+  SeasonRatesPanel,
+  aggregate,
+  lineRow,
+  situationRow,
+} from './PitchingPanels'
+import { Panel, SkeletonRows, TablePanel, ZonePanel } from './PvbPanels'
+import {
+  PlayerIdentity,
+  compareTo,
+  fixed,
+  monthDay,
+  rate3,
+  rateText,
+  splitCode,
+  whole,
+} from './PvbShared'
 
 const SEASON = new Date().getFullYear().toString()
 
-/** Bound to gameStore.recentFormGames; the season log is fetched once, so switching never refetches. */
-const SPAN_OPTIONS: readonly number[] = [7, 15, 30]
+/** Spans served from the one cached season log, so switching never refetches. */
+const SPAN_OPTIONS = [
+  { id: '7', label: '7 G' },
+  { id: '15', label: '15 G' },
+  { id: '30', label: '30 G' },
+]
 
-/** sitCodes 'vl,vr,risp' is fetchStatSplits' default, which usePlayerStats already relies on. */
-const SPLIT_ROWS: readonly { code: string; label: string }[] = [
+/** `vl,vr,risp` is fetchStatSplits' default, which usePlayerStats relies on. */
+const SITUATIONS: ReadonlyArray<{ code: string; label: string }> = [
   { code: 'vl', label: 'vs L' },
   { code: 'vr', label: 'vs R' },
   { code: 'risp', label: 'RISP' },
 ]
-
-/**
- * StatSplit.split is typed as string, but the StatsAPI also returns `{ code, description }`
- * for this field. Normalising through unknown keeps both shapes working without a cast.
- */
-function splitCode(entry: StatSplit): string {
-  const raw: unknown = entry.split
-  if (typeof raw === 'string') return raw.toLowerCase()
-  if (typeof raw === 'object' && raw !== null && 'code' in raw) {
-    const code: unknown = raw.code
-    if (typeof code === 'string') return code.toLowerCase()
-  }
-  return ''
-}
-
-interface FormLine {
-  games: number
-  innings: number
-  earnedRuns: number
-  strikeOuts: number
-  baseOnBalls: number
-  hits: number
-  era: number | null
-  whip: number | null
-}
-
-function aggregateForm(entries: readonly GameLogEntry[]): FormLine {
-  let innings = 0
-  let earnedRuns = 0
-  let strikeOuts = 0
-  let baseOnBalls = 0
-  let hits = 0
-
-  for (const entry of entries) {
-    const ip = entry.stat.inningsPitched
-    if (ip !== undefined) innings += ipToDecimal(ip)
-    earnedRuns += entry.stat.earnedRuns ?? 0
-    baseOnBalls += entry.stat.baseOnBalls ?? 0
-    strikeOuts += entry.stat.strikeOuts
-    hits += entry.stat.hits
-  }
-
-  const totalInnings = Number(innings.toFixed(2))
-  return {
-    games: entries.length,
-    innings: totalInnings,
-    earnedRuns,
-    strikeOuts,
-    baseOnBalls,
-    hits,
-    era: totalInnings > 0 ? Number(((earnedRuns * 9) / totalInnings).toFixed(2)) : null,
-    whip: totalInnings > 0 ? Number(((hits + baseOnBalls) / totalInnings).toFixed(2)) : null,
-  }
-}
-
-/** Lower ERA over the span than on the season is a hot stretch for a pitcher. */
-function trendClass(spanEra: number | null, seasonEra: number | null): string {
-  if (spanEra === null || seasonEra === null || spanEra === seasonEra) return ''
-  return spanEra < seasonEra ? ' good' : ' bad'
-}
-
-function trendMark(spanEra: number | null, seasonEra: number | null): string {
-  if (spanEra === null || seasonEra === null || spanEra === seasonEra) return ''
-  return spanEra < seasonEra ? ' \u25bc' : ' \u25b2'
-}
-
-function num(value: number | null, digits: number): string {
-  return value === null ? '\u2014' : value.toFixed(digits)
-}
-
-function text(value: string | undefined): string {
-  return parseStat(value ?? '') === null ? '\u2014' : (value ?? '\u2014')
-}
 
 export function PitchingSubTab(): ReactElement {
   const selectedGame = useGameStore((s) => s.selectedGame)
@@ -100,167 +52,179 @@ export function PitchingSubTab(): ReactElement {
 
   const matchup = currentPlay?.matchup ?? null
   const batterId = matchup?.batter.id ?? null
-  const pitcherId =
-    matchup?.pitcher.id ??
-    selectedGame?.teams.home.probablePitcher?.id ??
-    selectedGame?.teams.away.probablePitcher?.id ??
-    null
+  const probable =
+    selectedGame?.teams.home.probablePitcher ?? selectedGame?.teams.away.probablePitcher ?? null
+  const pitcher = matchup?.pitcher ?? probable ?? null
+  const pitcherId = pitcher?.id ?? null
 
   const { pitchArsenal, pitcherHotCold, pitcherSplits, pitcherSeason, loading } = usePlayerStats(
     batterId,
     pitcherId,
   )
 
-  const [pitcherGameLog, setPitcherGameLog] = useState<GameLogEntry[]>([])
-  const [logError, setLogError] = useState<string | null>(null)
+  const [log, setLog] = useState<GameLogEntry[]>([])
+  const [logLoading, setLogLoading] = useState(false)
 
-  // usePlayerStats' gameLog is the BATTER's and is pre-truncated to 5, so the pitching log
-  // is fetched here once per pitcher. recentFormGames is deliberately not a dependency.
+  // usePlayerStats' gameLog is the BATTER's and is pre-truncated, so the full
+  // pitching log is fetched once per pitcher. The span is never a dependency.
   useEffect((): (() => void) | undefined => {
     if (pitcherId === null) {
-      setPitcherGameLog([])
-      setLogError(null)
+      setLog([])
       return undefined
     }
-
     let cancelled = false
-    setLogError(null)
+    setLogLoading(true)
     fetchGameLog(pitcherId, SEASON, 'pitching')
       .then((entries) => {
-        if (cancelled) return
-        setPitcherGameLog(entries)
+        if (!cancelled) setLog(entries)
       })
-      .catch((error: unknown) => {
-        if (cancelled) return
-        setPitcherGameLog([])
-        setLogError(error instanceof Error ? error.message : 'Game log unavailable')
+      .catch(() => {
+        if (!cancelled) setLog([])
       })
-
+      .finally(() => {
+        if (!cancelled) setLogLoading(false)
+      })
     return () => {
       cancelled = true
     }
   }, [pitcherId])
 
-  const splitByCode = new Map<string, StatSplit>()
-  for (const entry of pitcherSplits) splitByCode.set(splitCode(entry), entry)
+  const splitRows = useMemo<DataTableRow[]>(() => {
+    const byCode = new Map<string, StatSplit>()
+    for (const entry of pitcherSplits) byCode.set(splitCode(entry), entry)
+
+    const rows: DataTableRow[] = []
+    for (const { code, label } of SITUATIONS) {
+      const entry = byCode.get(code)
+      if (entry) rows.push(situationRow(label, entry.stat))
+    }
+    const spans: ReadonlyArray<readonly [string, GameLogEntry[]]> = [
+      ['Home', log.filter((entry) => entry.isHome)],
+      ['Away', log.filter((entry) => !entry.isHome)],
+      ['Season', log],
+    ]
+    for (const [label, entries] of spans) {
+      const line = aggregate(entries)
+      if (line.games > 0) rows.push(lineRow(label, line))
+    }
+    return rows
+  }, [pitcherSplits, log])
 
   // The log is date-ascending, so the tail is the most recent span.
-  const recentGames = pitcherGameLog.slice(-recentFormGames).reverse()
-  const form = aggregateForm(recentGames)
-  const seasonEra = parseStat(pitcherSeason?.era ?? '')
-  const eraClass = trendClass(form.era, seasonEra)
+  const form = useMemo(() => aggregate(log.slice(-recentFormGames)), [log, recentFormGames])
 
-  const emptyLabel = pitcherId === null ? 'No pitcher selected' : loading ? 'Loading\u2026' : null
+  const logRows = useMemo<DataTableRow[]>(
+    () =>
+      [...log].reverse().map((entry) => ({
+        date: `${entry.isHome ? 'vs' : '@'} ${monthDay(entry.date)}`,
+        ip: entry.stat.inningsPitched ?? '',
+        h: String(entry.stat.hits),
+        er: whole(entry.stat.earnedRuns ?? null),
+        bb: whole(entry.stat.baseOnBalls ?? null),
+        k: String(entry.stat.strikeOuts),
+      })),
+    [log],
+  )
+
+  if (pitcherId === null || pitcher === null) {
+    return (
+      <div>
+        <Panel title="Pitching">
+          <EmptyPanel
+            message="No pitcher on the mound yet"
+            hint="Pitching data appears once a starter is announced."
+          />
+        </Panel>
+      </div>
+    )
+  }
+
+  const seasonEra = parseStat(pitcherSeason?.era ?? '')
+  const eraVerdict = compareTo(form.era, seasonEra, true)
+  const hand = matchup?.pitchHand.code
 
   return (
     <div>
-      <div className="panel-split">
-        <div className="arsenal-canvas">
-          {pitchArsenal.length > 0 ? (
-            <ArsenalBars
-              arsenal={[...pitchArsenal].sort((a, b) => b.percentage - a.percentage).slice(0, 5)}
-              width={230}
+      <PlayerIdentity
+        personId={pitcher.id}
+        name={pitcher.fullName}
+        role={`${hand === undefined ? 'Pitcher' : `${hand}HP`} · ${SEASON} season`}
+      >
+        <StatGrid>
+          <Stat label="ERA" value={rateText(pitcherSeason?.era)} />
+          <Stat label="WHIP" value={rateText(pitcherSeason?.whip)} />
+          <Stat label="IP" value={pitcherSeason?.inningsPitched ?? ''} />
+          <Stat label="SO" value={whole(pitcherSeason?.strikeOuts ?? null)} />
+        </StatGrid>
+      </PlayerIdentity>
+
+      <ArsenalPanel arsenal={pitchArsenal} loading={loading} />
+
+      <ZonePanel
+        title="Zone Profile"
+        caption="Opponent batting average by strike-zone cell"
+        zones={pitcherHotCold}
+        loading={loading}
+        emptyMessage="No zone data for this season"
+      />
+
+      <TablePanel
+        title="Opponent Splits"
+        meta={SEASON}
+        columns={SPLIT_COLUMNS}
+        rows={splitRows}
+        loading={loading || logLoading}
+        emptyMessage="No situational splits published yet"
+        emptyHint="Splits appear after the pitcher faces enough batters."
+        skeletonRows={6}
+      />
+
+      <Panel title="Recent Form" meta={`${String(form.games)} of ${String(log.length)} G`}>
+        <Segmented
+          options={SPAN_OPTIONS}
+          activeId={String(recentFormGames)}
+          onSelect={(id) => setRecentFormGames(Number(id))}
+        />
+        {form.games > 0 ? (
+          <StatGrid>
+            <Stat
+              label="ERA"
+              value={`${fixed(form.era, 2)}${eraVerdict.mark}`}
+              tone={eraVerdict.tone}
             />
-          ) : (
-            <span className="stat-label">{emptyLabel ?? 'No arsenal data'}</span>
-          )}
-        </div>
-        <div className="heatmap-canvas" style={{ flex: '0 0 140px' }}>
-          {pitcherHotCold.length > 0 ? (
-            <HeatMap zones={pitcherHotCold} size={140} />
-          ) : (
-            <span className="stat-label">{emptyLabel ?? 'No zones'}</span>
-          )}
-        </div>
-      </div>
-
-      <div className="subsection">
-        <div className="section-title">
-          <span>Splits</span>
-          <span>{SEASON}</span>
-        </div>
-        <div className="split-table">
-          <table>
-            <thead>
-              <tr>
-                <th>Split</th>
-                <th>AVG</th>
-                <th>OPS</th>
-                <th>K</th>
-                <th>BB</th>
-              </tr>
-            </thead>
-            <tbody>
-              {SPLIT_ROWS.map((row) => {
-                const entry = splitByCode.get(row.code)
-                return (
-                  <tr key={row.code}>
-                    <td>{row.label}</td>
-                    <td>{entry ? text(entry.stat.avg) : '\u2014'}</td>
-                    <td>{entry ? text(entry.stat.ops) : '\u2014'}</td>
-                    <td>{entry ? String(entry.stat.strikeOuts) : '\u2014'}</td>
-                    <td>{entry ? String(entry.stat.baseOnBalls) : '\u2014'}</td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <div className="subsection">
-        <div className="section-title">
-          <span>Recent Form</span>
-          <span>{`${String(form.games)} G`}</span>
-        </div>
-        <div className="segmented">
-          {SPAN_OPTIONS.map((span) => (
-            <button
-              key={span}
-              type="button"
-              className={recentFormGames === span ? 'active' : ''}
-              onClick={() => setRecentFormGames(span)}
-            >
-              {span}
-            </button>
-          ))}
-        </div>
-        {logError !== null ? (
-          <div className="stat-row">
-            <span className="stat-label">Game log error</span>
-            <span className="stat-value bad">{logError}</span>
-          </div>
+            <Stat label="Szn ERA" value={rateText(pitcherSeason?.era)} />
+            <Stat label="WHIP" value={fixed(form.whip, 2)} />
+            <Stat label="IP" value={fixed(form.innings, 1)} />
+            <Stat label="Opp AVG" value={rate3(form.avg)} />
+            <Stat label="K/9" value={fixed(form.k9, 1)} />
+            <Stat label="BB/9" value={fixed(form.bb9, 1)} />
+            <Stat label="K" value={String(form.strikeOuts)} />
+            <Stat label="BB" value={String(form.baseOnBalls)} />
+            <Stat label="H" value={String(form.hits)} />
+            <Stat label="ER" value={String(form.earnedRuns)} />
+            <Stat label="HR" value={String(form.homeRuns)} />
+          </StatGrid>
+        ) : logLoading ? (
+          <SkeletonRows rows={4} />
         ) : (
-          <div className="stat-grid">
-            <div className="stat-row">
-              <span className="stat-label">ERA</span>
-              <span className={`stat-value${eraClass}`}>
-                {`${num(form.era, 2)}${trendMark(form.era, seasonEra)}`}
-              </span>
-            </div>
-            <div className="stat-row">
-              <span className="stat-label">Season</span>
-              <span className="stat-value">{text(pitcherSeason?.era)}</span>
-            </div>
-            <div className="stat-row">
-              <span className="stat-label">IP</span>
-              <span className="stat-value">{num(form.innings, 1)}</span>
-            </div>
-            <div className="stat-row">
-              <span className="stat-label">WHIP</span>
-              <span className="stat-value">{num(form.whip, 2)}</span>
-            </div>
-            <div className="stat-row">
-              <span className="stat-label">K</span>
-              <span className="stat-value">{String(form.strikeOuts)}</span>
-            </div>
-            <div className="stat-row">
-              <span className="stat-label">BB</span>
-              <span className="stat-value">{String(form.baseOnBalls)}</span>
-            </div>
-          </div>
+          <EmptyPanel message="No games logged this season" />
         )}
-      </div>
+      </Panel>
+
+      <SeasonRatesPanel
+        season={pitcherSeason}
+        parkFactor={PARK_FACTORS[selectedGame?.teams.home.team.abbreviation ?? ''] ?? 1.0}
+      />
+
+      <TablePanel
+        title="Game Log"
+        meta={`${String(log.length)} G`}
+        columns={LOG_COLUMNS}
+        rows={logRows}
+        loading={logLoading}
+        emptyMessage="No appearances logged this season"
+        skeletonRows={6}
+      />
     </div>
   )
 }
