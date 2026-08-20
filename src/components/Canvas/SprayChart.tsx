@@ -184,10 +184,10 @@ function fillCircle(
 }
 
 function drawBases(ctx: CanvasRenderingContext2D, project: Project, scale: number): void {
-  const side = Math.max(BASE_SIZE_FT * scale, 3)
+  const side = Math.max(BASE_SIZE_FT * scale, 4)
   ctx.fillStyle = FIELD.chalk
-  ctx.strokeStyle = FIELD.fence
-  ctx.lineWidth = 0.75
+  ctx.strokeStyle = CHART.label
+  ctx.lineWidth = 1
   for (const spot of diamondCorners(project)) {
     ctx.beginPath()
     ctx.rect(spot.x - side / 2, spot.y - side / 2, side, side)
@@ -204,7 +204,7 @@ function drawFoulLines(ctx: CanvasRenderingContext2D, project: Project): void {
   const leftEnd = project(left.x, left.y)
   const rightEnd = project(right.x, right.y)
   ctx.strokeStyle = FIELD.chalk
-  ctx.lineWidth = 1.5
+  ctx.lineWidth = 2
   ctx.beginPath()
   ctx.moveTo(leftEnd.x, leftEnd.y)
   ctx.lineTo(home.x, home.y)
@@ -285,7 +285,7 @@ function drawLegend(ctx: CanvasRenderingContext2D, width: number, baseline: numb
   })
 }
 
-export function SprayChart({ data, width = 280, height = 252 }: SprayChartProps) {
+export function SprayChart({ data, width = 304, height = 274 }: SprayChartProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
   useEffect(() => {

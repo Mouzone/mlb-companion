@@ -128,12 +128,12 @@ export const CHART = {
  * fighting the surrounding panels for attention.
  */
 export const FIELD = {
-  grass: '#e9f1e6',
-  grassAlt: '#dfeada',
-  dirt: '#f2e6d6',
-  warningTrack: '#ecdcc6',
+  grass: '#dcebd6',
+  grassAlt: '#cfe3c8',
+  dirt: '#ecd9bd',
+  warningTrack: '#e2caa4',
   chalk: '#ffffff',
-  fence: '#b9c2cc',
+  fence: '#a3aeba',
 } as const;
 
 /**

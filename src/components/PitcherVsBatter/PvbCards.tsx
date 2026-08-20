@@ -65,20 +65,6 @@ export function extraText(source: object, key: string): string | undefined {
   return undefined
 }
 
-function perNine(count: number, innings: number | null): number | null {
-  if (innings === null || innings === 0) return null
-  return (count / innings) * 9
-}
-
-/**
- * `PitcherSeasonStat.groundBalls` / `totalBattedBalls` are declared but NEVER
- * populated, so GB% is not computable and has been dropped. GO/AO is the ratio
- * the endpoint actually publishes and is reported under its own name.
- */
-function groundAir(stat: object): string {
-  return fixed(extraStat(stat, 'groundOutsToAirouts'), 2)
-}
-
 /** ERA+ is indexed so that the league average is exactly 100. */
 const ERA_PLUS_BASELINE = 100
 
@@ -90,6 +76,7 @@ export function pitcherSeasonCells(stat: PitcherSeasonStat, parkFactor: number):
   return [
     { label: 'ERA', value: rateText(stat.era) },
     { label: 'WHIP', value: rateText(stat.whip) },
+    { label: 'K%', value: percent(computeKpct(stat.strikeOuts, battersFaced)) },
     {
       label: 'FIP',
       value: fixed(
@@ -98,12 +85,8 @@ export function pitcherSeasonCells(stat: PitcherSeasonStat, parkFactor: number):
       ),
     },
     { label: 'ERA+', value: `${whole(eraPlus)}${verdict.mark}`, tone: verdict.tone },
-    { label: 'K%', value: percent(computeKpct(stat.strikeOuts, battersFaced)) },
     { label: 'BB%', value: percent(computeBBpct(stat.baseOnBalls, battersFaced)) },
-    { label: 'K/9', value: fixed(perNine(stat.strikeOuts, innings), 2) },
-    { label: 'BB/9', value: fixed(perNine(stat.baseOnBalls, innings), 2) },
     { label: 'HR/9', value: fixed(computeHR9(stat.homeRuns, innings), 2) },
-    { label: 'GO/AO', value: groundAir(stat) },
     { label: 'Opp AVG', value: rateText(stat.avg) },
     { label: 'SV', value: whole(extraStat(stat, 'saves')) },
   ]
@@ -119,6 +102,7 @@ export function pitcherCareerCells(stat: CareerPitcherStat): Cell[] {
   return [
     { label: 'ERA', value: rateText(stat.era) },
     { label: 'WHIP', value: rateText(stat.whip) },
+    { label: 'K%', value: percent(computeKpct(stat.strikeOuts, battersFaced)) },
     {
       label: 'FIP',
       value: fixed(
@@ -126,12 +110,8 @@ export function pitcherCareerCells(stat: CareerPitcherStat): Cell[] {
         2,
       ),
     },
-    { label: 'K%', value: percent(computeKpct(stat.strikeOuts, battersFaced)) },
     { label: 'BB%', value: percent(computeBBpct(stat.baseOnBalls, battersFaced)) },
-    { label: 'K/9', value: fixed(perNine(stat.strikeOuts, innings), 2) },
-    { label: 'BB/9', value: fixed(perNine(stat.baseOnBalls, innings), 2) },
     { label: 'HR/9', value: fixed(computeHR9(stat.homeRuns, innings), 2) },
-    { label: 'GO/AO', value: groundAir(stat) },
     { label: 'Opp AVG', value: rateText(stat.avg) },
     { label: 'SV', value: whole(extraStat(stat, 'saves')) },
     { label: 'H', value: whole(stat.hits) },
@@ -151,13 +131,10 @@ export function batterSeasonCells(stat: SeasonStat): Cell[] {
     { label: 'SLG', value: rateText(stat.slg) },
     { label: 'OPS', value: rateText(stat.ops) },
     { label: 'ISO', value: rate3(computeISO(parseStat(stat.avg), parseStat(stat.slg))) },
-    { label: 'BABIP', value: rateText(stat.babip) },
+    { label: 'HR', value: whole(stat.homeRuns) },
     { label: 'K%', value: percent(computeKpct(stat.strikeOuts, stat.plateAppearances)) },
     { label: 'BB%', value: percent(computeBBpct(stat.baseOnBalls, stat.plateAppearances)) },
-    { label: 'HR', value: whole(stat.homeRuns) },
-    { label: 'RBI', value: whole(stat.rbi) },
-    { label: 'H', value: whole(stat.hits) },
-    { label: 'TB', value: whole(extraStat(stat, 'totalBases')) },
+    { label: 'BABIP', value: rateText(stat.babip) },
   ]
 }
 
@@ -168,13 +145,10 @@ export function batterCareerCells(stat: CareerBatterStat): Cell[] {
     { label: 'SLG', value: rateText(stat.slg) },
     { label: 'OPS', value: rateText(stat.ops) },
     { label: 'ISO', value: rate3(computeISO(parseStat(stat.avg), parseStat(stat.slg))) },
-    { label: 'BABIP', value: rate3(extraStat(stat, 'babip')) },
+    { label: 'HR', value: whole(stat.homeRuns) },
     { label: 'K%', value: percent(computeKpct(stat.strikeOuts, stat.plateAppearances)) },
     { label: 'BB%', value: percent(computeBBpct(stat.baseOnBalls, stat.plateAppearances)) },
-    { label: 'HR', value: whole(stat.homeRuns) },
-    { label: 'RBI', value: whole(stat.rbi) },
-    { label: 'H', value: whole(stat.hits) },
-    { label: '2B', value: whole(extraStat(stat, 'doubles')) },
+    { label: 'BABIP', value: rate3(extraStat(stat, 'babip')) },
   ]
 }
 

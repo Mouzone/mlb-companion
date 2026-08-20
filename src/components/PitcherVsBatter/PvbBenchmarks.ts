@@ -41,10 +41,6 @@ export interface PitcherBenchmarkContext<T extends PitcherStat> {
   readonly cohort: ReadonlyArray<BenchmarkPlayerStat<T>>
 }
 
-function perNine(count: number, innings: number): number | null {
-  return innings === 0 ? null : (count / innings) * 9
-}
-
 function batterMetric(stat: BatterStat, label: string): MetricValue | null {
   switch (label) {
     case 'AVG':
@@ -74,14 +70,6 @@ function batterMetric(stat: BatterStat, label: string): MetricValue | null {
       }
     case 'HR':
       return { value: stat.homeRuns, lowerIsBetter: false }
-    case 'RBI':
-      return { value: stat.rbi, lowerIsBetter: false }
-    case 'H':
-      return { value: stat.hits, lowerIsBetter: false }
-    case 'TB':
-      return { value: extraStat(stat, 'totalBases'), lowerIsBetter: false }
-    case '2B':
-      return { value: extraStat(stat, 'doubles'), lowerIsBetter: false }
     default:
       return null
   }
@@ -112,14 +100,8 @@ function pitcherMetric(stat: PitcherStat, label: string): MetricValue | null {
       return { value: computeKpct(stat.strikeOuts, battersFaced), lowerIsBetter: false }
     case 'BB%':
       return { value: computeBBpct(stat.baseOnBalls, battersFaced), lowerIsBetter: true }
-    case 'K/9':
-      return { value: perNine(stat.strikeOuts, innings), lowerIsBetter: false }
-    case 'BB/9':
-      return { value: perNine(stat.baseOnBalls, innings), lowerIsBetter: true }
     case 'HR/9':
       return { value: computeHR9(stat.homeRuns, innings), lowerIsBetter: true }
-    case 'GO/AO':
-      return { value: extraStat(stat, 'groundOutsToAirouts'), lowerIsBetter: false }
     case 'Opp AVG':
       return { value: parseStat(stat.avg), lowerIsBetter: true }
     case 'SV':
