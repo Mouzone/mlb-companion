@@ -2,7 +2,7 @@
 
 ## 1. Project Overview
 
-MLB Companion is a mobile-first live MLB game-watching companion PWA. It is built with React 19, TypeScript, Vite 8, and zustand 5, and deploys to Vercel as a static SPA. The app targets a single viewport, iPhone 13 (390x844) in standalone PWA mode, and is designed for zero scrolling anywhere except the pre-game `GameSelect` picker. It has two top-level tabs (Live Game, Pitcher vs Batter), each with three sub-tabs, and pulls data from the public MLB Stats API and Baseball Savant. There is no backend, no router, and no test framework; the store is the only state layer.
+MLB Companion is a mobile-first live MLB game-watching companion PWA. It is built with React 19, TypeScript, Vite 8, and zustand 5, and deploys to Vercel as a static SPA. The app targets a single viewport, iPhone 13 (390x844) in standalone PWA mode, with one screen-level scroll owner at a time. It has two top-level tabs (Live Game, Pitcher vs Batter), each with three sub-tabs, and a global searchable Stats Guide that explains every displayed metric and formula. It pulls data from the public MLB Stats API and Baseball Savant. There is no backend, no router, and no test framework; the store is the only state layer.
 
 ## 2. Architecture Map
 
@@ -14,7 +14,7 @@ src/
                                            link (fetches live feed directly, bypassing GameSelect); fetches the
                                            Savant game feed into gameStore.gameFeedPitches whenever gamePk changes.
                                            Imports gameStore, GameSelect, LiveGameTab, PitcherVsBatter, api/mlb,
-                                           api/savant, App.css.
+                                           api/savant, App.css. Mounts StatsGuide on both app branches.
 
   api/
     types.ts                              All shared TypeScript interfaces (439 lines): Team, ScheduledGame,
@@ -123,7 +123,14 @@ src/
                                            numeral stacked on top, built entirely from <span> and <svg> — never
                                            <div> — because GameCard's root is a <button>, which only admits
                                            phrasing content. `null`/non-finite scores render `—`. Imported by
-                                           GameCard.
+                                            GameCard.
+    StatsGuide/StatsGuide.tsx             Global searchable metric reference. Renders the fixed information
+                                           trigger and accessible right-side dialog; owns search filtering,
+                                           focus trapping/restoration, Escape and scrim dismissal, and body
+                                           scroll locking. Mounted by App.tsx on every screen.
+    StatsGuide/statGlossary.ts            Typed, alphabetically sorted glossary data for standard, advanced,
+                                           live, pitch-tracking, batted-ball, linescore, and Watchability metrics.
+                                           Includes formulas where a displayed statistic is calculated.
      LiveGame/LiveGameTab.tsx              Live Game tab wrapper. Exports LiveGameTab. Owns the `.tab-content`
                                             flex root directly under the 48px `.tab-bar`; renders the 44px
                                             `.sub-tab-nav` (At Bat / Pitcher / Batter) as a sibling above
@@ -194,10 +201,11 @@ src/
                                            LEGEND_MIN_SIZE` (172). Imported by LiveAtBat, BatterGameSubTab,
                                            PitcherGameSubTab.
 
-  App.css                                 The height-budget layout system: app shell, tab bar, sub-tab nav,
+  App.css                                 The app-shell layout system: app shell, tab bar, sub-tab nav,
                                            panels, the `.h-*` utility classes, PvB card strip, canvas wrappers,
                                            dense data primitives (stat rows/grids/split tables), live at-bat
-                                           layout, game-select layout, focus-visibility rules. See section 8.
+                                           layout, game-select layout, focus-visibility rules, and the fixed
+                                           Stats Guide trigger, scrim, and responsive drawer. See section 8.
                                            `.game-card`/`.gc-skeleton` gained `width:100%; max-width:400px;
                                            justify-self:center` — the cap lives on the card, not the grid
                                            track's `minmax()` max, because `auto-fill` sizes tracks to the max,
