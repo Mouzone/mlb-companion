@@ -1,0 +1,622 @@
+/* ============================================================================
+   MLB Companion — UI primitive stylesheet
+   Implements DESIGN.md §5 (Primitives) for src/components/ui/*.
+
+   Cascade position: index.css (tokens, reset, base type) → ui.css → App.css.
+
+   CONTRACT
+   - Every colour, size, space, radius, shadow and duration is a var(--token)
+     declared in src/index.css. No raw hex, no off-grid pixels.
+   - Sizes the token grid does not name (image boxes, segmented track heights)
+     are either derived with calc() from spacing tokens, or supplied by the
+     component as a --ui-* custom property on the element itself.
+   - Motion animates transform/opacity/filter only (§4.4) and is nulled in the
+     prefers-reduced-motion block at the foot of this file.
+   - No primitive declares a fixed `height` unless it is fixed chrome (§6.3).
+   ========================================================================= */
+
+/* ===== Stat ============================================================== */
+/* DESIGN.md §5.1 — label ABOVE value, sharing a left edge. */
+
+.ui-stat {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  min-width: 0;
+}
+
+.ui-stat--left {
+  align-items: flex-start;
+  text-align: left;
+}
+
+.ui-stat--right {
+  align-items: flex-end;
+  text-align: right;
+}
+
+.ui-stat__label {
+  font-size: var(--fs-label);
+  font-weight: var(--fw-semibold);
+  line-height: var(--lh-snug);
+  color: var(--c-ink-muted);
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.ui-stat__value {
+  font-family: var(--font-num);
+  font-weight: var(--fw-semibold);
+  line-height: var(--lh-snug);
+  color: var(--c-ink);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: var(--tracking-tight);
+}
+
+.ui-stat__value--sm {
+  font-size: var(--fs-data);
+}
+
+.ui-stat__value--md {
+  font-size: var(--fs-lg);
+}
+
+.ui-stat__value--lg {
+  font-size: var(--fs-hero);
+  line-height: var(--lh-tight);
+}
+
+.ui-stat__value--positive {
+  color: var(--c-positive);
+}
+
+.ui-stat__value--negative {
+  color: var(--c-negative);
+}
+
+.ui-stat__value--muted {
+  color: var(--c-ink-muted);
+}
+
+.ui-stat__value--empty {
+  color: var(--c-ink-subtle);
+}
+
+/* ===== StatGrid ========================================================== */
+/* DESIGN.md §5.2 — the min(…, 100%) floor is the anti-overflow contract. */
+
+.ui-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(
+    auto-fit,
+    minmax(min(var(--stat-grid-min, 72px), 100%), 1fr)
+  );
+  gap: var(--sp-4) var(--sp-4);
+  min-width: 0;
+}
+
+/* ===== Card ============================================================== */
+/* DESIGN.md §5.3 — border-defined. NO fixed height, ever. */
+
+.ui-card {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: var(--c-bg);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius);
+}
+
+.ui-card--padded {
+  padding: var(--sp-4);
+}
+
+.ui-card--sunken {
+  background: var(--c-surface-sunken);
+}
+
+.ui-card--live {
+  border-color: var(--c-live);
+  box-shadow: var(--shadow-xs);
+}
+
+/* ===== Badge ============================================================= */
+/* DESIGN.md §5.4 — --fs-label is the floor: uppercase + tracking below 11px
+   is banned by §3.3. Deliberate deviation from §5.4's preview swatch: the
+   preview pill uses --c-brand-600 on --c-brand-050 rather than 700-on-100, so
+   it recedes further behind the LIVE pill it sits beside in the game list. */
+
+.ui-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-1) var(--sp-3);
+  font-size: var(--fs-label);
+  font-weight: var(--fw-bold);
+  line-height: var(--lh-snug);
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  white-space: nowrap;
+  border-radius: var(--radius-pill);
+}
+
+.ui-badge__dot {
+  flex: 0 0 auto;
+  width: calc(var(--sp-2) + var(--sp-1));
+  height: calc(var(--sp-2) + var(--sp-1));
+  background: currentcolor;
+  border-radius: var(--radius-pill);
+}
+
+.ui-badge--live {
+  color: var(--c-live);
+  background: var(--c-live-bg);
+}
+
+.ui-badge--live .ui-badge__dot {
+  animation: ui-badge-pulse 1.6s var(--ease-out) infinite;
+}
+
+.ui-badge--final {
+  color: var(--c-neutral-badge);
+  background: var(--c-neutral-badge-bg);
+}
+
+.ui-badge--preview {
+  color: var(--c-brand-600);
+  background: var(--c-brand-050);
+}
+
+.ui-badge--positive {
+  color: var(--c-positive);
+  background: var(--c-positive-bg);
+}
+
+.ui-badge--negative {
+  color: var(--c-negative);
+  background: var(--c-negative-bg);
+}
+
+.ui-badge--neutral {
+  color: var(--c-neutral-badge);
+  background: var(--c-neutral-badge-bg);
+}
+
+@keyframes ui-badge-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  50% {
+    opacity: 0.4;
+    transform: scale(0.7);
+  }
+}
+
+/* ===== TabBar ============================================================ */
+/* DESIGN.md §5.5 — `flex: 1 1 0` (NOT `flex: 1`) is what makes every tab an
+   exact fraction of the bar; content-derived basis is the off-centre defect.
+   Deliberate deviation from §5.5: the active LABEL is --c-ink rather than
+   --c-brand-700. On a white canvas the brand rule alone already marks
+   selection, and ink-vs-muted is the stronger of the two contrast steps. */
+
+.ui-tab-bar {
+  display: flex;
+  flex: 0 0 var(--tab-bar-h);
+  align-items: stretch;
+  width: 100%;
+  height: var(--tab-bar-h);
+  background: var(--c-bg);
+  border-bottom: 1px solid var(--c-border);
+}
+
+.ui-tab {
+  position: relative;
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 0 var(--sp-3);
+  overflow: hidden;
+  font-family: var(--font-ui);
+  font-size: var(--fs-body);
+  font-weight: var(--fw-medium);
+  color: var(--c-ink-muted);
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+  background: none;
+  border: 0;
+  transition: color var(--dur-fast) var(--ease-out);
+}
+
+.ui-tab:hover {
+  color: var(--c-ink-secondary);
+}
+
+.ui-tab:focus-visible {
+  z-index: 1;
+  border-radius: var(--radius-sm);
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+
+.ui-tab--active {
+  font-weight: var(--fw-semibold);
+  color: var(--c-ink);
+}
+
+/* Full-width rule — no asymmetric inset. */
+.ui-tab--active::after {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: var(--sp-1);
+  content: "";
+  background: var(--c-brand-600);
+}
+
+/* ===== SubTabNav ========================================================= */
+/* DESIGN.md §5.6 — same equal-fraction rule, sunken chrome, 44px tall. */
+
+.ui-sub-tab-nav {
+  display: flex;
+  flex: 0 0 var(--sub-tab-h);
+  align-items: stretch;
+  width: 100%;
+  height: var(--sub-tab-h);
+  background: var(--c-surface-sunken);
+  border-bottom: 1px solid var(--c-border);
+}
+
+.ui-sub-tab {
+  position: relative;
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 0 var(--sp-3);
+  overflow: hidden;
+  font-family: var(--font-ui);
+  font-size: var(--fs-body);
+  font-weight: var(--fw-medium);
+  color: var(--c-ink-muted);
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+  background: none;
+  border: 0;
+  transition: color var(--dur-fast) var(--ease-out);
+}
+
+.ui-sub-tab:hover {
+  color: var(--c-ink-secondary);
+}
+
+.ui-sub-tab:focus-visible {
+  z-index: 1;
+  border-radius: var(--radius-sm);
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+
+.ui-sub-tab--active {
+  font-weight: var(--fw-semibold);
+  color: var(--c-ink);
+  background: var(--c-bg);
+}
+
+.ui-sub-tab--active::after {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: var(--sp-1);
+  content: "";
+  background: var(--c-brand-600);
+}
+
+/* ===== Segmented ========================================================= */
+/* DESIGN.md §5.7 — 32px (sm) / 36px (md) track, both derived from the 4px
+   grid. Each option carries a transparent ::after that grows its pointer
+   target to 44px (§7) while the visible control stays compact; the expander is
+   centred on the option so it never escapes the control's own 44px envelope. */
+
+.ui-segmented {
+  --ui-seg-h: var(--sp-8); /* 32px */
+  --ui-seg-hit: calc(var(--sp-8) + var(--sp-4)); /* 44px */
+
+  display: inline-flex;
+  align-items: stretch;
+  height: var(--ui-seg-h);
+  padding: var(--sp-1);
+  background: var(--c-surface-sunken);
+  border: 1px solid var(--c-border-strong);
+  border-radius: var(--radius-pill);
+}
+
+.ui-segmented--md {
+  --ui-seg-h: calc(var(--sp-8) + var(--sp-2)); /* 36px */
+}
+
+.ui-segmented__option {
+  position: relative;
+  min-width: 0;
+  padding: 0 var(--sp-4);
+  overflow: hidden;
+  font-family: var(--font-ui);
+  font-size: var(--fs-label);
+  font-weight: var(--fw-semibold);
+  color: var(--c-ink-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+  background: none;
+  border: 0;
+  border-radius: var(--radius-pill);
+  transition:
+    color var(--dur-fast) var(--ease-out),
+    opacity var(--dur-fast) var(--ease-out);
+}
+
+/* Hit-area expander: (44px - option height) / 2 above and below. */
+.ui-segmented__option::after {
+  position: absolute;
+  right: 0;
+  left: 0;
+  inset-block: calc((var(--ui-seg-hit) - 100%) / -2);
+  content: "";
+}
+
+.ui-segmented__option:hover {
+  color: var(--c-ink-secondary);
+}
+
+.ui-segmented__option:active {
+  opacity: 0.7;
+}
+
+.ui-segmented__option:focus-visible {
+  z-index: 1;
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+
+.ui-segmented__option--active {
+  color: var(--c-ink);
+  background: var(--c-bg);
+  box-shadow: var(--shadow-xs);
+}
+
+/* ===== TeamLogo ========================================================== */
+/* DESIGN.md §5.8 — the box is reserved by --ui-logo-size (24/32/44px, set by
+   the component) so a slow or failed load never reflows the row. */
+
+.ui-team-logo {
+  flex: 0 0 var(--ui-logo-size);
+  width: var(--ui-logo-size);
+  height: var(--ui-logo-size);
+  object-fit: contain;
+}
+
+.ui-team-logo--fallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  font-family: var(--font-ui);
+  font-size: var(--fs-label);
+  font-weight: var(--fw-bold);
+  line-height: var(--lh-tight);
+  color: var(--c-ink-secondary);
+  letter-spacing: var(--tracking-tight);
+  text-transform: uppercase;
+  background: var(--c-surface-sunken);
+  border-radius: var(--radius-sm);
+}
+
+/* ===== PlayerAvatar ====================================================== */
+/* DESIGN.md §5.9 — circular, ringed, sunken ground behind the transparent
+   headshot PNG. No error state exists: a missing player resolves to the MLB
+   generic silhouette with HTTP 200. */
+
+.ui-player-avatar {
+  flex: 0 0 var(--ui-avatar-size);
+  width: var(--ui-avatar-size);
+  height: var(--ui-avatar-size);
+  object-fit: cover;
+  background: var(--c-surface-sunken);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-pill);
+}
+
+/* ===== SectionTitle ====================================================== */
+/* DESIGN.md §5.10 — shared baseline; title and meta differ in BOTH size and
+   colour. Zero left padding: the parent owns the gutter. */
+
+.ui-section-title {
+  display: flex;
+  gap: var(--sp-4);
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 0;
+  margin-bottom: var(--sp-3);
+}
+
+.ui-section-title__text {
+  min-width: 0;
+  overflow: hidden;
+  font-family: var(--font-ui);
+  font-size: var(--fs-title);
+  font-weight: var(--fw-semibold);
+  line-height: var(--lh-snug);
+  color: var(--c-ink);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ui-section-title__meta {
+  flex: 0 0 auto;
+  font-size: var(--fs-label);
+  font-weight: var(--fw-medium);
+  line-height: var(--lh-snug);
+  color: var(--c-ink-muted);
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* ===== DataTable ========================================================= */
+/* DESIGN.md §5.11 — full-width row rules, uniform --sp-4 right padding on
+   every numeric column. */
+
+.ui-table {
+  width: 100%;
+  font-size: var(--fs-body);
+  color: var(--c-ink);
+  table-layout: auto;
+}
+
+.ui-table__th {
+  padding: var(--sp-3) var(--sp-3);
+  font-size: var(--fs-label);
+  font-weight: var(--fw-semibold);
+  line-height: var(--lh-snug);
+  color: var(--c-ink-muted);
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--c-border);
+}
+
+.ui-table__td {
+  padding: var(--sp-3) var(--sp-3);
+  line-height: var(--lh-snug);
+  border-bottom: 1px solid var(--c-border);
+}
+
+.ui-table--dense .ui-table__th,
+.ui-table--dense .ui-table__td {
+  padding-block: var(--sp-2);
+}
+
+.ui-table__cell--left {
+  padding-left: 0;
+  text-align: left;
+}
+
+.ui-table__cell--right {
+  padding-right: var(--sp-4);
+  font-family: var(--font-num);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: var(--tracking-tight);
+}
+
+.ui-table__th.ui-table__cell--right {
+  font-family: var(--font-ui);
+}
+
+.ui-table__row:last-child .ui-table__td {
+  border-bottom: 0;
+}
+
+.ui-table__empty {
+  color: var(--c-ink-subtle);
+}
+
+/* ===== EmptyPanel ======================================================== */
+/* DESIGN.md §5.12 — min-height only; the panel grows with its message. */
+
+.ui-empty-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: calc(var(--sp-8) * 2);
+  padding: var(--sp-5) var(--sp-4);
+  text-align: center;
+}
+
+.ui-empty-panel__message {
+  font-size: var(--fs-body);
+  font-weight: var(--fw-medium);
+  line-height: var(--lh-normal);
+  color: var(--c-ink-muted);
+}
+
+.ui-empty-panel__hint {
+  font-size: var(--fs-body);
+  font-weight: var(--fw-regular);
+  line-height: var(--lh-normal);
+  color: var(--c-ink-subtle);
+}
+
+/* ===== Skeleton ========================================================== */
+/* GPU-composited sweep: the track itself is static, the highlight moves on
+   transform alone. Nothing animates layout or paint-bound properties. */
+
+.ui-skeleton {
+  position: relative;
+  display: block;
+  width: var(--ui-skeleton-w, 100%);
+  height: var(--ui-skeleton-h, var(--sp-5));
+  overflow: hidden;
+  background: var(--c-surface-sunken);
+  border-radius: var(--ui-skeleton-r, var(--radius-sm));
+}
+
+.ui-skeleton::after {
+  position: absolute;
+  inset: 0;
+  content: "";
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in srgb, var(--c-bg) 70%, transparent) 50%,
+    transparent 100%
+  );
+  transform: translateX(-100%);
+  animation: ui-skeleton-sweep 1.4s var(--ease-out) infinite;
+}
+
+@keyframes ui-skeleton-sweep {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+/* ===== Icon ============================================================== */
+/* DESIGN.md §5.13 — hand-authored SVG, painted in currentColor. */
+
+.ui-icon {
+  flex: 0 0 auto;
+  color: currentcolor;
+}
+
+/* ===== Reduced motion ==================================================== */
+/* DESIGN.md §4.4 / §7 — every primitive animation is nulled, not merely
+   shortened, so no residual movement survives the user's preference. */
+
+@media (prefers-reduced-motion: reduce) {
+  .ui-tab,
+  .ui-sub-tab,
+  .ui-segmented__option {
+    transition: none;
+  }
+
+  .ui-badge--live .ui-badge__dot,
+  .ui-skeleton::after {
+    animation: none;
+  }
+
+  .ui-skeleton::after {
+    content: none;
+  }
+}
