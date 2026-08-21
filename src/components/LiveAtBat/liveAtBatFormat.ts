@@ -19,30 +19,57 @@ export const PITCH_TYPE_NAMES: Readonly<Record<string, string>> = {
 
 export const CALL_NAMES: Readonly<Record<string, string>> = {
   B: 'Ball',
+  '*B': 'Ball In Dirt',
+  V: 'Automatic Ball',
   C: 'Called Strike',
   S: 'Swinging Strike',
+  W: 'Swinging Strike (Blocked)',
+  T: 'Foul Tip',
+  M: 'Missed Bunt',
   F: 'Foul',
+  L: 'Foul Bunt',
   X: 'In Play',
+  D: 'In Play',
   E: 'In Play (Error)',
   H: 'Hit By Pitch',
 }
 
-/** The four semantic slots ZonePlot paints, so the DOM sequence matches the canvas. */
-export type CallTone = 'ball' | 'strike' | 'foul' | 'inplay' | 'unknown'
+/**
+ * The five semantic call slots the sequence list paints. `strike` was one slot
+ * until a reader could no longer tell a taken strike from a swing-and-miss —
+ * the two carry opposite information about the hitter, so they are now split.
+ */
+export type CallTone = 'ball' | 'called' | 'swinging' | 'foul' | 'inplay' | 'unknown'
 
 const CALL_TONES: Readonly<Record<string, CallTone>> = {
   B: 'ball',
+  '*B': 'ball',
+  V: 'ball',
   H: 'ball',
-  C: 'strike',
-  S: 'strike',
+  C: 'called',
+  S: 'swinging',
+  W: 'swinging',
+  T: 'swinging',
+  M: 'swinging',
   F: 'foul',
+  L: 'foul',
   X: 'inplay',
+  D: 'inplay',
   E: 'inplay',
 }
 
 export function callTone(code: string | undefined): CallTone {
   return code === undefined ? 'unknown' : CALL_TONES[code] ?? 'unknown'
 }
+
+/** Legend copy for the sequence list, in the order a plate appearance reads. */
+export const CALL_TONE_LEGEND: readonly { readonly tone: CallTone; readonly label: string }[] = [
+  { tone: 'ball', label: 'Ball' },
+  { tone: 'called', label: 'Called' },
+  { tone: 'swinging', label: 'Swinging' },
+  { tone: 'foul', label: 'Foul' },
+  { tone: 'inplay', label: 'In play' },
+]
 
 export function callName(code: string | undefined): string {
   return code === undefined ? NO_VALUE : CALL_NAMES[code] ?? code

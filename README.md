@@ -218,6 +218,15 @@ src/
                                            extension, plate time), contact detail (exit velo, launch angle,
                                            distance, hardness, joined bat speed), and the play result banner.
                                            Imported by LiveGameTab.
+                                           AtBatPanel.tsx renders the three-column At Bat grid (situation /
+                                           ZonePlot / Sequence). The Sequence dots are colored by CALL, not by
+                                           pitch type -- the FF/KC code beside each dot already carries type,
+                                           while the ZonePlot dots and its internal legend are colored by type.
+                                           callTone() in liveAtBatFormat.ts maps Gameday `details.call.code`
+                                           onto five tones (ball / called / swinging / foul / inplay), each
+                                           given a distinct shape as well as a hue, and CALL_TONE_LEGEND drives
+                                           the labelled `.atbat__legend` key rendered on its own full-width row
+                                           beneath the grid.
     PitcherVsBatter/PitcherVsBatter.tsx   Exports PitcherVsBatter (the Pitcher-vs-Batter tab root). Owns
                                            `.tab-content`; renders the `.pvb-cards-wrap` card strip (pitcher
                                            season, pitcher career, batter season, batter career -- horizontally

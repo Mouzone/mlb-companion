@@ -3,7 +3,7 @@ import type { PlayEvent } from '../../api/types'
 import { ZonePlot } from '../Canvas/ZonePlot'
 import { SectionTitle, Stat } from '../ui'
 import type { BaseState, SequencePitch } from './liveAtBatData'
-import { NO_VALUE, ordinal, surname } from './liveAtBatFormat'
+import { CALL_TONE_LEGEND, NO_VALUE, ordinal, surname } from './liveAtBatFormat'
 
 /**
  * The at-bat region. Three columns at every width: situation · strike zone ·
@@ -84,6 +84,29 @@ function Sequence({ sequence }: { readonly sequence: readonly SequencePitch[] })
   )
 }
 
+/**
+ * The sequence dots encode the umpire's call, not the pitch type — the codes
+ * beside them already carry type. Without this key the colours were unlabelled,
+ * so the row read as decoration. It sits on its own full-width line under the
+ * three-column grid: putting it inside the sequence column would have squeezed
+ * the 1fr track at 390px, and shape backs up hue for colour-blind readers.
+ */
+function CallLegend(): ReactElement {
+  return (
+    <ul className="atbat__legend" aria-label="Pitch call colour key">
+      {CALL_TONE_LEGEND.map((entry) => (
+        <li key={entry.tone} className="atbat__legend-item">
+          <span
+            className={`atbat__seq-dot atbat__seq-dot--${entry.tone}`}
+            aria-hidden="true"
+          />
+          {entry.label}
+        </li>
+      ))}
+    </ul>
+  )
+}
+
 export function AtBatPanel({
   pitches,
   sequence,
@@ -126,6 +149,8 @@ export function AtBatPanel({
 
         <Sequence sequence={sequence} />
       </div>
+
+      {sequence.length === 0 ? null : <CallLegend />}
 
       {hasDeck ? (
         <div className="atbat__deck">

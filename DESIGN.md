@@ -120,8 +120,21 @@ from its neighbors. Replaces the neon set in `src/utils/pitchConstants.ts`.
 | EP | `--c-pitch-ep` | `#9b6a1f` | Eephus |
 | — | `--c-pitch-unknown` | `#8792a2` | Unclassified |
 
-**Pitch-call palette** (ZonePlot markers):
+**Pitch-call palette** (ZonePlot markers, At Bat sequence dots):
 `--c-call-ball #1b6fb5` · `--c-call-strike #c8102e` · `--c-call-foul #b25e09` · `--c-call-inplay #0f7b4f`
+
+The At Bat sequence list paints five tones from these four hues, because a
+called strike and a swing-and-miss say opposite things about the hitter and
+must not share one marker. Hue is never the only channel — each tone also
+carries a shape, and a labelled key (`.atbat__legend`) sits under the grid:
+
+| Tone | Call codes | Marker |
+| --- | --- | --- |
+| Ball | `B` `*B` `V` `H` | solid disc, `--c-call-ball` |
+| Called | `C` | hollow ring, `--c-call-strike` |
+| Swinging | `S` `W` `T` `M` | solid disc, `--c-call-strike` |
+| Foul | `F` `L` | rounded square, `--c-call-foul` |
+| In play | `X` `D` `E` | diamond, `--c-call-inplay` |
 
 ---
 

@@ -1051,9 +1051,13 @@ button:focus-visible,
   min-width: 0;
 }
 
-/* The dot is the same call palette ZonePlot paints; the pitch code beside it
-   is what keeps the row readable without colour (§7). */
+/* The dot is the call palette, NOT the pitch-type palette — the code beside it
+   already carries type (§7). Hue alone left called strikes and whiffs sharing
+   one red, so each tone also carries a shape: solid disc (ball), ring (called
+   strike, nothing swung at), solid disc (swinging), rounded square (foul),
+   diamond (in play). Shape is what keeps the key readable without colour. */
 .atbat__seq-dot {
+  box-sizing: border-box;
   flex: 0 0 auto;
   width: var(--sp-3);
   height: var(--sp-3);
@@ -1065,16 +1069,24 @@ button:focus-visible,
   background: var(--c-call-ball);
 }
 
-.atbat__seq-dot--strike {
+.atbat__seq-dot--called {
+  background: transparent;
+  border: 2px solid var(--c-call-strike);
+}
+
+.atbat__seq-dot--swinging {
   background: var(--c-call-strike);
 }
 
 .atbat__seq-dot--foul {
   background: var(--c-call-foul);
+  border-radius: var(--sp-1);
 }
 
 .atbat__seq-dot--inplay {
   background: var(--c-call-inplay);
+  border-radius: 1px;
+  transform: rotate(45deg);
 }
 
 .atbat__seq-no {
@@ -1112,6 +1124,33 @@ button:focus-visible,
   font-size: var(--fs-label);
   font-weight: var(--fw-medium);
   color: var(--c-ink-muted);
+}
+
+/* Full-width key under the three-column grid. It wraps rather than scrolls, so
+   at 390px it settles onto two lines instead of narrowing the 1fr tracks the
+   situation readout and the sequence share. */
+.atbat__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2) var(--sp-4);
+  align-items: center;
+  min-width: 0;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.atbat__legend-item {
+  display: flex;
+  gap: var(--sp-2);
+  align-items: center;
+  min-width: 0;
+  font-size: var(--fs-micro);
+  font-weight: var(--fw-medium);
+  color: var(--c-ink-muted);
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .atbat__deck {
