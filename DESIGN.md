@@ -276,6 +276,10 @@ The atom of the entire app.
 - Active: label `--c-brand-700` 600, 2px bottom rule in `--c-brand-600` spanning the **full** tab
   width (no asymmetric inset).
 - Inactive: `--c-ink-muted` 500. Hover `--c-ink-secondary`. Focus: `--shadow-focus`.
+- Optional `leading` slot renders a non-growing (`flex: 0 0 auto`) element before the tabs — used
+  for the "← Games" back button, which calls `gameStore.reset()` to return to `GameSelect`. The
+  back button is fixed chrome, always visible on every game screen regardless of active tab or
+  sub-tab, so navigation back to the game slate is never lost.
 
 ### 5.6 `SubTabNav` — secondary navigation
 - Same equal-fraction rule as `TabBar`, `--sub-tab-h`, `--c-surface-sunken` background,

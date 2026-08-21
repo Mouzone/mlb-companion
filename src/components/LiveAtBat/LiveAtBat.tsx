@@ -54,16 +54,13 @@ function LoadingState(): ReactElement {
   )
 }
 
-function NoPlayState({ onBack }: { readonly onBack: () => void }): ReactElement {
+function NoPlayState(): ReactElement {
   return (
     <section className="panel-row">
       <EmptyPanel
         message="No at-bat in progress"
         hint="Pick a game to follow pitch-by-pitch telemetry here."
       />
-      <button type="button" className="btn-back" onClick={onBack}>
-        ← Games
-      </button>
     </section>
   )
 }
@@ -72,10 +69,9 @@ export function LiveAtBat(): ReactElement {
   const currentPlay = useGameStore((s) => s.currentPlay)
   const liveFeed = useGameStore((s) => s.liveFeed)
   const gameFeedPitches = useGameStore((s) => s.gameFeedPitches)
-  const reset = useGameStore((s) => s.reset)
 
   if (liveFeed === null) return <LoadingState />
-  if (currentPlay === null) return <NoPlayState onBack={reset} />
+  if (currentPlay === null) return <NoPlayState />
 
   const { count, matchup, result, about, playEvents } = currentPlay
   const { linescore, plays } = liveFeed.liveData
@@ -162,7 +158,6 @@ export function LiveAtBat(): ReactElement {
         isTopInning={isTopInning}
         inningNumber={inningNumber}
         bases={bases}
-        onBack={reset}
       />
 
       <MatchupCard

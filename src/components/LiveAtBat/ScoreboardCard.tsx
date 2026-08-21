@@ -39,7 +39,6 @@ export interface ScoreboardCardProps {
   readonly isTopInning: boolean
   readonly inningNumber: number
   readonly bases: readonly BaseState[]
-  readonly onBack: () => void
 }
 
 /** A half-inning that has not been played prints a centre dot, never a zero. */
@@ -81,7 +80,6 @@ export function ScoreboardCard({
   isTopInning,
   inningNumber,
   bases,
-  onBack,
 }: ScoreboardCardProps): ReactElement {
   const { linescore } = feed.liveData
   const teams = feed.gameData.teams
@@ -120,9 +118,6 @@ export function ScoreboardCard({
   return (
     <section className="scoreboard" aria-label="Scoreboard">
       <div className="game-header">
-        <button type="button" className="btn-back" onClick={onBack}>
-          ← Games
-        </button>
         <div className="bases" role="img" aria-label={basesLabel}>
           {bases.map((base) => (
             <span key={base.label} className={base.runner === null ? 'base' : 'base occupied'} />

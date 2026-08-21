@@ -64,7 +64,8 @@
    confirmation of the tap (§4.4). */
 
 .ui-tab:active,
-.ui-sub-tab:active {
+.ui-sub-tab:active,
+.ui-tab-back:active {
   background: var(--c-surface-hover);
 }
 
@@ -722,34 +723,6 @@ button:focus-visible,
   align-items: center;
   justify-content: space-between;
   min-width: 0;
-}
-
-.btn-back {
-  display: inline-flex;
-  flex: 0 0 auto;
-  gap: var(--sp-2);
-  align-items: center;
-  justify-content: center;
-  /* 44px — the §7 touch-target floor, expressed in grid tokens. */
-  min-height: calc(var(--sp-8) + var(--sp-4));
-  padding: var(--sp-2) var(--sp-4);
-  font-size: var(--fs-label);
-  font-weight: var(--fw-semibold);
-  color: var(--c-ink-secondary);
-  letter-spacing: var(--tracking-caps);
-  text-transform: uppercase;
-  cursor: pointer;
-  background: var(--c-bg);
-  border: 1px solid var(--c-border-strong);
-  border-radius: var(--radius-sm);
-  transition:
-    color var(--dur-fast) var(--ease-out),
-    border-color var(--dur-fast) var(--ease-out);
-}
-
-.btn-back:active {
-  color: var(--c-ink);
-  border-color: var(--c-brand-600);
 }
 
 /* --- Line score --------------------------------------------------------- */

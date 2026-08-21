@@ -23,11 +23,13 @@ export interface TabBarProps {
   readonly tabs: ReadonlyArray<TabDescriptor>
   readonly activeId: string
   readonly onSelect: (id: string) => void
+  readonly leading?: ReactElement
 }
 
-export function TabBar({ tabs, activeId, onSelect }: TabBarProps): ReactElement {
+export function TabBar({ tabs, activeId, onSelect, leading }: TabBarProps): ReactElement {
   return (
     <div className="ui-tab-bar" role="tablist">
+      {leading}
       {tabs.map((tab) => {
         const active = tab.id === activeId
         return (

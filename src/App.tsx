@@ -6,7 +6,7 @@ import { PitcherVsBatter } from './components/PitcherVsBatter/PitcherVsBatter'
 import { fetchLiveFeed } from './api/mlb'
 import { fetchSavantGameFeed } from './api/savant'
 import type { LiveFeed, ScheduledGame } from './api/types'
-import { TabBar } from './components/ui'
+import { Icon, TabBar } from './components/ui'
 import { StatsGuide } from './components/StatsGuide/StatsGuide'
 import './App.css'
 
@@ -50,6 +50,7 @@ function App() {
   const setLiveFeed = useGameStore((s) => s.setLiveFeed)
   const setGameFeedPitches = useGameStore((s) => s.setGameFeedPitches)
   const setError = useGameStore((s) => s.setError)
+  const reset = useGameStore((s) => s.reset)
 
   // Deterministic QA/deep-link entry point: ?gamePk=<id> bypasses GameSelect.
   useEffect(() => {
@@ -110,6 +111,12 @@ function App() {
         onSelect={(id) => {
           if (isTabId(id)) setActiveTab(id)
         }}
+        leading={
+          <button type="button" className="ui-tab-back" onClick={reset}>
+            <Icon name="chevron-left" size={16} />
+            Games
+          </button>
+        }
       />
       {activeTab === 'live' ? <LiveGameTab /> : <PitcherVsBatter />}
       <StatsGuide />

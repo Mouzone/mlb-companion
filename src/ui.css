@@ -307,10 +307,42 @@
   background: var(--c-brand-600);
 }
 
-/* ===== SubTabNav ========================================================= */
-/* DESIGN.md §5.6 — same equal-fraction rule, sunken chrome, 44px tall. */
+/* --- Leading back button in the tab bar ---------------------------------- */
+/* Fixed chrome (§6.1): always visible regardless of active tab/sub-tab, so
+   the user can return to GameSelect from any game screen. Non-growing flex
+   item so the tabs keep their equal fractions. */
+.ui-tab-back {
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: var(--sp-1);
+  align-items: center;
+  justify-content: center;
+  min-height: var(--tab-bar-h);
+  padding: 0 var(--sp-4);
+  font-family: var(--font-ui);
+  font-size: var(--fs-label);
+  font-weight: var(--fw-semibold);
+  color: var(--c-ink-secondary);
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  white-space: nowrap;
+  cursor: pointer;
+  background: none;
+  border: 0;
+  border-right: 1px solid var(--c-border);
+  transition: color var(--dur-fast) var(--ease-out);
+}
 
-.ui-sub-tab-nav {
+.ui-tab-back:hover {
+  color: var(--c-ink);
+}
+
+.ui-tab-back:active {
+  color: var(--c-brand-700);
+}
+
+/* ===== SubTabNav ========================================================= */
+/* DESIGN.md §5.6 — same equal-fraction rule, sunken chrome, 44px tall. */.ui-sub-tab-nav {
   display: flex;
   flex: 0 0 var(--sub-tab-h);
   align-items: stretch;
@@ -726,7 +758,8 @@
 @media (prefers-reduced-motion: reduce) {
   .ui-tab,
   .ui-sub-tab,
-  .ui-segmented__option {
+  .ui-segmented__option,
+  .ui-tab-back {
     transition: none;
   }
 

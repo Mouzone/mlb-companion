@@ -13,8 +13,10 @@ src/
                                            layout based on gameStore.selectedGame; handles the ?gamePk=<id> deep
                                            link (fetches live feed directly, bypassing GameSelect); fetches the
                                            Savant game feed into gameStore.gameFeedPitches whenever gamePk changes.
-                                           Imports gameStore, GameSelect, LiveGameTab, PitcherVsBatter, api/mlb,
-                                           api/savant, App.css. Mounts StatsGuide on both app branches.
+                                           Renders a "← Games" back button as `leading` on the tab bar (wired to
+                                           gameStore.reset), so the user can return to GameSelect from any game
+                                           screen. Imports gameStore, GameSelect, LiveGameTab, PitcherVsBatter,
+                                           api/mlb, api/savant, App.css. Mounts StatsGuide on both app branches.
 
   api/
     types.ts                              All shared TypeScript interfaces (439 lines): Team, ScheduledGame,
@@ -151,7 +153,7 @@ src/
                                             ZonePlot, a workload stat grid + by-inning strip, and an efficiency
                                             stat grid. Declares no heights. Imported by LiveGameTab.
     LiveAtBat/LiveAtBat.tsx               The "At Bat" sub-tab (the default liveSubTab). Renders the full live
-                                           at-bat view: back button + score + baserunner diamond + inning
+                                           at-bat view: score + baserunner diamond + inning
                                            indicator, per-team linescore rows, batter-vs-pitcher matchup header,
                                            pace stats (count, pitch count, times through the order), a ZonePlot
                                            of the at-bat's pitches, last-pitch detail (velo, spin, break,
@@ -313,7 +315,7 @@ main.tsx
   App.tsx
     (no selectedGame) GameSelect -> GameCard -> ScoreRing
     (selectedGame set)
-      tab-bar (Live Game | Pitcher vs Batter buttons)
+      tab-bar (Live Game | Pitcher vs Batter buttons, with leading "← Games" back button)
       activeTab === 'live'
         LiveGameTab
           sub-tab-nav (At Bat | Pitcher | Batter)
@@ -370,7 +372,7 @@ Actions and when each is dispatched:
 - `setRecentFormGames(games)` — declared for the recent-form span toggle; `PitchingSubTab`/`BattingSubTab` currently keep their own local span state rather than dispatching this action (see section 11).
 - `setGameFeedPitches(pitches)` — called by `App.tsx`'s Savant game-feed effect on every `gamePk` change (success sets the rows, failure sets `[]`).
 - `setError(err)` — called by `App.tsx`'s deep-link handler and by `useLiveFeed` on any fetch/poll failure.
-- `reset()` — called from the "← Games" back button in `LiveAtBat`. Clears `selectedGame`, `gamePk`, `liveFeed`, `currentPlay`, `lastTimecode`, `isPolling`, `gameFeedPitches`, `error`, returning the app to `GameSelect`.
+- `reset()` — called from the "← Games" back button in the tab bar (rendered by `App.tsx` as `leading` on `TabBar`). Clears `selectedGame`, `gamePk`, `liveFeed`, `currentPlay`, `lastTimecode`, `isPolling`, `gameFeedPitches`, `error`, returning the app to `GameSelect`.
 
 Watchability scores deliberately do **not** live in `gameStore`. `useWatchability` owns its own `scores`/`loading`/`stale` state local to `GameSelect`, the same pattern `usePlayerStats` already uses for `PitcherVsBatter` — the store holds cross-screen selection state, not per-fetch caches.
 
