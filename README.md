@@ -62,11 +62,17 @@ src/
     useLiveFeed.ts                        useLiveFeed(): fetches the initial live feed on gamePk change, then
                                            polls fetchDiffPatch every 4000ms (POLL_INTERVAL) and applies the diff
                                            via applyDiff, but ONLY while
-                                           gameData.status.abstractGameState === 'Live'. applyDiff clones every
-                                           node along a mutated path so Zustand's Object.is subscribers actually
-                                           re-render; a path that does not resolve is skipped rather than
-                                           throwing. Polls are skipped while document.hidden and catch up from
-                                           the same timecode on the next visible tick. Skips the initial fetch
+                                           gameData.status.abstractGameState === 'Live'. The cursor is
+                                           metaData.timeStamp (NOT metaData.timecode — that field does not exist
+                                           on the MLB response; assuming it silently disabled polling entirely).
+                                           diffPatch returns an ARRAY of { diff: RFC 6902 operations } patch sets,
+                                           each op carrying op/path/value/from; when nothing changed since
+                                           startTimecode it returns the full feed object instead, which is
+                                           detected and stored directly. applyDiff clones every node along a
+                                           mutated path so Zustand's Object.is subscribers actually re-render; a
+                                           path that does not resolve is skipped rather than throwing. Polls are
+                                           skipped while document.hidden and catch up from the same timestamp on
+                                           the next visible tick. Skips the initial fetch
                                            when the store already holds a feed for this gamePk (deep-link path).
                                            Returns { isPolling }. Called exactly once, from App, so the feed
                                            survives tab switches instead of refetching.
@@ -333,8 +339,8 @@ All MLB Stats API endpoints use `BASE = 'https://statsapi.mlb.com/api'` from `sr
 | Endpoint | Params | Fetcher | Response shape (summary) |
 |---|---|---|---|
 | `GET /v1/schedule` | `sportId=1&date=<YYYY-MM-DD>&hydrate=probablePitcher,linescore,team` | `fetchSchedule(date)` | `ScheduleResponse.dates[].games[]` (flattened) → `ScheduledGame[]` |
-| `GET /v1.1/game/{gamePk}/feed/live` | path param `gamePk` | `fetchLiveFeed(gamePk)` | `LiveFeed` (gameData, liveData.plays, metaData.timecode) |
-| `GET /v1.1/game/{gamePk}/feed/live/diffPatch` | `startTimecode=<tc>` | `fetchDiffPatch(gamePk, startTimecode)` | `DiffPatchResponse` (`{ diff: [{path,value}], metaData }`) |
+| `GET /v1.1/game/{gamePk}/feed/live` | path param `gamePk` | `fetchLiveFeed(gamePk)` | `LiveFeed` (gameData, liveData.plays, metaData.timeStamp) |
+| `GET /v1.1/game/{gamePk}/feed/live/diffPatch` | `startTimecode=<metaData.timeStamp>` | `fetchDiffPatch(gamePk, startTimecode)` | `DiffPatchResponse` = `DiffPatchEntry[]` (`[{ diff: [{op,path,value?,from?}] }]`, RFC 6902) **or** a full `LiveFeed` when nothing changed |
 | `GET /v1/people/{personId}` | path param `personId` | `fetchPlayer(personId)` | `{ people: [PlayerInfo] }` (first element returned) |
 | `GET /v1/people/{personId}/stats` | `stats=season&group=<hitting\|pitching>&season=<year>` | `fetchSeasonStats(personId, group, season, mode='season')` | `stats[0].splits[0].stat` → `SeasonStat \| PitcherSeasonStat` |
 | `GET /v1/people/{personId}/stats` | `stats=career&group=<hitting\|pitching>` | `fetchCareerStats(personId, group)` / `fetchSeasonStats(..., mode='career')` | `stats[0].splits[0].stat` → `CareerBatterStat \| CareerPitcherStat` |
@@ -410,9 +416,9 @@ Defaults: `activeTab: 'live'`, `activeSubTab: 'pitching'`, `liveSubTab: 'atBat'`
 Actions and when each is dispatched:
 
 - `selectGame(game)` — called from `GameSelect`'s card `onClick` and from `App.tsx`'s `?gamePk=` deep-link handler (via `scheduledGameFromLiveFeed`). Sets `selectedGame`, `gamePk`, and resets `liveFeed`, `currentPlay`, `lastTimecode`, `gameFeedPitches`, `error` to their empty state.
-- `setLiveFeed(feed)` — called by `useLiveFeed` after the initial `fetchLiveFeed` and after every `fetchDiffPatch` that produces a non-empty diff. Also derives `currentPlay` from `feed.liveData.plays.currentPlay` and `lastTimecode` from `feed.metaData.timecode` in the same update.
+- `setLiveFeed(feed)` — called by `useLiveFeed` after the initial `fetchLiveFeed` and after every `fetchDiffPatch` that produces a non-empty diff. Also derives `currentPlay` from `feed.liveData.plays.currentPlay` and `lastTimecode` from `feed.metaData.timeStamp` in the same update.
 - `setCurrentPlay(play)` — declared for direct overrides; not currently dispatched outside `setLiveFeed`'s derivation.
-- `setTimecode(tc)` — called by `useLiveFeed`'s poll loop whenever a diffPatch response carries a `metaData.timecode`.
+- `setTimecode(tc)` — called by `useLiveFeed`'s poll loop with the `metaData.timeStamp` of the folded diffPatch result.
 - `setPolling(polling)` — called by `useLiveFeed` around its live-feed initialization (`true` at start, `false` in the `finally` block).
 - `setActiveTab(tab)` — called by the tab-bar buttons in `App.tsx`.
 - `setActiveSubTab(subTab)` — called by the sub-tab-nav buttons in `PitcherVsBatter`.
@@ -528,7 +534,9 @@ Scripts (`package.json`):
 
 There is no test framework in this project and none may be added; verification is `npx tsc -b` (judge by empty stdout — it can misleadingly report exit 0 when piped through another command), `npm run build`, `npm run lint`, `npm run check:design`, and manual Playwright QA at the 390x844 viewport. Zero new npm dependencies is a hard project constraint.
 
-Deterministic QA entry point: `http://localhost:5173/?gamePk=746352` — a completed 2024 game whose Savant `gf` feed is still served, useful when no live game exists.
+**Live-update behavior must be verified against production, not localhost.** Test at `https://mlb-companion.vercel.app/?gamePk=<a game that is currently Live>`, leave the tab focused and in the foreground for several minutes, and confirm in DevTools → Network that `diffPatch?startTimecode=…` requests fire every ~4s with a *different* `startTimecode` each time. A repeating `startTimecode`, or no diffPatch requests at all, means the timestamp cursor is not advancing. Two properties make localhost a poor proxy: the production service worker's Workbox rules (including the `NetworkOnly` diffPatch exclusion) only exist in a built bundle, and polling is gated on `document.hidden`, so a background or unfocused tab legitimately shows no traffic.
+
+Deterministic QA entry point: `?gamePk=746352` — a completed 2024 Astros/Royals game (Josh Hader vs. MJ Melendez) whose Savant `gf` feed is still served, useful for rendering and layout work when no live game exists. Because the game is Final, `abstractGameState !== 'Live'` and the 4s poll loop never starts, so **this game can never validate live updating** — it always shows the same frozen pitcher/batter matchup. Use a live gamePk from the slate for anything touching `useLiveFeed`.
 
 Deployment is Vercel, configured entirely by `vercel.json`: `framework: "vite"`, `buildCommand: "tsc -b && vite build"`, `outputDirectory: "dist"`, and a catch-all SPA rewrite of `/(.*)` to `/index.html` (required since there is no client-side router — the app is a single route with `?gamePk=` as its only query-string input).
 
@@ -544,6 +552,7 @@ Three further runtime rules exist, and rule order matters — Workbox takes the 
 
 ## 11. Known Limitations
 
+0. **The live-feed cursor is `metaData.timeStamp`; there is no `metaData.timecode`.** The `diffPatch` query parameter is named `startTimecode`, which invites the assumption that the response field is `timecode` too. It is not. Reading the nonexistent field left `lastTimecodeRef` permanently `undefined`, so `poll()` returned at its first guard and the app never issued a single diffPatch request — it appeared to load fine and then silently never updated. Related: `diffPatch` returns an **array** of RFC 6902 patch sets (`[{ diff: [{ op, path, value?, from? }] }]`) that must each be folded in order, using the `op` field; and when nothing has changed since `startTimecode` it returns a **full `LiveFeed` object** rather than an empty array, which must be detected and stored wholesale.
 1. **Savant CSV has a UTF-8 BOM and every header is quoted.** `parseSavantCSV` strips `\uFEFF` first, then parses the header with the quote-aware `parseCSVLine`. A naive `.split(',')` would yield keys like `"pitch_type"` and silently garble every field.
 2. **`fetchSavantBattedBalls` uses `batters_lookup[]` / `pitchers_lookup[]`, never `player_id`.** Savant ignores `player_id` on `statcast_search` and returns the entire league (~25,000 rows) instead of one player.
 3. **The `statcast_search` CSV lags roughly a day** and returns zero rows for today's game. In-game bat speed therefore comes from the Savant **game feed** (`GET /gf?game_pk=N`, camelCase `batSpeed`), stored in `gameStore.gameFeedPitches`, never from the CSV endpoint.

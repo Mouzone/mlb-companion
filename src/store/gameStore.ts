@@ -50,7 +50,7 @@ export const useGameStore = create<GameState>((set) => ({
   selectGame: (game) =>
     set({ selectedGame: game, gamePk: game.gamePk, liveFeed: null, currentPlay: null, lastTimecode: null, gameFeedPitches: [], error: null }),
   setLiveFeed: (feed) =>
-    set({ liveFeed: feed, currentPlay: feed.liveData.plays.currentPlay ?? null, lastTimecode: feed.metaData.timecode }),
+    set({ liveFeed: feed, currentPlay: feed.liveData.plays.currentPlay ?? null, lastTimecode: feed.metaData.timeStamp }),
   setCurrentPlay: (play) => set({ currentPlay: play }),
   setTimecode: (tc) => set({ lastTimecode: tc }),
   setPolling: (polling) => set({ isPolling: polling }),

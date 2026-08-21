@@ -1,7 +1,7 @@
 import { useEffect, useRef, useCallback } from 'react'
 import { useGameStore } from '../store/gameStore'
 import { fetchLiveFeed, fetchDiffPatch } from '../api/mlb'
-import type { LiveFeed } from '../api/types'
+import type { LiveFeed, DiffPatchOperation, DiffPatchResponse } from '../api/types'
 
 const POLL_INTERVAL = 4000
 
@@ -11,37 +11,97 @@ function shallowClone(node: unknown): unknown {
   return node
 }
 
-// Applies a diffPatch immutably: every node along a mutated path is cloned so
+function decodePointerSegment(segment: string): string {
+  return segment.replace(/~1/g, '/').replace(/~0/g, '~')
+}
+
+function readPointer(root: Record<string, unknown>, pointer: string): unknown {
+  const parts = pointer.split('/').filter(Boolean).map(decodePointerSegment)
+  let node: unknown = root
+  for (const key of parts) {
+    if (typeof node !== 'object' || node === null) return undefined
+    node = (node as Record<string, unknown>)[key]
+  }
+  return node
+}
+
+// Walks to the parent of `pointer`, cloning every node along the way so
 // Zustand's Object.is subscribers actually see a new reference and re-render.
-function applyDiff(feed: LiveFeed, diff: { path: string; value: unknown }[]): LiveFeed {
+function cloneToParent(
+  root: Record<string, unknown>,
+  pointer: string,
+): { parent: Record<string, unknown>; key: string } | null {
+  const parts = pointer.split('/').filter(Boolean).map(decodePointerSegment)
+  if (parts.length === 0) return null
+
+  let target = root
+  for (let i = 0; i < parts.length - 1; i++) {
+    const child = target[parts[i]]
+    if (typeof child !== 'object' || child === null) return null
+    const cloned = shallowClone(child) as Record<string, unknown>
+    target[parts[i]] = cloned
+    target = cloned
+  }
+  return { parent: target, key: parts[parts.length - 1] }
+}
+
+function removeAt(parent: Record<string, unknown>, key: string) {
+  if (Array.isArray(parent)) {
+    const index = key === '-' ? parent.length - 1 : Number(key)
+    if (Number.isInteger(index)) (parent as unknown[]).splice(index, 1)
+    return
+  }
+  delete parent[key]
+}
+
+function insertAt(parent: Record<string, unknown>, key: string, value: unknown, isAdd: boolean) {
+  if (Array.isArray(parent)) {
+    const arr = parent as unknown[]
+    const index = key === '-' ? arr.length : Number(key)
+    if (!Number.isInteger(index)) return
+    if (isAdd) arr.splice(index, 0, value)
+    else arr[index] = value
+    return
+  }
+  parent[key] = value
+}
+
+// Applies one RFC 6902 patch set immutably.
+function applyDiff(feed: LiveFeed, ops: DiffPatchOperation[]): LiveFeed {
   const root = shallowClone(feed) as Record<string, unknown>
-  for (const entry of diff) {
-    const pathParts = entry.path.split('/').filter(Boolean)
-    if (pathParts.length === 0) continue
+  for (const op of ops) {
+    // `copy`/`move` read from the pre-mutation tree at `from`.
+    const sourceValue =
+      op.op === 'copy' || op.op === 'move' ? readPointer(root, op.from ?? '') : undefined
 
-    let target = root
-    let ok = true
-    for (let i = 0; i < pathParts.length - 1; i++) {
-      const key = pathParts[i]
-      const child = target[key]
-      if (typeof child !== 'object' || child === null) {
-        ok = false
-        break
-      }
-      const cloned = shallowClone(child) as Record<string, unknown>
-      target[key] = cloned
-      target = cloned
+    if (op.op === 'move' && op.from) {
+      const src = cloneToParent(root, op.from)
+      if (src) removeAt(src.parent, src.key)
     }
-    if (!ok) continue
 
-    const lastKey = pathParts[pathParts.length - 1]
-    if (entry.value === null) {
-      delete target[lastKey]
-    } else {
-      target[lastKey] = entry.value
+    const dest = cloneToParent(root, op.path)
+    if (!dest) continue
+
+    switch (op.op) {
+      case 'remove':
+        removeAt(dest.parent, dest.key)
+        break
+      case 'add':
+        insertAt(dest.parent, dest.key, op.value, true)
+        break
+      case 'copy':
+      case 'move':
+        insertAt(dest.parent, dest.key, sourceValue, true)
+        break
+      default:
+        insertAt(dest.parent, dest.key, op.value, false)
     }
   }
   return root as unknown as LiveFeed
+}
+
+function isPatchArray(res: DiffPatchResponse): res is { diff: DiffPatchOperation[] }[] {
+  return Array.isArray(res)
 }
 
 export function useLiveFeed() {
@@ -65,15 +125,33 @@ export function useLiveFeed() {
     // requests a diff from the same timecode and catches up in one call.
     if (typeof document !== 'undefined' && document.hidden) return
     try {
-      const diff = await fetchDiffPatch(gamePk, lastTimecodeRef.current)
-      if (diff.diff && diff.diff.length > 0 && feedRef.current) {
-        const updated = applyDiff(feedRef.current, diff.diff)
-        feedRef.current = updated
-        setLiveFeed(updated)
+      const res = await fetchDiffPatch(gamePk, lastTimecodeRef.current)
+
+      // No changes since `startTimecode`: the API replies with the whole feed
+      // instead of a patch array.
+      if (!isPatchArray(res)) {
+        if (res.metaData?.timeStamp) {
+          feedRef.current = res
+          setLiveFeed(res)
+          lastTimecodeRef.current = res.metaData.timeStamp
+          setTimecode(res.metaData.timeStamp)
+        }
+        return
       }
-      if (diff.metaData?.timecode) {
-        lastTimecodeRef.current = diff.metaData.timecode
-        setTimecode(diff.metaData.timecode)
+
+      if (res.length === 0 || !feedRef.current) return
+
+      let updated = feedRef.current
+      for (const entry of res) {
+        if (entry.diff?.length) updated = applyDiff(updated, entry.diff)
+      }
+      feedRef.current = updated
+      setLiveFeed(updated)
+
+      const nextTimecode = updated.metaData?.timeStamp
+      if (nextTimecode && nextTimecode !== lastTimecodeRef.current) {
+        lastTimecodeRef.current = nextTimecode
+        setTimecode(nextTimecode)
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Polling error')
@@ -95,7 +173,7 @@ export function useLiveFeed() {
         const existing = useGameStore.getState().liveFeed
         if (existing && useGameStore.getState().gamePk === pk) {
           feedRef.current = existing
-          lastTimecodeRef.current = existing.metaData.timecode
+          lastTimecodeRef.current = existing.metaData.timeStamp
           const status = existing.gameData.status.abstractGameState
           if (status === 'Live' && intervalRef.current === null) {
             intervalRef.current = setInterval(poll, POLL_INTERVAL)
@@ -106,7 +184,7 @@ export function useLiveFeed() {
         const feed = await fetchLiveFeed(pk)
         if (cancelled) return
         feedRef.current = feed
-        lastTimecodeRef.current = feed.metaData.timecode
+        lastTimecodeRef.current = feed.metaData.timeStamp
         setLiveFeed(feed)
 
         const status = feed.gameData.status.abstractGameState

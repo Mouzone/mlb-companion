@@ -294,20 +294,24 @@ export interface LiveFeed {
     }
   }
   metaData: {
-    timecode: string
+    timeStamp: string
   }
 }
 
-export interface DiffPatchResponse {
-  diff: {
-    type: string
-    path: string
-    value: unknown
-  }[]
-  metaData: {
-    timecode: string
-  }
+export interface DiffPatchOperation {
+  op: 'add' | 'replace' | 'remove' | 'copy' | 'move'
+  path: string
+  value?: unknown
+  from?: string
 }
+
+export interface DiffPatchEntry {
+  diff: DiffPatchOperation[]
+}
+
+// The endpoint returns an array of patch sets when the game advanced, or the
+// full feed object when nothing changed since `startTimecode`.
+export type DiffPatchResponse = DiffPatchEntry[] | LiveFeed
 
 export interface SavantBattedBall {
   pitch_type: string
