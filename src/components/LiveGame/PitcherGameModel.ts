@@ -155,7 +155,7 @@ export function derivePitcherGame(allPlays: readonly CurrentPlay[], current: Cur
     outs: countOuts(soFar, pitcherId),
     firstPitchStrikes,
     startedPlateAppearances,
-    strikeouts: events.filter((event) => event.startsWith('Strikeout')).length,
+    strikeouts: events.filter((event) => event?.startsWith('Strikeout')).length,
     walks: events.filter((event) => WALK_EVENTS.has(event)).length,
     hits: events.filter((event) => HIT_EVENTS.has(event)).length,
     homeRuns: events.filter((event) => event === 'Home Run').length,

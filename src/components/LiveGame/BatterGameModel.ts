@@ -98,7 +98,7 @@ export function buildGameLine(plays: readonly CurrentPlay[]): GameLine {
     atBats: events.filter((event) => !NON_AT_BAT_EVENTS.has(event)).length,
     hits: events.filter((event) => HIT_EVENTS.has(event)).length,
     homeRuns: events.filter((event) => event === 'Home Run').length,
-    strikeouts: events.filter((event) => event.startsWith('Strikeout')).length,
+    strikeouts: events.filter((event) => event?.startsWith('Strikeout')).length,
     walks: events.filter((event) => WALK_EVENTS.has(event)).length,
     rbi: plays.reduce((total, play) => total + play.result.rbi, 0),
   }
