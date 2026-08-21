@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "check:design": "node scripts/design-checks.mjs",
+    "qa:gamepk": "node scripts/qa-gamepk.mjs",
     "preview": "vite preview"
   },
   "dependencies": {
