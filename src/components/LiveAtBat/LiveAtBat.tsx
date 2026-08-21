@@ -69,7 +69,20 @@ export function LiveAtBat(): ReactElement {
   const currentPlay = useGameStore((s) => s.currentPlay)
   const liveFeed = useGameStore((s) => s.liveFeed)
   const gameFeedPitches = useGameStore((s) => s.gameFeedPitches)
+  const error = useGameStore((s) => s.error)
 
+  // Without this the skeleton renders forever on a failed feed, which is
+  // indistinguishable from a slow load and is the common case offline.
+  if (liveFeed === null && error !== null) {
+    return (
+      <section className="live-atbat">
+        <EmptyPanel
+          message="Live feed unavailable"
+          hint={`${error} — check your connection; polling resumes automatically.`}
+        />
+      </section>
+    )
+  }
   if (liveFeed === null) return <LoadingState />
   if (currentPlay === null) return <NoPlayState />
 

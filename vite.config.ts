@@ -58,6 +58,24 @@ export default defineConfig({
               expiration: { maxEntries: 4, maxAgeSeconds: 86400 },
             },
           },
+          // Every diffPatch URL embeds a fresh startTimecode, so caching them would
+          // add ~15 unique entries a minute and evict everything else worth keeping
+          // offline. They are also worthless once consumed. Must precede the general
+          // statsapi rule.
+          {
+            urlPattern: /^https:\/\/statsapi\.mlb\.com\/.*\/diffPatch/,
+            handler: 'NetworkOnly',
+          },
+          // Cohort responses are multi-megabyte and shared by every game, so they get
+          // their own long-lived bucket rather than competing with per-game requests.
+          {
+            urlPattern: /^https:\/\/statsapi\.mlb\.com\/api\/v1\/stats\?.*limit=2000/,
+            handler: 'StaleWhileRevalidate',
+            options: {
+              cacheName: 'mlb-cohorts',
+              expiration: { maxEntries: 6, maxAgeSeconds: 86400 },
+            },
+          },
           // Without a timeout these hang on the dead-air mobile connections this app
           // is actually used on (ballpark wifi, cellular) instead of falling back to
           // cache, so the fallback that justifies NetworkFirst never fires.
@@ -77,6 +95,17 @@ export default defineConfig({
               cacheName: 'mlb-savant',
               networkTimeoutSeconds: 4,
               expiration: { maxEntries: 20, maxAgeSeconds: 600 },
+            },
+          },
+          // Logos and headshots are immutable per player/team, so cache-first keeps
+          // the UI from falling back to placeholders the moment signal drops.
+          {
+            urlPattern: /^https:\/\/([a-z]+\.)?mlbstatic\.com\/.*/,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'mlb-images',
+              expiration: { maxEntries: 200, maxAgeSeconds: 604800 },
+              cacheableResponse: { statuses: [0, 200] },
             },
           },
         ],

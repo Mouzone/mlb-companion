@@ -1,6 +1,5 @@
 import type { ReactElement } from 'react'
 import { useGameStore } from '../../store/gameStore'
-import { useLiveFeed } from '../../hooks/useLiveFeed'
 import { LiveAtBat } from '../LiveAtBat/LiveAtBat'
 import { SubTabNav } from '../ui'
 import { BatterGameSubTab } from './BatterGameSubTab'
@@ -51,9 +50,6 @@ function renderSubTab(subTab: LiveSubTab): ReactElement {
  * sibling ABOVE `.sub-tab-panel`, which is this screen's only scroll owner.
  */
 export function LiveGameTab(): ReactElement {
-  // Called for its polling side effect; unmounting this tab stops the interval.
-  useLiveFeed()
-
   const liveSubTab = useGameStore((s) => s.liveSubTab)
   const setLiveSubTab = useGameStore((s) => s.setLiveSubTab)
 

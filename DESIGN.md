@@ -485,9 +485,10 @@ Recorded deliberately, with reasons. Each is a known gap, not an oversight.
    the shell is verified stable at 200% text zoom.
 4. **Canvas charts have no interactive affordances.** No tooltips, no keyboard access. The
    `role="img"` + summary pattern is a floor, not parity.
-5. **Team and player imagery is hotlinked from MLB CDNs.** No self-hosting, no caching layer
-   beyond the existing Workbox runtime cache. Acceptable: all three hosts send
-   `Access-Control-Allow-Origin: *` and impose no hotlink protection.
+5. **Team and player imagery is hotlinked from MLB CDNs.** No self-hosting. A Workbox
+   `CacheFirst` runtime rule (`mlb-images`, 200 entries, 7d) now backs `*.mlbstatic.com`, so
+   logos and headshots survive offline instead of falling back to placeholders. Acceptable:
+   all three hosts send `Access-Control-Allow-Origin: *` and impose no hotlink protection.
 6. **Pitch-color palette is tuned for white only.** There is no dark theme, and adding one
    would require a second verified palette. Out of scope.
 

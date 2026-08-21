@@ -109,7 +109,7 @@ export function PitcherVsBatter(): ReactElement {
     batterId,
   )
 
-  const { batterSeason, pitcherSeason, batterSplits, pitcherSplits, loading } = usePlayerStats(
+  const { batterSeason, pitcherSeason, batterSplits, pitcherSplits, pitcherLoading, batterLoading } = usePlayerStats(
     batterId,
     pitcherId,
   )
@@ -227,7 +227,7 @@ export function PitcherVsBatter(): ReactElement {
             role="pitcher"
             cells={pitcherCells}
             platoon={pitcherPlatoon}
-            loading={loading || benchmarksLoading}
+            loading={pitcherLoading || benchmarksLoading}
           />
           <PvbCard
             personId={batterId ?? 0}
@@ -241,7 +241,7 @@ export function PitcherVsBatter(): ReactElement {
             role="batter"
             cells={batterCells}
             platoon={batterPlatoon}
-            loading={loading || benchmarksLoading}
+            loading={batterLoading || benchmarksLoading}
           />
         </div>
       </div>

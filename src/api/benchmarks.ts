@@ -127,6 +127,11 @@ async function fetchSeasonCohorts(season: string): Promise<SeasonBenchmarkCohort
   })
 
   seasonRequests.set(season, request)
+  // A failed cohort fetch must not be cached, or benchmarks stay missing for the
+  // rest of the session with no way to recover.
+  void request.catch(() => {
+    seasonRequests.delete(season)
+  })
   return request
 }
 
@@ -179,6 +184,9 @@ async function fetchCareerCohorts(season: string): Promise<CareerBenchmarkCohort
   })
 
   careerRequests.set(season, request)
+  void request.catch(() => {
+    careerRequests.delete(season)
+  })
   return request
 }
 

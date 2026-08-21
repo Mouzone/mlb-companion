@@ -8,11 +8,27 @@ MLB Companion is a mobile-first live MLB game-watching companion PWA. It is buil
 
 ```
 src/
-  main.tsx                                React root. Renders <App /> inside <StrictMode>, imports index.css.
+  main.tsx                                React root. Renders <App /> inside <ErrorBoundary> inside <StrictMode>,
+                                           imports index.css.
+  components/ErrorBoundary.tsx            Class component; the only one in the codebase, since only a class can
+                                           implement getDerivedStateFromError. Without it a render throw in an
+                                           installed PWA is a permanent white screen — the cached bundle throws
+                                           again on every launch. Offers a reset that deletes every Cache Storage
+                                           bucket and clears sessionStorage before reloading, which recovers the
+                                           stale-payload-plus-new-code case.
   App.tsx                                 Shell component. Exports default App. Decides GameSelect vs the 2-tab
                                            layout based on gameStore.selectedGame; handles the ?gamePk=<id> deep
                                            link (fetches live feed directly, bypassing GameSelect); fetches the
                                            Savant game feed into gameStore.gameFeedPitches whenever gamePk changes.
+                                           Calls useLiveFeed() (the single call site) so live polling is tied to
+                                           the selected game rather than to the Live tab being mounted. Warms
+                                           every Pitcher vs Batter cache as soon as a matchup is known —
+                                           fetchActiveBenchmarkCohorts on gamePk, then preloadPlayerStats,
+                                           preloadCareerMatchupStats, fetchCachedGameLog, and
+                                           fetchCachedCareerVsPlayer once currentPlay.matchup resolves — so that
+                                           tab opens without a loading pass. Every preload is idempotent
+                                           (module-cache guarded) and swallows its own rejection; the hooks
+                                           surface real failures when the tab actually mounts.
                                            Renders a "← Games" back button as `leading` on the tab bar (wired to
                                            gameStore.reset), so the user can return to GameSelect from any game
                                            screen. Imports gameStore, GameSelect, LiveGameTab, PitcherVsBatter,
@@ -44,23 +60,43 @@ src/
 
   hooks/
     useLiveFeed.ts                        useLiveFeed(): fetches the initial live feed on gamePk change, then
-                                           polls fetchDiffPatch every 4000ms (POLL_INTERVAL) and diff-patches the
-                                           feed in place via applyDiff, but ONLY while
-                                           gameData.status.abstractGameState === 'Live'. Returns { isPolling }.
-                                           Imported by LiveGameTab (called there for its polling side effect only;
-                                           unmounting LiveGameTab stops the interval).
+                                           polls fetchDiffPatch every 4000ms (POLL_INTERVAL) and applies the diff
+                                           via applyDiff, but ONLY while
+                                           gameData.status.abstractGameState === 'Live'. applyDiff clones every
+                                           node along a mutated path so Zustand's Object.is subscribers actually
+                                           re-render; a path that does not resolve is skipped rather than
+                                           throwing. Polls are skipped while document.hidden and catch up from
+                                           the same timecode on the next visible tick. Skips the initial fetch
+                                           when the store already holds a feed for this gamePk (deep-link path).
+                                           Returns { isPolling }. Called exactly once, from App, so the feed
+                                           survives tab switches instead of refetching.
     usePlayerStats.ts                     usePlayerStats(batterId: number | null, pitcherId: number | null):
                                            PlayerStatsData. Takes exactly these TWO arguments; derives the
                                            current season internally via `new Date().getFullYear().toString()`
                                            (module-level `currentYear` constant, not recomputed per render).
-                                           Fires 10 parallel fetches (fetchSeasonStats x2, fetchPitchArsenal,
-                                           fetchHotColdZones x2, fetchStatSplits x2, fetchGameLog, fetchVsPlayer,
-                                           fetchSavantBattedBalls), each independently caught so one failing
-                                           endpoint does not blank the rest. Returns batterSeason, pitcherSeason,
-                                           pitchArsenal, batterHotCold, pitcherHotCold, batterSplits,
-                                           pitcherSplits, gameLog (sliced to 5 most recent), vsPlayer, savantData
-                                           (filtered to rows with both hc_x and hc_y present), loading. Imported
-                                           by PitcherVsBatter, PitchingSubTab, BattingSubTab.
+                                           Fires the same 10 endpoints, but split across THREE independently
+                                           cached bundles so a mid-inning player swap only refetches the half
+                                           that changed: a pitcher bundle (fetchSeasonStats, fetchPitchArsenal,
+                                           fetchHotColdZones, fetchStatSplits) keyed `${year}:${pitcherId}`, a
+                                           batter bundle (fetchSeasonStats, fetchHotColdZones, fetchStatSplits,
+                                           fetchGameLog, fetchSavantBattedBalls) keyed `${year}:${batterId}`, and
+                                           fetchVsPlayer keyed on both. Each constituent fetch is independently
+                                           caught so one failing endpoint does not blank the rest; because that
+                                           means the bundle promise can never reject, a fully-empty result is
+                                           evicted from the cache on resolution so a fetch that happened while
+                                           offline is not cached as empty for the session. Returns batterSeason,
+                                           pitcherSeason, pitchArsenal, batterHotCold, pitcherHotCold,
+                                           batterSplits, pitcherSplits, gameLog (sliced to 5 most recent),
+                                           vsPlayer, savantData (filtered to rows with both hc_x and hc_y
+                                           present), loading, plus pitcherLoading and batterLoading so each PVB
+                                           card resolves on its own. Also exports preloadPlayerStats(batterId,
+                                           pitcherId), called from App. Imported by PitcherVsBatter,
+                                           PitchingSubTab, BattingSubTab, MatchupSubTab.
+    useCareerMatchupStats.ts              useCareerMatchupStats(pitcherId, batterId) => { pitcher, batter }.
+                                           Two module-level caches keyed on the bare player ID, so swapping one
+                                           side of the matchup leaves the other untouched. Empty results are
+                                           evicted rather than cached. Exports
+                                           preloadCareerMatchupStats(pitcherId, batterId), called from App.
     useWatchability.ts                    useWatchability(games) => { scores: ReadonlyMap<number,
                                            WatchabilityResult>, loading, stale }. Fetches /watchability.json once
                                            on mount (a missing payload degrades to cards with no score rather
@@ -70,7 +106,15 @@ src/
                                            useLiveFeed's 4s single-game poll, because this covers the whole slate
                                            and excitement is a game-shape measure, not a pitch-by-pitch one.
                                            Reattaches parkFactor from leagueConstants.ts's PARK_FACTORS, since the
-                                           payload itself omits it (see section 12). Imported by GameSelect.
+                                           payload itself omits it (see section 12). Live plays are mirrored into
+                                           sessionStorage under 'mlb-watchability-plays' (versioned envelope,
+                                           stamped with a LOCAL date so it does not self-invalidate at 8pm ET)
+                                           and used to seed state on mount, so a reload shows the blended live
+                                           score immediately instead of flashing the pregame score while the
+                                           win-probability fetch is in flight. The payload is validated against
+                                           REQUIRED_BASELINE_KEYS before use; an unrecognised shape (a cached
+                                           payload outliving a pipeline schema change) is discarded rather than
+                                           allowed to throw mid-render. Imported by GameSelect.
 
   utils/
     pitchConstants.ts                     Exports PITCH_COLORS (Record<string,string>, keys FF SI FC SL ST CU KC
@@ -224,8 +268,10 @@ vercel.json                               Vercel deploy config: framework "vite"
 vite.config.ts                            Vite config: @vitejs/plugin-react, vite-plugin-pwa (autoUpdate,
                                            manifest with standalone display orientation, NetworkFirst runtime
                                            caching for statsapi.mlb.com (5 min TTL) and baseballsavant.mlb.com
-                                           (10 min TTL), plus a StaleWhileRevalidate rule for /watchability.json.
-                                           See section 10.
+                                           (10 min TTL), a StaleWhileRevalidate rule for /watchability.json, a
+                                           NetworkOnly rule excluding diffPatch, a StaleWhileRevalidate bucket
+                                           for the benchmark cohort queries, and a CacheFirst rule for
+                                           mlbstatic.com imagery. See section 10.
 index.html                                Root HTML. Sets viewport-fit=cover and maximum-scale=1.0,
                                            user-scalable=no on the viewport meta tag (viewport-fit=cover is
                                            required for env(safe-area-inset-*) to resolve to a non-zero value).
@@ -267,8 +313,9 @@ Baseball Savant (baseballsavant   ──┘                            │
 ```
 
 - `App.tsx` is the only place that writes `selectedGame`/`gamePk` from a URL (`?gamePk=`) or from `GameSelect`'s picker, and the only place that populates `gameFeedPitches` from `fetchSavantGameFeed`.
-- `useLiveFeed` is the only source of live-feed polling; it is invoked exactly once, inside `LiveGameTab`, so mounting/unmounting that tab starts/stops the 4s interval.
-- `usePlayerStats` is called independently by `PitcherVsBatter`, `PitchingSubTab`, and `BattingSubTab` with the same `(batterId, pitcherId)` pair; each call refetches all 10 endpoints (no cross-component caching layer exists).
+- `useLiveFeed` is the only source of live-feed polling; it is invoked exactly once, inside `App`, so the 4s interval is tied to the selected game rather than to which tab happens to be mounted. Switching tabs no longer tears down and refetches the feed.
+- `usePlayerStats` is called independently by `PitcherVsBatter`, `PitchingSubTab`, `BattingSubTab`, and `MatchupSubTab` with the same `(batterId, pitcherId)` pair. Module-level promise caches keyed per player mean only the first caller fetches; the rest await the same promise. `App` warms these caches (`preloadPlayerStats`, `preloadCareerMatchupStats`, `fetchCachedGameLog`, `fetchCachedCareerVsPlayer`, `fetchActiveBenchmarkCohorts`) as soon as the live feed yields a matchup, so opening the Pitcher vs Batter tab is generally instant.
+- Because the caches are keyed per player rather than per matchup, a pitching change refetches only the pitcher bundle and a new batter refetches only the batter bundle.
 - Sabermetric derivations (FIP, ERA+, wRC+, ISO, K%, BB%, HR/9, GB%) happen in the consuming components (`PitcherVsBatter`, indirectly `PitchingSubTab`/`BattingSubTab`), not inside the store or the fetchers — raw stat objects are stored/passed as-is and computed on render.
 - No data ever flows backward from components into the API layer; all fetchers are one-directional reads.
 - **Watchability is a separate, parallel data flow that never touches gameStore.** `scripts/build-watchability.mjs`
@@ -312,7 +359,8 @@ Baseball Savant endpoints use `SAVANT_BASE = 'https://baseballsavant.mlb.com'` f
 
 ```
 main.tsx
-  App.tsx
+  ErrorBoundary
+    App.tsx
     (no selectedGame) GameSelect -> GameCard -> ScoreRing
     (selectedGame set)
       tab-bar (Live Game | Pitcher vs Batter buttons, with leading "← Games" back button)
@@ -486,6 +534,12 @@ Deployment is Vercel, configured entirely by `vercel.json`: `framework: "vite"`,
 
 PWA behavior is configured in `vite.config.ts` via `vite-plugin-pwa`: `registerType: 'autoUpdate'`, manifest with `display: 'standalone'`, `id: '/'`, `scope: '/'`, `categories: ['sports']`, and a `shortcuts` entry ("Most watchable games" → `/?sort=watchability`); `orientation: 'portrait'` was removed because the app now has desktop layouts. Workbox gained `navigateFallback: 'index.html'` and `cleanupOutdatedCaches: true`, and a new **first** runtime-caching rule gives `/watchability.json` a `StaleWhileRevalidate` strategy (cacheName `mlb-watchability`, 4 entries, 86400s TTL) so ratings render instantly and survive offline. The two pre-existing `NetworkFirst` rules for `statsapi.mlb.com` (50 entries, 300s TTL) and `baseballsavant.mlb.com` (20 entries, 600s TTL) both gained `networkTimeoutSeconds: 4`, so they fall back to cache instead of hanging on dead-air mobile connections.
 
+Three further runtime rules exist, and rule order matters — Workbox takes the first match:
+
+1. `**/diffPatch` on `statsapi.mlb.com` is `NetworkOnly`. Every diff URL embeds a fresh `startTimecode`, so at a 4s poll they would add ~15 unique entries a minute and evict the entire 50-entry `mlb-statsapi` LRU every few minutes — taking the schedule, feed, and player stats with it. They are also worthless once consumed. This rule must precede the general `statsapi.mlb.com` rule.
+2. `/api/v1/stats?...limit=2000` (the league-wide benchmark cohorts) gets its own `StaleWhileRevalidate` bucket, `mlb-cohorts` (6 entries, 86400s). These responses are multi-megabyte and shared by every game, so they should not compete for slots with per-game requests.
+3. `*.mlbstatic.com` (team logos, player headshots) is `CacheFirst`, `mlb-images` (200 entries, 7d, `cacheableResponse.statuses: [0, 200]` to permit opaque cross-origin responses). Previously uncached, so every logo fell back to its placeholder the moment signal dropped.
+
 **Watchability data pipeline.** `.github/workflows/watchability.yml` runs `scripts/build-watchability.mjs` on ubuntu-latest with Node 24, on two crons — `0 11 * * *` (07:00 ET, picks up the finished slate and updated Elo) and `0 16 * * *` (12:00 ET, picks up late-announced probable pitchers) — plus `workflow_dispatch` for manual runs. `permissions: contents: write`; `concurrency: { group: watchability, cancel-in-progress: false }` so overlapping runs queue instead of racing. It commits `public/watchability.json` and `public/elo-state.json` as `chore(data): refresh watchability ratings`, skipping the commit when nothing changed. Because the app-side formula lives entirely in `src/utils/watchability.ts`, retuning weights is a normal `git push` deploy — it never requires re-running this pipeline.
 
 ## 11. Known Limitations
@@ -504,7 +558,7 @@ PWA behavior is configured in `vite.config.ts` via `vite-plugin-pwa`: `registerT
 12. **The play-by-play endpoint is `/v1/game/{gamePk}/playByPlay` — v1, not v1.1.** `fetchPlayByPlayBatch` caps concurrency at 5 requests via `chunk(gamePks, 5)`.
 13. **ERA+/wRC+ park factor uses the current game's home park** (`PARK_FACTORS[selectedGame.teams.home.team.abbreviation] ?? 1.00`) as an approximation of the player's own home park; it is not looked up per-player.
 14. **`env(safe-area-inset-*)` resolves to 0 in headless Chrome**, so QA there renders a marginally taller `.app` than a real iPhone does. Because the layout is flex-based with no fixed budgets (section 8), this only changes how much of the panel is visible before scrolling begins — it is a headless-browser artifact, not a layout violation.
-15. **`usePlayerStats` is called independently by four components** (`PitcherVsBatter`, `MatchupSubTab`, `PitchingSubTab`, `BattingSubTab`) with no shared cache. It is a plain `useState`/`useEffect` firing a ten-way `Promise.all`, each request individually `.catch()`-defaulted, so switching between the Pitcher vs Batter card strip and its sub-tabs re-requests the same batter/pitcher pair from scratch.
+15. **Module-level promise caches have no TTL and are never cleared.** `usePlayerStats`, `useCareerMatchupStats`, `playerStatsCache`, and `benchmarks` all dedupe via `Map`s that live for the lifetime of the page. This is what makes tab and sub-tab switching free, but it also means a starter's season line fetched at first pitch never updates for the rest of the broadcast, and nothing evicts entries on `reset()`. Failed/empty results *are* evicted so they can be retried; successful ones are frozen. `currentYear` is likewise computed once at module load, so an installed PWA left resident across a season boundary would query the wrong season.
 16. **The recent-form span is global, not per-tab.** `recentFormGames` is a single `gameStore` field (default `7`) and both `PitchingSubTab` and `BattingSubTab` dispatch `setRecentFormGames` against it, so changing the span in one sub-tab silently changes it in the other.
 17. **No test framework, no client-side router, and no backend exist in this project**, by design; do not introduce any of the three without updating this document and `vercel.json`'s SPA rewrite assumption.
 18. **Manifest `screenshots` are still missing.** The repo-root `memo-desktop.png` (1280x4044) and `memo-mobile.png` (397x5288) are full-page captures whose aspect ratios exceed Chrome's 2.3 limit for install-prompt screenshots; properly-sized viewport captures are still needed to unlock the rich install prompt.

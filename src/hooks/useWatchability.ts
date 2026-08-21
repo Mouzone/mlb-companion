@@ -32,6 +32,78 @@ import {
 
 const PAYLOAD_URL = '/watchability.json';
 const LIVE_POLL_INTERVAL = 30_000;
+const PLAYS_STORAGE_KEY = 'mlb-watchability-plays';
+/** Bump when the persisted shape changes so old entries are dropped, not misread. */
+const PLAYS_STORAGE_VERSION = 1;
+
+type PlaysRecord = Record<number, WinProbabilityPlay[]>;
+
+/**
+ * Local, not UTC. The slate is fetched with a local date, so a UTC stamp would
+ * roll over at 8pm ET and discard plays for every game still in progress.
+ */
+function localDateStr(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function loadPersistedPlays(today: string): ReadonlyMap<number, WinProbabilityPlay[]> {
+  try {
+    const raw = sessionStorage.getItem(PLAYS_STORAGE_KEY);
+    if (!raw) return new Map();
+    const parsed = JSON.parse(raw) as { v?: number; date: string; plays: PlaysRecord };
+    if (parsed.v !== PLAYS_STORAGE_VERSION) return new Map();
+    if (parsed.date !== today) return new Map();
+    return new Map(Object.entries(parsed.plays).map(([k, v]) => [Number(k), v]));
+  } catch {
+    return new Map();
+  }
+}
+
+function persistPlays(plays: ReadonlyMap<number, WinProbabilityPlay[]>, today: string): void {
+  try {
+    const record: PlaysRecord = {};
+    for (const [gamePk, gamePlays] of plays) record[gamePk] = gamePlays;
+    sessionStorage.setItem(
+      PLAYS_STORAGE_KEY,
+      JSON.stringify({ v: PLAYS_STORAGE_VERSION, date: today, plays: record }),
+    );
+  } catch {
+    // sessionStorage full or unavailable — live polling still works, just no seed on next load.
+  }
+}
+
+/** Every baseline key the scorer dereferences as `.mean`/`.sd`. */
+const REQUIRED_BASELINE_KEYS = [
+  'wrcPlus',
+  'iso',
+  'hrPerGame',
+  'rotationFip',
+  'bullpenFip',
+  'blownSaveRate',
+  'starterFip',
+  'starterKPct',
+  'starterGameScore',
+  'elo',
+  'winPct',
+  'competitiveness',
+] as const;
+
+function isUsablePayload(data: WatchabilityPayload | null): boolean {
+  if (data === null || typeof data !== 'object') return false;
+  if (!Array.isArray(data.games)) return false;
+  const baseline = data.baseline as unknown as Record<string, unknown> | undefined;
+  if (baseline === undefined || baseline === null) return false;
+  return REQUIRED_BASELINE_KEYS.every((key) => {
+    const entry = baseline[key] as { mean?: unknown; sd?: unknown } | undefined;
+    return (
+      entry !== undefined &&
+      entry !== null &&
+      typeof entry.mean === 'number' &&
+      typeof entry.sd === 'number'
+    );
+  });
+}
 
 export interface WatchabilityState {
   /** Score per gamePk. Absent when the pipeline has no inputs for that game. */
@@ -64,7 +136,16 @@ function liveKeyFor(games: readonly ScheduledGame[]): string {
 export function useWatchability(games: readonly ScheduledGame[]): WatchabilityState {
   const [payload, setPayload] = useState<WatchabilityPayload | null>(null);
   const [loading, setLoading] = useState(true);
-  const [plays, setPlays] = useState<ReadonlyMap<number, WinProbabilityPlay[]>>(new Map());
+  const [plays, setPlays] = useState<ReadonlyMap<number, WinProbabilityPlay[]>>(() =>
+    loadPersistedPlays(localDateStr()),
+  );
+
+  // Persisting outside the setState updater keeps the ~200KB stringify off the
+  // double-invoked render path and always stamps a freshly computed date.
+  useEffect(() => {
+    if (plays.size === 0) return;
+    persistPlays(plays, localDateStr());
+  }, [plays]);
 
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const liveKey = liveKeyFor(games);
@@ -77,6 +158,10 @@ export function useWatchability(games: readonly ScheduledGame[]): WatchabilitySt
         const res = await fetch(PAYLOAD_URL, { cache: 'no-cache' });
         if (!res.ok) throw new Error(`Watchability payload fetch failed: ${res.status}`);
         const data = (await res.json()) as WatchabilityPayload;
+        // A cached payload can outlive a pipeline schema change by up to a day.
+        // Reject anything missing the fields the scorer dereferences rather than
+        // letting it throw mid-render behind a stale-while-revalidate cache.
+        if (!isUsablePayload(data)) throw new Error('Watchability payload shape unrecognised');
         if (!cancelled) setPayload(data);
       } catch {
         // A missing payload is not an app error: cards simply render without a
