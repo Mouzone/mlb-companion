@@ -2,6 +2,7 @@ import { useMemo, type ReactElement } from 'react'
 import type { GameLogEntry, StatSplit } from '../../api/types'
 import { usePlayerStats } from '../../hooks/usePlayerStats'
 import { useGameStore } from '../../store/gameStore'
+import { derivePitcher } from '../../utils/derivePitcher'
 import { computeBBpct, computeKpct, parseStat } from '../../utils/sabermetrics'
 import type { DataTableColumn, DataTableRow } from '../ui'
 import { EmptyPanel, Segmented, Stat, StatGrid } from '../ui'
@@ -116,18 +117,14 @@ const HANDEDNESS: Record<string, string> = { L: 'LH batter', R: 'RH batter', S: 
 export function BattingSubTab(): ReactElement {
   const selectedGame = useGameStore((s) => s.selectedGame)
   const currentPlay = useGameStore((s) => s.currentPlay)
+  const liveFeed = useGameStore((s) => s.liveFeed)
   const recentFormGames = useGameStore((s) => s.recentFormGames)
   const setRecentFormGames = useGameStore((s) => s.setRecentFormGames)
 
   const matchup = currentPlay?.matchup ?? null
   const batter = matchup?.batter ?? null
   const batterId = batter?.id ?? null
-  // The stats hook keys every batter fetch on having a pitcher too.
-  const pitcherId =
-    matchup?.pitcher.id ??
-    selectedGame?.teams.home.probablePitcher?.id ??
-    selectedGame?.teams.away.probablePitcher?.id ??
-    null
+  const pitcherId = derivePitcher(currentPlay, liveFeed, selectedGame)?.id ?? null
 
   const { batterSeason, batterHotCold, batterSplits, gameLog, vsPlayer, savantData, loading } =
     usePlayerStats(batterId, pitcherId)

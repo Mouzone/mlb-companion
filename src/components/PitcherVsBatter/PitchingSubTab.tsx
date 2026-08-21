@@ -3,6 +3,7 @@ import { fetchCachedGameLog } from '../../api/playerStatsCache'
 import type { GameLogEntry, StatSplit } from '../../api/types'
 import { usePlayerStats } from '../../hooks/usePlayerStats'
 import { useGameStore } from '../../store/gameStore'
+import { derivePitcher } from '../../utils/derivePitcher'
 import { parseStat } from '../../utils/sabermetrics'
 import type { DataTableRow } from '../ui'
 import { EmptyPanel, Segmented, Stat, StatGrid } from '../ui'
@@ -45,14 +46,13 @@ const SITUATIONS: ReadonlyArray<{ code: string; label: string }> = [
 export function PitchingSubTab(): ReactElement {
   const selectedGame = useGameStore((s) => s.selectedGame)
   const currentPlay = useGameStore((s) => s.currentPlay)
+  const liveFeed = useGameStore((s) => s.liveFeed)
   const recentFormGames = useGameStore((s) => s.recentFormGames)
   const setRecentFormGames = useGameStore((s) => s.setRecentFormGames)
 
   const matchup = currentPlay?.matchup ?? null
   const batterId = matchup?.batter.id ?? null
-  const probable =
-    selectedGame?.teams.home.probablePitcher ?? selectedGame?.teams.away.probablePitcher ?? null
-  const pitcher = matchup?.pitcher ?? probable ?? null
+  const pitcher = derivePitcher(currentPlay, liveFeed, selectedGame)
   const pitcherId = pitcher?.id ?? null
 
   const { pitchArsenal, pitcherHotCold, pitcherSplits, pitcherSeason, loading } = usePlayerStats(

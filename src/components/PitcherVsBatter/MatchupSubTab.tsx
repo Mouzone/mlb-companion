@@ -3,6 +3,7 @@ import { fetchCachedCareerVsPlayer } from '../../api/playerStatsCache'
 import type { StatSplit, VsPlayerStat } from '../../api/types'
 import { usePlayerStats } from '../../hooks/usePlayerStats'
 import { useGameStore } from '../../store/gameStore'
+import { derivePitcher } from '../../utils/derivePitcher'
 import { parseStat } from '../../utils/sabermetrics'
 import type { DataTableRow } from '../ui'
 import { Segmented } from '../ui'
@@ -47,6 +48,7 @@ function effectiveSide(batSide: 'L' | 'R' | 'S', pitchHand: 'L' | 'R'): 'L' | 'R
 export function MatchupSubTab(): ReactElement {
   const selectedGame = useGameStore((s) => s.selectedGame)
   const currentPlay = useGameStore((s) => s.currentPlay)
+  const liveFeed = useGameStore((s) => s.liveFeed)
 
   const [scope, setScope] = useState<Scope>('career')
   const [career, setCareer] = useState<VsPlayerStat | null>(null)
@@ -55,9 +57,7 @@ export function MatchupSubTab(): ReactElement {
   const [seriesStatus, setSeriesStatus] = useState<Status>('idle')
 
   const matchup = currentPlay?.matchup ?? null
-  const probable =
-    selectedGame?.teams.home.probablePitcher ?? selectedGame?.teams.away.probablePitcher ?? null
-  const pitcher = matchup?.pitcher ?? probable ?? null
+  const pitcher = derivePitcher(currentPlay, liveFeed, selectedGame)
   const batter = matchup?.batter ?? null
   const batterId = batter?.id ?? null
   const pitcherId = pitcher?.id ?? null

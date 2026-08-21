@@ -10,6 +10,7 @@ import { usePlayerStats } from '../../hooks/usePlayerStats'
 import { useStatBenchmarks } from '../../hooks/useStatBenchmarks'
 import { useCareerMatchupStats } from '../../hooks/useCareerMatchupStats'
 import { useGameStore } from '../../store/gameStore'
+import { derivePitcher } from '../../utils/derivePitcher'
 import { PARK_FACTORS } from '../../utils/leagueConstants'
 import type { Cell, PlatoonBlock } from './PvbCards'
 import {
@@ -92,6 +93,7 @@ function roleOfPitcher(
 export function PitcherVsBatter(): ReactElement {
   const selectedGame = useGameStore((s) => s.selectedGame)
   const currentPlay = useGameStore((s) => s.currentPlay)
+  const liveFeed = useGameStore((s) => s.liveFeed)
   const activeSubTab = useGameStore((s) => s.activeSubTab)
   const setActiveSubTab = useGameStore((s) => s.setActiveSubTab)
 
@@ -100,9 +102,7 @@ export function PitcherVsBatter(): ReactElement {
 
   const matchup = currentPlay?.matchup ?? null
   const batterId = matchup?.batter.id ?? null
-  const probable =
-    selectedGame?.teams.home.probablePitcher ?? selectedGame?.teams.away.probablePitcher ?? null
-  const pitcher = matchup?.pitcher ?? probable ?? null
+  const pitcher = derivePitcher(currentPlay, liveFeed, selectedGame)
   const pitcherId = pitcher?.id ?? null
   const { pitcher: pitcherCareer, batter: batterCareer } = useCareerMatchupStats(
     pitcherId,

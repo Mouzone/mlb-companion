@@ -10,6 +10,7 @@ import { fetchCachedGameLog, fetchCachedCareerVsPlayer } from './api/playerStats
 import { useLiveFeed } from './hooks/useLiveFeed'
 import { preloadPlayerStats } from './hooks/usePlayerStats'
 import { preloadCareerMatchupStats } from './hooks/useCareerMatchupStats'
+import { derivePitcher } from './utils/derivePitcher'
 import type { LiveFeed, ScheduledGame } from './api/types'
 import { Icon, TabBar } from './components/ui'
 import { StatsGuide } from './components/StatsGuide/StatsGuide'
@@ -59,6 +60,7 @@ function App() {
   const setError = useGameStore((s) => s.setError)
   const reset = useGameStore((s) => s.reset)
   const currentPlay = useGameStore((s) => s.currentPlay)
+  const liveFeed = useGameStore((s) => s.liveFeed)
 
   // Live feed fetches here (not in LiveGameTab) so it survives tab switches
   // and starts the moment a game is selected.
@@ -119,9 +121,8 @@ function App() {
   // (module-cache guarded), so repeated calls are no-ops.
   const pvbMatchup = currentPlay?.matchup ?? null
   const pvbBatterId = pvbMatchup?.batter.id ?? null
-  const pvbProbable =
-    selectedGame?.teams.home.probablePitcher ?? selectedGame?.teams.away.probablePitcher ?? null
-  const pvbPitcherId = pvbMatchup?.pitcher.id ?? pvbProbable?.id ?? null
+  const pvbPitcher = derivePitcher(currentPlay, liveFeed, selectedGame)
+  const pvbPitcherId = pvbPitcher?.id ?? null
 
   useEffect(() => {
     if (pvbPitcherId !== null) {

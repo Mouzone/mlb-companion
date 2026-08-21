@@ -138,6 +138,14 @@ src/
                                            parseStat, ipToDecimal. See section 7 for formulas. Imported by
                                            PitcherVsBatter, MatchupSubTab (indirectly via ipToDecimal/parseStat),
                                            PitchingSubTab, BattingSubTab.
+    derivePitcher.ts                      Exports derivePitcher(currentPlay, liveFeed, selectedGame): resolves the
+                                           current pitcher via a 4-step fallback chain — (1) currentPlay.matchup.pitcher
+                                           (the pitcher in the current at-bat), (2) liveFeed.linescore.defense.pitcher
+                                           (always populated once the feed loads, even between at-bats or in Preview
+                                           state), (3) selectedGame home probable pitcher, (4) selectedGame away probable
+                                           pitcher, (5) null. This replaces a copy-pasted 5-line fallback that was
+                                           duplicated in App.tsx, PitcherVsBatter, PitchingSubTab, MatchupSubTab, and
+                                           BattingSubTab. Imported by all five of those files.
     watchability.ts                       Client-side watchability scoring engine (~640 lines, zero deps). See
                                            section 12 for the full formula. Exports types (Baseline,
                                            LeagueBaseline, TeamRating, PitcherRating, GameInputs, PayloadGame,
@@ -211,11 +219,13 @@ src/
                                            distance, hardness, joined bat speed), and the play result banner.
                                            Imported by LiveGameTab.
     PitcherVsBatter/PitcherVsBatter.tsx   Exports PitcherVsBatter (the Pitcher-vs-Batter tab root). Owns
-                                            `.tab-content`; renders the `.pvb-cards-wrap` card strip (pitcher
-                                            season, pitcher career, batter season, batter career -- horizontally
-                                            swipeable below 1024px, a two-column grid at or above it), the 44px
-                                            `.sub-tab-nav` (Matchup / Pitching / Batting), and `.pvb-panel`, which
-                                            is the scroll owner. Calls usePlayerStats(batterId, pitcherId) and
+                                           `.tab-content`; renders the `.pvb-cards-wrap` card strip (pitcher
+                                           season, pitcher career, batter season, batter career -- horizontally
+                                           swipeable below 1024px, a two-column grid at or above it), the 44px
+                                           `.sub-tab-nav` (Matchup / Pitching / Batting), and `.pvb-panel`, which
+                                           is the scroll owner. Resolves the current pitcher via derivePitcher()
+                                           (utils/derivePitcher.ts), which prefers live feed data over scheduled
+                                           probables. Calls usePlayerStats(batterId, pitcherId) and
                                            fetchCareerStats independently for pitcher and batter career rows.
                                            Computes park-adjusted sabermetric cells for the swipe cards using
                                            utils/sabermetrics.ts and utils/leagueConstants.ts. Dispatches to
@@ -321,6 +331,7 @@ Baseball Savant (baseballsavant   ──┘                            │
 - `App.tsx` is the only place that writes `selectedGame`/`gamePk` from a URL (`?gamePk=`) or from `GameSelect`'s picker, and the only place that populates `gameFeedPitches` from `fetchSavantGameFeed`.
 - `useLiveFeed` is the only source of live-feed polling; it is invoked exactly once, inside `App`, so the 4s interval is tied to the selected game rather than to which tab happens to be mounted. Switching tabs no longer tears down and refetches the feed.
 - `usePlayerStats` is called independently by `PitcherVsBatter`, `PitchingSubTab`, `BattingSubTab`, and `MatchupSubTab` with the same `(batterId, pitcherId)` pair. Module-level promise caches keyed per player mean only the first caller fetches; the rest await the same promise. `App` warms these caches (`preloadPlayerStats`, `preloadCareerMatchupStats`, `fetchCachedGameLog`, `fetchCachedCareerVsPlayer`, `fetchActiveBenchmarkCohorts`) as soon as the live feed yields a matchup, so opening the Pitcher vs Batter tab is generally instant.
+- **Pitcher selection** in the Pitcher vs Batter tab and the `App` preload uses a shared `derivePitcher(currentPlay, liveFeed, selectedGame)` helper (`src/utils/derivePitcher.ts`) with a 4-step fallback: (1) `currentPlay.matchup.pitcher` — the pitcher in the current at-bat, (2) `liveFeed.linescore.defense.pitcher` — the MLB API's linescore defense field, always populated once the feed loads (even in Preview state or between at-bats when `currentPlay` is transiently null), (3) home probable pitcher, (4) away probable pitcher, (5) null. This ensures the PVB tab shows the actual pitcher on the mound — including relievers after a pitching change — rather than defaulting to the scheduled starter. The Live Game tab (At Bat / Pitcher / Batter sub-tabs) already used `currentPlay.matchup.pitcher` directly with no fallback; only the PVB tab had the copy-pasted probable fallback.
 - Because the caches are keyed per player rather than per matchup, a pitching change refetches only the pitcher bundle and a new batter refetches only the batter bundle.
 - Sabermetric derivations (FIP, ERA+, wRC+, ISO, K%, BB%, HR/9, GB%) happen in the consuming components (`PitcherVsBatter`, indirectly `PitchingSubTab`/`BattingSubTab`), not inside the store or the fetchers — raw stat objects are stored/passed as-is and computed on render.
 - No data ever flows backward from components into the API layer; all fetchers are one-directional reads.
@@ -577,6 +588,7 @@ Three further runtime rules exist, and rule order matters — Workbox takes the 
 20. **FanGraphs cannot be used as a watchability data source.** Their terms prohibit scraping and automated export, so SIERA, official wRC+, and Depth Charts projections are unavailable to the pipeline; every watchability input is derived from the MLB Stats API or computed locally in `scripts/build-watchability.mjs`.
 21. **The watchability formula is calibrated by construction, not yet validated against realised outcomes.** Weights were chosen deliberately, not fit to data. Backtesting pregame scores against actual Excitement Index for completed games is the natural next step, and has not been done.
 22. **The Elo constants in `build-watchability.mjs` are not a reproduction of FiveThirtyEight's MLB Elo.** FiveThirtyEight's MLB Elo is archived and its methodology page now redirects away; the constants here are informed by their published CSV columns but are this project's own choices.
+23. **Pitcher selection in the PVB tab previously defaulted to the scheduled probable starter.** Before the `derivePitcher` refactor, all five PVB consumers (App, PitcherVsBatter, PitchingSubTab, MatchupSubTab, BattingSubTab) used the same copy-pasted fallback `currentPlay?.matchup.pitcher ?? selectedGame.teams.home.probablePitcher ?? selectedGame.teams.away.probablePitcher ?? null`. When `currentPlay` was null — in Preview state, briefly after `selectGame` cleared it before the feed resolved, or for Final games whose feed omitted `currentPlay` — the PVB tab showed the probable starter instead of the actual pitcher. The `derivePitcher` helper now inserts `liveFeed.linescore.defense.pitcher` as a second-priority fallback (after `currentPlay.matchup.pitcher` but before probables), which is populated as soon as the feed loads regardless of game state. The home-first probable ordering (`home ?? away`) is retained because the home pitcher is on the mound first (top of the 1st).
 
 ## 12. Watchability Score
 

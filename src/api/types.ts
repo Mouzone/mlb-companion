@@ -291,6 +291,18 @@ export interface LiveFeed {
         second?: { id: number; fullName: string }
         third?: { id: number; fullName: string }
       }
+      defense?: {
+        pitcher?: { id: number; fullName: string }
+        catcher?: { id: number; fullName: string }
+        first?: { id: number; fullName: string }
+        second?: { id: number; fullName: string }
+        third?: { id: number; fullName: string }
+        shortstop?: { id: number; fullName: string }
+        left?: { id: number; fullName: string }
+        center?: { id: number; fullName: string }
+        right?: { id: number; fullName: string }
+        team?: { id: number; name: string }
+      }
     }
   }
   metaData: {
