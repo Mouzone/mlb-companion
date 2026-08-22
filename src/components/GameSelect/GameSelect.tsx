@@ -4,6 +4,7 @@ import { fetchSchedule } from '../../api/mlb'
 import { useGameStore } from '../../store/gameStore'
 import useWatchability from '../../hooks/useWatchability'
 import type { ScheduledGame } from '../../api/types'
+import { gameDateStr } from '../../utils/gameDay'
 import { EmptyPanel, Segmented, Skeleton } from '../ui'
 import type { SegmentedOption } from '../ui'
 import { GameCard } from './GameCard'
@@ -28,11 +29,6 @@ interface Group {
   readonly tone: GroupTone
   readonly title: string
   readonly games: ScheduledGame[]
-}
-
-function todayStr(): string {
-  const d = new Date()
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
 /** Unscored games sink last rather than sorting as 0, which would rank them below genuinely unwatchable games. */
@@ -118,7 +114,7 @@ export function GameSelect(): ReactElement {
     async function load() {
       try {
         setLoading(true)
-        const scheduled = await fetchSchedule(todayStr())
+        const scheduled = await fetchSchedule(gameDateStr())
         if (!cancelled) setGames(scheduled)
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load schedule')

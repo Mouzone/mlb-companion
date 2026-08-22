@@ -47,14 +47,16 @@ export default defineConfig({
         navigateFallback: 'index.html',
         cleanupOutdatedCaches: true,
         runtimeCaching: [
-          // Ratings are a whole-slate snapshot rebuilt nightly, so a cached copy is
-          // never meaningfully wrong within a day. Serving it from cache first is
-          // what lets the slate render scores instantly and with no signal at all.
+          // Ratings are a whole-slate snapshot rebuilt twice daily (07:00 and
+          // 12:00 ET). NetworkFirst ensures the morning reload picks up the
+          // fresh payload without a hard refresh, while the 4s timeout falls
+          // back to cache on dead-air connections so scores still render offline.
           {
             urlPattern: ({ url }) => url.pathname === '/watchability.json',
-            handler: 'StaleWhileRevalidate',
+            handler: 'NetworkFirst',
             options: {
               cacheName: 'mlb-watchability',
+              networkTimeoutSeconds: 4,
               expiration: { maxEntries: 4, maxAgeSeconds: 86400 },
             },
           },

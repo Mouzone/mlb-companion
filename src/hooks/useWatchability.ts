@@ -20,6 +20,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { fetchWinProbability } from '../api/mlb';
 import type { ScheduledGame } from '../api/types';
+import { gameDateStr } from '../utils/gameDay';
 import { PARK_FACTORS } from '../utils/leagueConstants';
 import {
   computeWatchability,
@@ -37,15 +38,6 @@ const PLAYS_STORAGE_KEY = 'mlb-watchability-plays';
 const PLAYS_STORAGE_VERSION = 1;
 
 type PlaysRecord = Record<number, WinProbabilityPlay[]>;
-
-/**
- * Local, not UTC. The slate is fetched with a local date, so a UTC stamp would
- * roll over at 8pm ET and discard plays for every game still in progress.
- */
-function localDateStr(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
 
 function loadPersistedPlays(today: string): ReadonlyMap<number, WinProbabilityPlay[]> {
   try {
@@ -137,14 +129,14 @@ export function useWatchability(games: readonly ScheduledGame[]): WatchabilitySt
   const [payload, setPayload] = useState<WatchabilityPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [plays, setPlays] = useState<ReadonlyMap<number, WinProbabilityPlay[]>>(() =>
-    loadPersistedPlays(localDateStr()),
+    loadPersistedPlays(gameDateStr()),
   );
 
   // Persisting outside the setState updater keeps the ~200KB stringify off the
   // double-invoked render path and always stamps a freshly computed date.
   useEffect(() => {
     if (plays.size === 0) return;
-    persistPlays(plays, localDateStr());
+    persistPlays(plays, gameDateStr());
   }, [plays]);
 
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -173,8 +165,16 @@ export function useWatchability(games: readonly ScheduledGame[]): WatchabilitySt
     }
 
     void load();
+
+    function onVisibilityChange(): void {
+      if (!document.hidden && !cancelled) void load();
+    }
+
+    document.addEventListener('visibilitychange', onVisibilityChange);
+
     return () => {
       cancelled = true;
+      document.removeEventListener('visibilitychange', onVisibilityChange);
     };
   }, []);
 
