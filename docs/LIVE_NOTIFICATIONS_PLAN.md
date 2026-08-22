@@ -1,10 +1,20 @@
-# Live Notifications Plan
+# Live Game Experience Plan
 
-Telegram Bot notifications when a game's watchability score reaches 65+
-(Great or Elite tier). Two serverless functions handle everything — no
-frontend notification code needed. A 10-minute cron covers pregame alerts,
-and a 1-minute cron with a 15-second in-function polling loop covers live
-games with near-real-time updates.
+Two related improvements bundled as one refactor:
+
+1. **Telegram Bot notifications** — push alerts to your phone when a game's
+   watchability score reaches 65+ (Great or Elite tier). Two serverless
+   functions handle everything — no frontend notification code needed. A
+   10-minute cron covers pregame alerts, and a 1-minute cron with a 15-second
+   in-function polling loop covers live games with near-real-time updates.
+
+2. **Live slate polling** — GameSelect currently fetches the schedule once
+   on mount and never refreshes. Scores, game status (Preview→Live→Final),
+   and inning detail are frozen for the session. A new `useLiveSlate` hook
+   adds adaptive polling (15s when games are live, 30s during preview, off
+   when all final) so the slate view reflects real-time game state. This
+   also feeds fresh game status to `useWatchability`, which automatically
+   starts/stops win-probability polling as games transition.
 
 ## Architecture
 
@@ -19,14 +29,12 @@ games with near-real-time updates.
 │                         public/elo-state.json     Vercel (static) │
 │                                                  │               │
 │  Browser ──fetch /watchability.json──────────────┘               │
-│         ──poll winProbability (15s for live)──▶ statsapi.mlb.com │
 │         ──computeWatchability() in browser (UI display only)     │
 └──────────────────────────────────────────────────────────────────┘
 
 ┌──────────────────────────────────────────────────────────────────┐
-│ NEW                                                              │
+│ NEW — Backend (Firebase Cloud Functions, free tier)              │
 │                                                                  │
-│  Firebase Cloud Functions (free tier)                            │
 │  ├── notify-pregame  ──cron 10min──▶ fetch /watchability.json   │
 │  │                                    compute pregame scores     │
 │  │                                    query Firestore for dedup  │
@@ -46,6 +54,30 @@ games with near-real-time updates.
 │    crossingNotified: boolean                                     │
 │    lastNotifiedScore: number                                     │
 │    pregameNotified: boolean                                      │
+└──────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────┐
+│ NEW — Frontend (Browser)                                         │
+│                                                                  │
+│  useLiveSlate(date)                                              │
+│  ├── fetchSchedule(date) on mount + date change                 │
+│  ├── adaptive setTimeout (not setInterval):                     │
+│  │     any Live game  → 15s until next fetch                    │
+│  │     all Preview     → 30s until next fetch                   │
+│  │     all Final       → stop polling                           │
+│  ├── pause when document.hidden                                  │
+│  ├── resume + immediate refresh on visibilitychange             │
+│  └── exposes { games, loading, refresh }                        │
+│                                                                  │
+│  GameSelect.tsx                                                  │
+│  ├── const { games, loading } = useLiveSlate(gameDateStr())     │
+│  ├── useWatchability(games) ← receives fresh games array        │
+│  │     automatically starts/stops winProbability polling        │
+│  │     as games transition Preview→Live→Final                   │
+│  └── GameCard receives fresh scores, status, linescore          │
+│                                                                  │
+│  Polling: fetchSchedule ──▶ statsapi.mlb.com (15s/30s/off)      │
+│           fetchWinProbability ─▶ statsapi.mlb.com (15s for live)│
 └──────────────────────────────────────────────────────────────────┘
 ```
 
@@ -100,7 +132,9 @@ is redundant. Dropping it removes:
 - Duplicate in-memory + Firestore dedup logic
 
 The frontend's `useWatchability` hook continues to compute scores for UI
-display only. No notification logic runs in the browser.
+display only. No notification logic runs in the browser. The frontend does
+gain a new `useLiveSlate` hook (see Part 5 below) for live score/status
+polling — but that is UI-only and separate from the notification pipeline.
 
 ### Why 15-second polling inside the function?
 
@@ -506,7 +540,122 @@ functions which need Firebase SDKs.
 }
 ```
 
-## Part 5 — Firestore Schema
+## Part 5 — Live Slate Polling (Frontend)
+
+### Current Problem
+
+`GameSelect.tsx` calls `fetchSchedule(gameDateStr())` exactly once on mount
+(`useEffect([], [])`). The returned `ScheduledGame[]` — including
+`abstractGameState`, `teams.*.score`, and the undeclared `linescore` field
+(currentInning, inningState, outs) — is frozen for the component's lifetime.
+This means:
+
+- **Scores are static** — if a team scores while you're viewing the slate,
+  the card still shows the old score
+- **Game status is static** — Preview→Live and Live→Final transitions
+  don't happen until you reload the page
+- **Inning/outs detail is static** — the "LIVE · BOT 7 · 2 OUT" chip never
+  updates
+- **`useWatchability` can't adapt** — it derives its live-poll set from the
+  `games` prop, so if a game goes Live after the initial fetch,
+  win-probability polling never starts for that game
+
+The only live-updating element on the slate is the watchability `ScoreRing`,
+which receives fresh scores from `useWatchability`'s 30s winProbability poll
+— but only for games that were already Live at mount time.
+
+### New: `src/hooks/useLiveSlate.ts`
+
+```ts
+interface UseLiveSlateResult {
+  games: ScheduledGame[]
+  loading: boolean
+  refresh: () => void
+}
+
+export function useLiveSlate(date: string): UseLiveSlateResult
+```
+
+**Logic:**
+
+1. Call `fetchSchedule(date)` on mount and whenever `date` changes
+2. After each fetch, determine the next polling cadence from the results:
+   - Any game with `abstractGameState === 'Live'` → **15s**
+   - All games `abstractGameState === 'Preview'` → **30s**
+   - All games `abstractGameState === 'Final'` → **stop polling**
+3. Use recursive `setTimeout` (not `setInterval`) so cadence adapts after
+   each fetch — a game going Live mid-session speeds up the next poll
+4. On fetch error: keep existing `games` (don't clobber with empty array),
+   schedule next retry at the same cadence
+5. Pause polling when `document.hidden`; on `visibilitychange` → immediate
+   refresh + resume adaptive polling
+6. Clear pending timeout on unmount or `date` change
+
+**Why `setTimeout` instead of `setInterval`?** `setInterval` fires at a fixed
+cadence regardless of fetch latency. If a fetch takes 3s, a 15s `setInterval`
+would fire 12s after the response, not 15s. Recursive `setTimeout` schedules
+the next poll 15s _after_ the previous fetch completes, giving even spacing
+and allowing the cadence to change between polls.
+
+### Modify: `src/components/GameSelect/GameSelect.tsx`
+
+Replace the one-shot fetch pattern:
+
+```tsx
+// BEFORE
+const [games, setGames] = useState<ScheduledGame[]>([])
+useEffect(() => {
+  fetchSchedule(gameDateStr()).then(setGames).catch(() => {})
+}, [])
+
+// AFTER
+const { games, loading } = useLiveSlate(gameDateStr())
+```
+
+Remove the `useEffect(() => { fetchSchedule... }, [])` block entirely.
+Everything else stays unchanged:
+
+- Grouping into Live / Upcoming / Final buckets (now reflects real-time
+  status transitions)
+- Sorting by time or watchability
+- `useWatchability(games)` — receives fresh `games`, automatically
+  starts/stops win-probability polling as games go Live/Final
+- `<GameCard>` rendering — already renders scores, linescore, status chip;
+  just receives fresh data now
+
+### What stays unchanged
+
+| File | Why unchanged |
+|---|---|
+| `GameCard.tsx` | Already renders scores, linescore, status chip from props — just receives fresh data now |
+| `useWatchability.ts` | Receives fresher `games` prop; polling adapts automatically. No code change needed. |
+| `useLiveFeed.ts` | Single-game 4s diff-patch feed for detail view, unaffected |
+| `gameStore.ts` | `selectedGame` snapshot not clobbered by slate refreshes — store holds `gamePk`, not the slate array |
+| `mlb.ts` | No new API endpoints — `fetchSchedule` already returns scores, status, and linescore |
+
+### Browser polling: two independent loops
+
+After this change, the browser runs two independent polling loops:
+
+| Hook | Endpoint | Cadence | Purpose |
+|---|---|---|---|
+| `useLiveSlate` | `fetchSchedule(date)` | 15s live / 30s preview / off final | Scores, status, inning detail for the slate |
+| `useWatchability` | `fetchWinProbability(gamePk)` | 15s for live games | Excitement score for ScoreRing |
+
+Both pause when `document.hidden` and resume on `visibilitychange`. They do
+not coordinate — `useLiveSlate` feeds fresh `games` to `useWatchability`,
+which independently polls win-probability for games it sees as Live.
+
+Total API calls during a live slate (e.g. 9 live games):
+- `fetchSchedule`: 1 call / 15s = 4 calls/min
+- `fetchWinProbability`: 9 calls / 15s = 36 calls/min
+- Total: ~40 calls/min = ~2,400/hr = ~29K/day (12hr of live games)
+
+The MLB Stats API has no published rate limit. These are lightweight GET
+requests (schedule ~5KB, winProbability ~2KB per game). Well within
+reasonable usage.
+
+## Part 6 — Firestore Schema
 
 ### Collection: `notifications`
 
@@ -567,9 +716,9 @@ Notifications accumulate over the season. Options:
 each, ~15 games/day = ~3KB/day, ~100KB/season). Not worth a cleanup function
 until the volume matters.
 
-## Part 6 — File Manifest
+## Part 7 — File Manifest
 
-### New files (14)
+### New files (15)
 
 | Path | Purpose |
 |---|---|
@@ -585,16 +734,18 @@ until the volume matters.
 | `firebase.json` | Firebase config (functions + firestore) |
 | `firestore.rules` | Firestore security rules |
 | `firestore.indexes.json` | Firestore indexes (empty, no composite needed) |
+| `src/hooks/useLiveSlate.ts` | Adaptive schedule polling hook (15s live / 30s preview / off final) |
 | `.gitignore` additions | `functions/lib/`, `functions/node_modules/`, `.firebase/` |
 | `docs/LIVE_NOTIFICATIONS_PLAN.md` | This document |
 
-### Modified files (3)
+### Modified files (4)
 
 | Path | Changes |
 |---|---|
 | `src/utils/watchability.ts` | Re-export from `shared/scoring.mjs` instead of defining inline |
 | `src/utils/leagueConstants.ts` | Re-export `PARK_FACTORS` + league constants from `shared/scoring.mjs` |
 | `scripts/build-watchability.mjs` | Import `WOBA_SCALE`, `LEAGUE_R_PER_PA` from `shared/scoring.mjs` |
+| `src/components/GameSelect/GameSelect.tsx` | Replace one-shot `fetchSchedule` with `useLiveSlate` hook for adaptive polling |
 
 ### Unchanged (key files)
 
@@ -604,11 +755,13 @@ until the volume matters.
 | `vercel.json` | Still pure static SPA — Firebase handles the backend |
 | `.github/workflows/watchability.yml` | Nightly build unchanged |
 | `package.json` (root) | No new frontend deps |
-| `src/hooks/useWatchability.ts` | Scores for UI display only; no notification sending |
-| `src/components/GameSelect/GameSelect.tsx` | No notification hook integration needed |
-| `src/api/mlb.ts` | Functions use direct `fetch`, not the frontend API client |
+| `src/hooks/useWatchability.ts` | Scores for UI display; receives fresher `games` prop automatically |
+| `src/components/GameSelect/GameCard.tsx` | Already renders scores/status/linescore from props — receives fresh data |
+| `src/hooks/useLiveFeed.ts` | Single-game 4s feed for detail view, unaffected |
+| `src/store/gameStore.ts` | `selectedGame` snapshot not clobbered by slate refreshes |
+| `src/api/mlb.ts` | No new endpoints — `fetchSchedule` already returns scores, status, linescore |
 
-## Part 7 — Implementation Order
+## Part 8 — Implementation Order
 
 1. **Extract shared scoring module**
    - Create `shared/scoring.mjs` with all pure math + constants from
@@ -646,10 +799,24 @@ until the volume matters.
    - Crossing suppression when pregameNotified is true
    - Deploy and test
 
-6. **Deploy Firestore rules**
+6. **Implement `src/hooks/useLiveSlate.ts`**
+   - Adaptive `setTimeout` polling (15s live / 30s preview / off final)
+   - Pause on `document.hidden`, resume on `visibilitychange`
+   - Error handling (keep existing games on fetch failure)
+   - Verify: `npx tsc -b`, `npm run lint`, `npm run build`,
+     `npm run check:design` — all must pass
+
+7. **Integrate `useLiveSlate` in `GameSelect.tsx`**
+   - Replace one-shot `fetchSchedule` + `useState` with `useLiveSlate`
+   - Remove the `useEffect(() => { fetchSchedule... }, [])` block
+   - Verify grouping, sorting, and `useWatchability` all receive fresh data
+   - Manually test: open app during live games, verify scores/status update
+     every ~15s without page reload
+
+8. **Deploy Firestore rules**
    - `firebase deploy --only firestore:rules`
 
-7. **End-to-end test**
+9. **End-to-end test**
    - Set Telegram bot token + chat ID
    - Trigger `notify-pregame` via `firebase functions:shell`
    - Wait for a live game, verify 1-min cron + 15s polling fires
@@ -657,8 +824,9 @@ until the volume matters.
    - Verify jump notification fires on +10 swing
    - Verify dedup: run same function twice → no duplicate notification
    - Verify inline button opens PWA with correct gamePk
+   - Verify GameSelect scores/status refresh every ~15s during live games
 
-## Part 8 — Verification
+## Part 9 — Verification
 
 ### Build checks (run after each step that touches frontend code)
 
@@ -691,6 +859,15 @@ cd functions && npx tsc --noEmit  # Functions type-check
    notifications should fire)
 7. **Inline button:** Tap "⚾ Open Game" in Telegram → verify PWA opens
    with the correct game loaded
+8. **Live slate polling:** Open app during a live game → verify scores on
+   game cards update every ~15s without page reload
+9. **Status transitions:** Leave app open as a game goes from Preview→Live
+   → verify the game card moves to the Live section and starts showing
+   inning/outs detail automatically
+10. **Adaptive cadence:** With all games in Preview → verify polling is
+    ~30s; when a game goes Live → verify polling speeds up to ~15s
+11. **Tab visibility:** Background the app during a live game → resume →
+    verify immediate refresh of scores and status
 
 ## Cost Analysis
 
@@ -737,3 +914,8 @@ well within limits.
   live feed endpoint alongside winProbability.
 - **Cleanup function:** A weekly cron to delete Firestore notification docs
   older than 7 days, if manual cleanup becomes tedious.
+- **Score-change animation:** Brief CSS flash highlight on GameCard when a
+  team's score increments — no new deps, pure CSS keyframe.
+- **Date rollover:** If the app stays open across the 6 AM boundary,
+  `useLiveSlate` could re-evaluate `gameDateStr()` to auto-advance to the
+  new day's slate.
