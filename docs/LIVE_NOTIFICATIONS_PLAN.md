@@ -1,8 +1,10 @@
-# Discord Notifications Plan
+# Live Notifications Plan
 
-Discord webhook notifications when a game's watchability score reaches 65+
-(Great or Elite tier). Two delivery paths: a 10-minute cron for when the app
-is closed, and an HTTP function for ~30s real-time when the app is open.
+Telegram Bot notifications when a game's watchability score reaches 65+
+(Great or Elite tier). Two serverless functions handle everything — no
+frontend notification code needed. A 10-minute cron covers pregame alerts,
+and a 1-minute cron with a 15-second in-function polling loop covers live
+games with near-real-time updates.
 
 ## Architecture
 
@@ -17,8 +19,8 @@ is closed, and an HTTP function for ~30s real-time when the app is open.
 │                         public/elo-state.json     Vercel (static) │
 │                                                  │               │
 │  Browser ──fetch /watchability.json──────────────┘               │
-│         ──poll winProbability (30s)──▶ statsapi.mlb.com          │
-│         ──computeWatchability() in browser                       │
+│         ──poll winProbability (15s for live)──▶ statsapi.mlb.com │
+│         ──computeWatchability() in browser (UI display only)     │
 └──────────────────────────────────────────────────────────────────┘
 
 ┌──────────────────────────────────────────────────────────────────┐
@@ -28,20 +30,18 @@ is closed, and an HTTP function for ~30s real-time when the app is open.
 │  ├── notify-pregame  ──cron 10min──▶ fetch /watchability.json   │
 │  │                                    compute pregame scores     │
 │  │                                    query Firestore for dedup  │
-│  │                                    POST Discord webhook       │
+│  │                                    POST Telegram sendMessage  │
 │  │                                                               │
-│  ├── notify-live     ──cron 10min──▶ for each Live game:        │
-│  │                                    fetch winProbability       │
-│  │                                    fetch /watchability.json   │
-│  │                                    computeWatchability()      │
-│  │                                    query Firestore for dedup  │
-│  │                                    POST Discord webhook       │
+│  ├── notify-live     ──cron 1min───▶ fetch MLB schedule         │
+│  │                                    if no live games → exit    │
+│  │                                    poll loop (every 15s):     │
+│  │                                      fetch winProbability     │
+│  │                                      fetch /watchability.json │
+│  │                                      computeWatchability()    │
+│  │                                      query Firestore dedup    │
+│  │                                      POST Telegram sendMessage│
+│  │                                    exit before next cron      │
 │  │                                                               │
-│  └── notify          ──HTTP POST───◀ browser (app open)         │
-│                                    { gamePk, score, tier, ... } │
-│                                    query Firestore for dedup    │
-│                                    POST Discord webhook         │
-│                                                                  │
 │  Firestore: notifications/{date}/{gamePk}                        │
 │    crossingNotified: boolean                                     │
 │    lastNotifiedScore: number                                     │
@@ -49,14 +49,30 @@ is closed, and an HTTP function for ~30s real-time when the app is open.
 └──────────────────────────────────────────────────────────────────┘
 ```
 
+### Why Telegram
+
+| Factor | Telegram Bot | Discord Webhook | Pushover | Twilio SMS |
+|---|---|---|---|---|
+| Cost | Free | Free | $5 one-time | ~$5/mo + per-msg |
+| iOS push reliability | Very good | Can lag | Best (emergency priority) | Native |
+| Setup complexity | Low (BotFather) | Low | Low | High (10DLC registration) |
+| API docs | Excellent | Minimal | Good | Good |
+| Rate limits | 30 msg/sec | 50 req/sec (webhook) | 10K msg/mo (free tier) | Per-carrier |
+| Inline buttons | Yes (URL deep-link) | Yes (but limited on mobile) | No | N/A |
+| Message formatting | HTML | Markdown embeds | Plain text | Plain text |
+
+Telegram was chosen for its combination of free tier, excellent
+documentation, reliable iOS push delivery, and inline keyboard buttons
+that deep-link to the PWA.
+
 ### Why Firebase Cloud Functions
 
 | Factor | Vercel Hobby | Firebase Free Tier |
 |---|---|---|
-| Cron < 1 day | Only daily cron free; $20/mo Pro for 10-min | Scheduled functions at any frequency |
+| Cron < 1 day | Only daily cron free; $20/mo Pro for sub-daily | Scheduled functions at any frequency |
 | Serverless functions | Included (limited) | Included (2M invocations/mo) |
 | Document store | Would need Firestore anyway | Firestore 50K reads / 20K writes per day |
-| Cold starts | Yes | Yes, but 10-min cadence keeps warm |
+| Cold starts | Yes | Yes, but 1-min cadence keeps warm during games |
 
 GitHub Actions stays for the nightly build — git commit is native, batch job
 is purpose-built for CI, and the free tier has no issue with the 60+ API calls
@@ -64,10 +80,39 @@ the build makes.
 
 ### Why not just GitHub Actions cron for notifications too?
 
-GitHub Actions free tier: 2,000 minutes/month. A 10-minute cron running
-~12 hours/day = 6 runs/hour × 12 = 72 runs/day × ~30 days = ~2,160 runs/month.
-Each run takes ~30s = ~1,080 minutes. That eats half the free tier on
-notifications alone. Firebase free tier handles this with no minute budget.
+GitHub Actions free tier: 2,000 minutes/month. A 1-minute cron running
+~12 hours/day = 720 runs/day × ~30 days = ~21,600 runs/month. Each run
+takes ~1-60s (depending on live games) = ~5,000+ minutes. That blows past
+the free tier on notifications alone. Firebase free tier handles this with
+no minute budget.
+
+### Why no frontend notification path?
+
+The original plan included an HTTP function callable from the browser for
+~30s real-time alerts. With the 1-minute cron + 15s polling loop, the cron
+path alone achieves ~15s latency — fast enough that a separate HTTP path
+is redundant. Dropping it removes:
+
+- `functions/src/notify.ts` (HTTP function)
+- `src/hooks/useNotifications.ts` (frontend hook)
+- `GameSelect.tsx` integration
+- `VITE_NOTIFY_FUNCTION_URL` + `VITE_NOTIFICATIONS_ENABLED` env vars
+- Duplicate in-memory + Firestore dedup logic
+
+The frontend's `useWatchability` hook continues to compute scores for UI
+display only. No notification logic runs in the browser.
+
+### Why 15-second polling inside the function?
+
+MLB's `winProbability` endpoint updates per play (~20-60s between updates
+in real games). Polling faster than 15s is pointless — the data doesn't
+change between plays. Polling slower than 15s risks missing a score
+crossing for up to a full minute. 15s balances latency with API courtesy.
+
+The 1-minute cron ensures the function is always running during live games.
+The in-function loop polls every 15s for 55s, then exits before the next
+cron invocation fires. No overlapping invocations occur because the function
+exits within the 60-second cron window.
 
 ## Part 1 — Extract Shared Scoring Module
 
@@ -91,6 +136,11 @@ Moves from `watchability.ts`:
 - All constants: `WEIGHTS`, `LIVE_WEIGHTS`, `EGI_MEAN`, `EGI_SD`, `LI_MEAN`,
   `LI_SD`, `DRAMA_MEAN`, `DRAMA_SD`, `LIVE_SATURATION_PLAYS`, `SQUASH_K`,
   `HOME_FIELD_ELO`
+
+Moves from `leagueConstants.ts`:
+- `PARK_FACTORS` record
+- `WOBA_SCALE`, `LEAGUE_R_PER_PA` and any other league constants used by
+  the scoring math
 
 ### New: `shared/scoring.d.ts`
 
@@ -122,22 +172,16 @@ everything.
 
 ### Modify: `src/utils/leagueConstants.ts`
 
-No changes needed. Park factors stay client-side only. The Cloud Functions
-will import `PARK_FACTORS` from `shared/scoring.mjs` via a re-export, or more
-simply, the functions will inline the park factor lookup since they already
-have the payload game's `home.abbreviation`.
-
-**Decision:** Move `PARK_FACTORS` and the four league constants into
-`shared/scoring.mjs` as well, then re-export from `leagueConstants.ts`. This
+Re-export `PARK_FACTORS` and league constants from `shared/scoring.mjs`. This
 eliminates the drift risk with `build-watchability.mjs`'s hardcoded
 `WOBA_SCALE` and `LEAGUE_R_PER_PA`.
 
 ### Modify: `scripts/build-watchability.mjs`
 
-Replace the hardcoded `WOBA_SCALE = 1.24` and `LEAGUE_R_PER_PA = 0.12` (lines
-48-49) with imports from `../shared/scoring.mjs`. This closes the drift risk.
-The `FIP_CONSTANT = 3.15` duplication with `sabermetrics.ts` is left as-is for
-now (different calling conventions — see analysis in conversation).
+Replace the hardcoded `WOBA_SCALE = 1.24` and `LEAGUE_R_PER_PA = 0.12`
+(lines 48-49) with imports from `../shared/scoring.mjs`. This closes the
+drift risk. The `FIP_CONSTANT = 3.15` duplication with `sabermetrics.ts` is
+left as-is for now (different calling conventions).
 
 ### Vite Config
 
@@ -193,29 +237,50 @@ firebase init
 ### Secrets (via Firebase CLI)
 
 ```bash
-firebase functions:secrets:set DISCORD_WEBHOOK_URL
-# Paste the Discord webhook URL
+firebase functions:secrets:set TELEGRAM_BOT_TOKEN
+# Paste the bot token from @BotFather
+
+firebase functions:secrets:set TELEGRAM_CHAT_ID
+# Paste the channel chat_id (negative number, e.g. -1001234567890)
 
 firebase functions:secrets:set WATCHABILITY_JSON_URL
 # Paste the Vercel URL: https://mlb-companion.vercel.app/watchability.json
 ```
 
-## Part 3 — Cloud Functions
+## Part 3 — Telegram Bot Setup
+
+### One-time manual steps
+
+1. **Create the bot:** Message `@BotFather` on Telegram → `/newbot` →
+   follow prompts → receive bot token
+2. **Create a dedicated channel:** "MLB Companion Alerts" (or similar)
+3. **Add bot as channel admin:** Channel Settings → Administrators → Add
+   the bot → grant "Post Messages" permission
+4. **Get the channel chat_id:** Send any message in the channel, then call
+   `https://api.telegram.org/bot{token}/getUpdates` → find the `chat.id`
+   in the response (negative number starting with `-100`)
+
+### Telegram API Reference
+
+- **sendMessage:** `POST https://api.telegram.org/bot{token}/sendMessage`
+  with `{chat_id, text, parse_mode: "HTML", reply_markup: {inline_keyboard}}`
+- **HTML formatting:** `<b>`, `<i>`, `<a>`, `<code>`, `<s>`, `<u>` tags
+- **Inline keyboard:** `reply_markup: {inline_keyboard: [[{text, url}]]}`
+  — URL can deep-link to the PWA
+- **Rate limits:** 30 msgs/sec overall, 1/sec per chat. We send ~1-2 per
+  15s polling cycle. Well within limits.
+- **Message max:** 4096 chars. Our messages are ~200 chars.
+
+## Part 4 — Cloud Functions
 
 All in `functions/src/`. Each function is a single file. The entry point
 `index.ts` exports them.
 
-### `functions/src/discord.ts`
+### `functions/src/telegram.ts`
 
-Discord webhook sender. Builds rich embeds with tier-based colors.
+Telegram message sender + HTML message builder.
 
 ```ts
-const TIER_COLORS: Record<string, number> = {
-  elite: 0xe74c3c, // red
-  great: 0xe67e22, // orange
-  good:  0xf1c40f, // yellow
-}
-
 interface NotificationPayload {
   gamePk: number
   date: string
@@ -232,28 +297,65 @@ interface NotificationPayload {
   trigger: 'pregame' | 'crossing' | 'jump'
   previousScore?: number
   inning?: number | null
+  awayScore?: number | null
+  homeScore?: number | null
 }
 
-export async function sendDiscordNotification(
-  webhookUrl: string,
+export async function sendTelegramNotification(
+  botToken: string,
+  chatId: string,
   payload: NotificationPayload,
 ): Promise<void>
 ```
 
-Embed shape:
-- **Title:** `{awayAbbr} @ {homeAbbr}` — with score if live/final
-- **Color:** tier color (red/orange/yellow)
-- **Description:** trigger-specific message (see below)
-- **Fields:** Watchability score, Pregame projection, Live score (if applicable)
-- **Footer:** `MLB Companion · {date}`
+### Message Format (HTML parse_mode)
 
-### Trigger messages
+All messages include an inline keyboard button:
 
-| Trigger | Message |
-|---|---|
-| `pregame` | `Pre-game watchability: {score} ({tier}). {awayTeam} @ {homeTeam}` |
-| `crossing` | `Watchability crossed 65! {score} ({tier}) — {awayAbbr} @ {homeAbbr}, Inning {inning}` |
-| `jump` | `Watchability jumped +{delta} to {score} ({tier}) — {awayAbbr} @ {homeAbbr}, Inning {inning}` |
+```json
+{
+  "inline_keyboard": [[{
+    "text": "⚾ Open Game",
+    "url": "https://mlb-companion.vercel.app/?gamePk={gamePk}"
+  }]]
+}
+```
+
+**Pregame:**
+```
+⚾ <b>Pregame Alert</b> ⚡
+
+<b>NYY @ BOS</b> — 7:05 PM ET
+Watchability: <b>72</b> (Great)
+
+MLB Companion · 2024-08-22
+```
+
+**Live crossing:**
+```
+⚾ <b>Live Alert</b> 🔥
+
+<b>LAD @ SF</b> — Bot 7th
+Watchability crossed 65 → now <b>78</b> (Great)
+
+Live: 78 | Pregame: 61
+LAD 3 - SF 2
+
+MLB Companion · 2024-08-22
+```
+
+**Live jump:**
+```
+⚾ <b>Live Alert</b> ⚡
+
+<b>LAD @ SF</b> — Bot 8th
+Watchability jumped +12 → <b>83</b> (Elite) 🔥
+
+Live: 83 | Pregame: 61
+LAD 4 - SF 4
+
+MLB Companion · 2024-08-22
+```
 
 ### `functions/src/notify-pregame.ts`
 
@@ -267,7 +369,7 @@ export const notifyPregame = onSchedule(
   {
     schedule: 'every 10 minutes',
     timeZone: 'America/New_York',
-    secrets: ['DISCORD_WEBHOOK_URL', 'WATCHABILITY_JSON_URL'],
+    secrets: ['TELEGRAM_BOT_TOKEN', 'TELEGRAM_CHAT_ID', 'WATCHABILITY_JSON_URL'],
     memory: '256MiB',
     timeoutSeconds: 30,
   },
@@ -278,10 +380,10 @@ export const notifyPregame = onSchedule(
 Logic:
 1. Fetch `watchability.json` from Vercel (the `WATCHABILITY_JSON_URL` secret)
 2. For each game in `payload.games`:
-   - Compute pregame score using `shared/scoring.mjs` (need park factor —
-     inline `PARK_FACTORS` from the shared module)
+   - Compute pregame score using `shared/scoring.mjs` (park factor from
+     the shared `PARK_FACTORS` record)
    - If score >= 65 and `pregameNotified` is false in Firestore:
-     - Send Discord notification (trigger: `pregame`)
+     - Send Telegram notification (trigger: `pregame`)
      - Set `pregameNotified: true`, `lastNotifiedScore: score` in Firestore
 3. Skip games whose status is already Live or Final (check MLB schedule API
    for current status — or simply skip if the game's start time has passed)
@@ -293,15 +395,15 @@ notification before first pitch.
 
 ### `functions/src/notify-live.ts`
 
-Scheduled function, runs every 10 minutes. Checks live scores for games in
-progress.
+Scheduled function, runs every 1 minute. Checks live scores for games in
+progress using a 15-second in-function polling loop.
 
 ```ts
 export const notifyLive = onSchedule(
   {
-    schedule: 'every 10 minutes',
+    schedule: 'every 1 minutes',
     timeZone: 'America/New_York',
-    secrets: ['DISCORD_WEBHOOK_URL', 'WATCHABILITY_JSON_URL'],
+    secrets: ['TELEGRAM_BOT_TOKEN', 'TELEGRAM_CHAT_ID', 'WATCHABILITY_JSON_URL'],
     memory: '256MiB',
     timeoutSeconds: 60,
   },
@@ -310,58 +412,55 @@ export const notifyLive = onSchedule(
 ```
 
 Logic:
-1. Fetch today's schedule from `statsapi.mlb.com/api/v1/schedule?sportId=1&date={today}`
+1. Fetch today's schedule from
+   `statsapi.mlb.com/api/v1/schedule?sportId=1&date={today}`
 2. Filter to games with `abstractGameState === 'Live'`
-3. Fetch `watchability.json` for inputs
-4. For each live game:
-   - Fetch `winProbability` from `statsapi.mlb.com/api/v1/game/{gamePk}/winProbability`
-   - Compute `computeWatchability(inputs, baseline, plays, 'live')`
-   - Check Firestore document `notifications/{today}/{gamePk}`:
-     - **Crossing trigger:** score >= 65 and `crossingNotified` is false
-       → send notification, set `crossingNotified: true`
-     - **Jump trigger:** score >= 65 and `lastNotifiedScore` exists and
-       `score - lastNotifiedScore >= 10` and `lastNotifiedScore >= 65`
-       → send notification (trigger: `jump`, `previousScore`)
-     - Update `lastNotifiedScore: score` on every run
+3. If no live games → exit immediately (sub-second, negligible cost)
+4. Fetch `watchability.json` for inputs (once, not per poll iteration)
+5. **Polling loop** (every 15s for 55s, ~3-4 iterations per invocation):
+   - For each live game:
+     - Fetch `winProbability` from
+       `statsapi.mlb.com/api/v1/game/{gamePk}/winProbability`
+     - Compute `computeWatchability(inputs, baseline, plays, 'live')`
+     - Check Firestore document `notifications/{today}/{gamePk}`:
+       - **Crossing trigger:** score >= 65 and `crossingNotified` is false
+         and `pregameNotified` is false
+         → send notification, set `crossingNotified: true`
+         (skip crossing if pregame was already notified — avoids double-notify)
+       - **Jump trigger:** score >= 65 and `lastNotifiedScore` exists and
+         `score - lastNotifiedScore >= 10` and `lastNotifiedScore >= 65`
+         → send notification (trigger: `jump`, `previousScore`)
+       - Update `lastNotifiedScore: score` on every poll iteration
+   - Sleep 15s (using `await new Promise(r => setTimeout(r, 15000))`)
+   - Exit before 60s elapsed (before next cron fires)
 
-### `functions/src/notify.ts`
+**No overlapping invocations:** The function exits within 60 seconds. The
+next 1-minute cron fires after the previous one exits. Firebase guarantees
+no concurrent executions of the same scheduled function.
 
-HTTP function, callable from the browser. The fast path — ~30s latency when
-the app is open, vs 10 minutes for the cron.
+**Crossing trigger refinement:** If a game's pregame score was already >= 65
+and `pregameNotified` is true, the crossing trigger is suppressed. This
+prevents an immediate second alert when the live score kicks in above 65.
+The jump trigger still fires for these games if the score climbs +10 further.
+
+### `functions/src/scoring.ts`
+
+Re-export from `../../shared/scoring.mjs` with type safety for the functions
+TypeScript context.
 
 ```ts
-import { onRequest } from 'firebase-functions/v2/https'
-
-export const notify = onRequest(
-  {
-    secrets: ['DISCORD_WEBHOOK_URL'],
-    memory: '128MiB',
-    timeoutSeconds: 10,
-    cors: true,  // allows browser to call directly
-  },
-  async (req, res) => { ... }
-)
+export {
+  computePregameScore, computeExcitementIndex, computeLiveScore,
+  computeWatchability, tierFor, eloWinProbability,
+  PARK_FACTORS, WOBA_SCALE, LEAGUE_R_PER_PA,
+} from '../../shared/scoring.mjs'
 ```
-
-Logic:
-1. Parse POST body: `{ gamePk, score, tier, awayTeam, homeTeam, awayAbbr,
-   homeAbbr, state, inning, pregame, live, liveWeight, date }`
-2. Check Firestore for dedup (same logic as `notify-live`)
-3. If a notification should be sent, POST to Discord webhook
-4. Return `{ sent: boolean, reason: string }`
-
-**Why does the browser send the computed score?** Because `useWatchability`
-already computes it every 30 seconds for all live games. The function doesn't
-need to re-fetch anything — it just does dedup + Discord POST. This keeps the
-HTTP function fast (sub-second cold start path) and avoids double-fetching
-the MLB API.
 
 ### `functions/src/index.ts`
 
 ```ts
 export { notifyPregame } from './notify-pregame'
 export { notifyLive } from './notify-live'
-export { notify } from './notify'
 ```
 
 ### `functions/package.json`
@@ -407,59 +506,6 @@ functions which need Firebase SDKs.
 }
 ```
 
-## Part 4 — Frontend Threshold Detection
-
-### New: `src/hooks/useNotifications.ts`
-
-A hook that watches the `scores` Map from `useWatchability` and calls the
-Firebase HTTP function when a game crosses 65 or jumps +10.
-
-```ts
-interface UseNotificationsOptions {
-  scores: ReadonlyMap<number, WatchabilityResult>
-  games: readonly ScheduledGame[]
-  enabled: boolean  // gated by a user toggle or env var
-}
-
-export function useNotifications(options: UseNotificationsOptions): void
-```
-
-Logic:
-1. Maintains a `useRef` Map of `lastNotifiedScore` per gamePk (in-memory
-   dedup, separate from Firestore — the HTTP function does the authoritative
-   Firestore check)
-2. On each `scores` change, for each game:
-   - If score >= 65 and `lastNotifiedScore` was < 65 (or undefined):
-     → POST to Firebase HTTP function (crossing trigger)
-   - If score >= 65 and `lastNotifiedScore` >= 65 and
-     `score - lastNotifiedScore >= 10`:
-     → POST to Firebase HTTP function (jump trigger)
-   - Update `lastNotifiedScore` ref
-3. Swallows errors silently (notifications are best-effort; never block UI)
-
-**Why in-memory dedup AND Firestore dedup?** The browser may be backgrounded
-and miss score changes. When it resumes, it could see a score that's already
-65+ but was already notified by the cron. The Firestore check in the HTTP
-function is the authoritative dedup — the in-memory check just prevents
-redundant HTTP calls within a session.
-
-### Integration in `GameSelect.tsx`
-
-```tsx
-const { scores } = useWatchability(games)
-useNotifications({ scores, games, enabled: import.meta.env.VITE_NOTIFICATIONS_ENABLED === 'true' })
-```
-
-The `VITE_NOTIFICATIONS_ENABLED` env var lets the feature be toggled without
-code changes. Set it in Vercel project settings.
-
-### Notification function URL
-
-The Firebase HTTP function URL will be:
-`https://us-central1-mlb-companion.cloudfunctions.net/notify`
-
-This is passed to the frontend via `VITE_NOTIFY_FUNCTION_URL` env var.
-
 ## Part 5 — Firestore Schema
 
 ### Collection: `notifications`
@@ -476,9 +522,10 @@ interface NotificationDoc {
   pregameScore: number | null
 
   // Crossing notification (fired once when live score first crosses 65)
+  // Only fires if pregameNotified is false
   crossingNotified: boolean
 
-  // Jump tracking (updated every cron run while game is live)
+  // Jump tracking (updated every poll iteration while game is live)
   lastNotifiedScore: number
   lastNotifiedAt: Timestamp
 
@@ -520,61 +567,34 @@ Notifications accumulate over the season. Options:
 each, ~15 games/day = ~3KB/day, ~100KB/season). Not worth a cleanup function
 until the volume matters.
 
-## Part 6 — Environment Setup
+## Part 6 — File Manifest
 
-### Firebase Secrets
-
-```bash
-firebase functions:secrets:set DISCORD_WEBHOOK_URL
-firebase functions:secrets:set WATCHABILITY_JSON_URL
-# Value: https://mlb-companion.vercel.app/watchability.json
-```
-
-### Vercel Environment Variables
-
-| Variable | Value | Where |
-|---|---|---|
-| `VITE_NOTIFICATIONS_ENABLED` | `true` | Vercel Project Settings → Environment Variables |
-| `VITE_NOTIFY_FUNCTION_URL` | `https://us-central1-mlb-companion.cloudfunctions.net/notify` | Same |
-
-### Discord Webhook
-
-Create in Discord: Server Settings → Integrations → Webhooks → New Webhook
-- Name: `MLB Companion`
-- Channel: wherever you want notifications
-- Copy URL → set as `DISCORD_WEBHOOK_URL` Firebase secret
-
-## Part 7 — File Manifest
-
-### New files (16)
+### New files (14)
 
 | Path | Purpose |
 |---|---|
-| `shared/scoring.mjs` | Pure scoring math, extracted from `watchability.ts` |
+| `shared/scoring.mjs` | Pure scoring math, extracted from `watchability.ts` + `leagueConstants.ts` |
 | `shared/scoring.d.ts` | TypeScript types for the shared module |
 | `functions/package.json` | Functions package (firebase-admin, firebase-functions) |
 | `functions/tsconfig.json` | Functions TS config |
 | `functions/src/index.ts` | Entry point, exports all functions |
-| `functions/src/discord.ts` | Discord webhook sender + embed builder |
-| `functions/src/notify-pregame.ts` | Scheduled: pre-game score check (10-min) |
-| `functions/src/notify-live.ts` | Scheduled: live score check (10-min) |
-| `functions/src/notify.ts` | HTTP: real-time from browser |
+| `functions/src/telegram.ts` | Telegram sendMessage + HTML message builder + inline keyboard |
+| `functions/src/notify-pregame.ts` | Scheduled: pre-game score check (10-min cron) |
+| `functions/src/notify-live.ts` | Scheduled: live score check (1-min cron + 15s polling loop) |
 | `functions/src/scoring.ts` | Re-export from `../../shared/scoring.mjs` (type-safe wrapper) |
 | `firebase.json` | Firebase config (functions + firestore) |
 | `firestore.rules` | Firestore security rules |
 | `firestore.indexes.json` | Firestore indexes (empty, no composite needed) |
-| `src/hooks/useNotifications.ts` | Frontend threshold detection hook |
 | `.gitignore` additions | `functions/lib/`, `functions/node_modules/`, `.firebase/` |
-| `docs/NOTIFICATIONS_PLAN.md` | This document |
+| `docs/LIVE_NOTIFICATIONS_PLAN.md` | This document |
 
-### Modified files (4)
+### Modified files (3)
 
 | Path | Changes |
 |---|---|
 | `src/utils/watchability.ts` | Re-export from `shared/scoring.mjs` instead of defining inline |
-| `src/utils/leagueConstants.ts` | Re-export `PARK_FACTORS` + 4 constants from `shared/scoring.mjs` |
+| `src/utils/leagueConstants.ts` | Re-export `PARK_FACTORS` + league constants from `shared/scoring.mjs` |
 | `scripts/build-watchability.mjs` | Import `WOBA_SCALE`, `LEAGUE_R_PER_PA` from `shared/scoring.mjs` |
-| `src/components/GameSelect/GameSelect.tsx` | Add `useNotifications` hook call |
 
 ### Unchanged (key files)
 
@@ -584,10 +604,11 @@ Create in Discord: Server Settings → Integrations → Webhooks → New Webhook
 | `vercel.json` | Still pure static SPA — Firebase handles the backend |
 | `.github/workflows/watchability.yml` | Nightly build unchanged |
 | `package.json` (root) | No new frontend deps |
-| `src/hooks/useWatchability.ts` | Already polls all live games; scores Map feeds notifications |
-| `src/api/mlb.ts` | `fetchWinProbability` already exists, used by functions too (via direct fetch) |
+| `src/hooks/useWatchability.ts` | Scores for UI display only; no notification sending |
+| `src/components/GameSelect/GameSelect.tsx` | No notification hook integration needed |
+| `src/api/mlb.ts` | Functions use direct `fetch`, not the frontend API client |
 
-## Part 8 — Implementation Order
+## Part 7 — Implementation Order
 
 1. **Extract shared scoring module**
    - Create `shared/scoring.mjs` with all pure math + constants from
@@ -603,54 +624,41 @@ Create in Discord: Server Settings → Integrations → Webhooks → New Webhook
 2. **Create Firebase project**
    - `firebase init` in repo root
    - Select Functions (TypeScript) + Firestore
-   - Set secrets via CLI
+   - Set secrets via CLI (`TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`,
+     `WATCHABILITY_JSON_URL`)
 
-3. **Implement `functions/src/discord.ts`**
-   - Embed builder with tier colors
-   - Webhook POST sender
+3. **Implement `functions/src/telegram.ts`**
+   - HTML message builder for pregame / crossing / jump triggers
+   - Inline keyboard with "Open Game" deep-link button
+   - sendMessage POST sender
    - Test with a hardcoded payload locally
 
-4. **Implement `functions/src/notify.ts`** (HTTP function)
-   - Parse request body
-   - Firestore dedup check
-   - Call `discord.sendDiscordNotification`
-   - Deploy: `firebase deploy --only functions:notify`
-   - Test with curl
-
-5. **Implement `functions/src/notify-pregame.ts`**
+4. **Implement `functions/src/notify-pregame.ts`**
    - Fetch `watchability.json`
    - Compute pregame scores (using shared scoring module)
    - Firestore dedup
    - Deploy and test
 
-6. **Implement `functions/src/notify-live.ts`**
+5. **Implement `functions/src/notify-live.ts`**
    - Fetch schedule, filter live games
-   - Fetch winProbability for each
-   - Compute live watchability
-   - Crossing + jump triggers
-   - Firestore dedup
+   - 15-second polling loop (fetch winProbability, compute live watchability)
+   - Crossing + jump triggers with dedup
+   - Crossing suppression when pregameNotified is true
    - Deploy and test
 
-7. **Implement `src/hooks/useNotifications.ts`**
-   - In-memory dedup ref
-   - POST to Firebase HTTP function
-   - Silent error handling
-
-8. **Integrate in `GameSelect.tsx`**
-   - Add `useNotifications` call
-   - Set `VITE_NOTIFICATIONS_ENABLED` and `VITE_NOTIFY_FUNCTION_URL` in
-     `.env.local` for dev testing
-
-9. **Deploy Firestore rules**
+6. **Deploy Firestore rules**
    - `firebase deploy --only firestore:rules`
 
-10. **End-to-end test**
-    - Set Discord webhook
-    - Trigger `notify-pregame` via `firebase functions:shell`
-    - Open app, verify crossing notification fires
-    - Wait for a live game, verify cron fires
+7. **End-to-end test**
+   - Set Telegram bot token + chat ID
+   - Trigger `notify-pregame` via `firebase functions:shell`
+   - Wait for a live game, verify 1-min cron + 15s polling fires
+   - Verify crossing notification fires within ~15s of threshold crossing
+   - Verify jump notification fires on +10 swing
+   - Verify dedup: run same function twice → no duplicate notification
+   - Verify inline button opens PWA with correct gamePk
 
-## Part 9 — Verification
+## Part 8 — Verification
 
 ### Build checks (run after each step that touches frontend code)
 
@@ -671,43 +679,49 @@ cd functions && npx tsc --noEmit  # Functions type-check
 
 1. **Scoring module extraction:** Open app, verify watchability scores on
    game cards are identical to before the refactor
-2. **HTTP function:** `curl -X POST <function-url> -H 'Content-Type: application/json' -d '{...}'`
-   → verify Discord message appears
-3. **Pre-game cron:** `firebase functions:shell` → call `notifyPregame()` →
-   verify Discord message for games >= 65
-4. **Live cron:** Same, call `notifyLive()` during a live game
-5. **Frontend hook:** Open app during a live game that crosses 65 → verify
-   Discord message within ~30s
-6. **Dedup:** Run the same cron twice → verify no duplicate notification
-7. **Jump trigger:** During a live game already above 65, wait for a +10
+2. **Pregame cron:** `firebase functions:shell` → call `notifyPregame()` →
+   verify Telegram message for games >= 65
+3. **Live cron:** Same, call `notifyLive()` during a live game → verify
+   crossing notification within ~15s
+4. **Dedup:** Run the same cron twice → verify no duplicate notification
+5. **Jump trigger:** During a live game already above 65, wait for a +10
    swing → verify jump notification fires
-
-### iOS PWA limitation
-
-iOS Safari kills JS when a PWA is backgrounded. The frontend `useNotifications`
-hook only fires while the app is in the foreground. The 10-minute cron is the
-safety net for when the app is closed. This is an acceptable tradeoff — the
-cron catches everything within 10 minutes, and the frontend path provides
-near-real-time when the user is actively watching.
+6. **Crossing suppression:** For a game with pregame >= 65, verify no
+   crossing notification fires when live score starts >= 65 (only jump
+   notifications should fire)
+7. **Inline button:** Tap "⚾ Open Game" in Telegram → verify PWA opens
+   with the correct game loaded
 
 ## Cost Analysis
 
-### Firebase Free Tier
+### Firebase Free Tier (1-min cron + 15s polling)
 
 | Resource | Free quota | Expected usage |
 |---|---|---|
-| Function invocations | 2M/month | ~6K/month (10-min cron × 12hr × 30 days × 2 + browser calls) |
-| Function compute time | 400K GB-sec/month | ~3K GB-sec (256MiB × 30s × 360 runs) |
-| Firestore reads | 50K/day | ~30/day (15 games × 2 cron runs) |
-| Firestore writes | 20K/day | ~15/day |
+| Function invocations | 2M/month | ~32K/month (1-min cron × 12hr × 30 days live + 10-min pregame) |
+| Function compute (GB-sec) | 400K/month | ~200K GB-sec (256MiB × ~60s × ~360 live runs + ~720 pregame × 10s) |
+| Firestore reads | 50K/day | ~29K/day (~360 live runs × ~9 live games + ~144 pregame runs × ~15 games) |
+| Firestore writes | 20K/day | ~30/day (notifications + score updates) |
 | Firestore storage | 1 GiB | ~100KB/season |
+| MLB API calls | Free (no published limit) | ~17K/day (~360 runs × ~9 games + pregame fetches) |
 
-All well within free tier. No cost expected.
+All within free tier. Function compute is the tightest at ~50% of the free
+quota, but only on days with many live games. Most days will be far less.
+
+**Note:** The `notify-live` function exits immediately (sub-second) when no
+games are live, so the 1-min cron is nearly free during off-hours. The
+15s polling loop only runs during live games (~3-4 hours/day typically).
 
 ### GitHub Actions
 
 The nightly build workflow is unchanged. 2 runs/day × ~60s = ~60 minutes/month.
 Well within the 2,000 free minutes.
+
+### Telegram
+
+Free. No published per-message cost for bots. Rate limit: 30 msgs/sec
+overall, 1/sec per chat. We send ~1-2 messages per 15s polling cycle —
+well within limits.
 
 ## Future Considerations
 
@@ -716,8 +730,10 @@ Well within the 2,000 free minutes.
   thresholds could be tuned after backtesting.
 - **User preferences:** Currently all-or-nothing. Could add per-tier
   thresholds (e.g., only Elite) via a settings UI.
-- **Multi-channel:** Discord webhook is the first target. The `discord.ts`
-  module could be abstracted to support Slack, Telegram, etc.
-- **Live play context:** The `notify` HTTP function could accept additional
-  context (e.g., "Mason Miller entering 9th") from the browser, which has the
-  full live feed. The browser knows the current play; the cron doesn't.
+- **Multi-channel:** The `telegram.ts` module could be abstracted to support
+  Discord, Slack, etc. as alternative delivery channels.
+- **Live play context:** The `notify-live` function could enrich messages
+  with play context (e.g., "Mason Miller entering 9th") by fetching the
+  live feed endpoint alongside winProbability.
+- **Cleanup function:** A weekly cron to delete Firestore notification docs
+  older than 7 days, if manual cleanup becomes tedious.

@@ -25,7 +25,7 @@ The following docs are the source of truth and MUST be updated in the same commi
 | `DESIGN.md` §2 | Color system — all hex values in `chartTheme.ts` must match |
 | `DESIGN.md` §5 | Percentile bands — heat ramp values must match `chartTheme.ts` `HEAT_RAMP` |
 | `DESIGN.md` §9 | Change protocol — update when the lint-guard or design-check workflow changes |
-| `docs/` | Any plan docs (e.g. `NOTIFICATIONS_PLAN.md`) must reflect current implementation status |
+| `docs/` | Any plan docs (e.g. `LIVE_NOTIFICATIONS_PLAN.md`) must reflect current implementation status |
 
 ## Lint & Type Checks
 
