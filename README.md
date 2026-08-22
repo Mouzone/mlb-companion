@@ -53,6 +53,21 @@ src/
                                            Exports fetchSavantGameFeed (GET /gf?game_pk=N) and
                                            fetchSavantBattedBalls (GET /statcast_search/csv?...), plus internal
                                            parseSavantCSV and parseCSVLine. Imported by App.tsx and usePlayerStats.
+    benchmarks.ts                         League-wide percentile-benchmark cohort fetcher. Exports
+                                           fetchActiveBenchmarkCohorts(scope: BenchmarkScope, season:
+                                           string), which batches ~200 players per call into batters,
+                                           starters, and relievers cohorts. Also exports types
+                                           BenchmarkScope, PitcherRole, BenchmarkPlayerStat<T>,
+                                           SeasonBenchmarkCohorts, CareerBenchmarkCohorts, and
+                                           ActiveBenchmarkCohorts (union of the two). Imported by App.tsx
+                                           (preload) and useStatBenchmarks.
+    playerStatsCache.ts                   Module-level promise caches for game-log and career-vs-player
+                                           fetches. Exports fetchCachedGameLog(personId, season, group)
+                                           and fetchCachedCareerVsPlayer(batterId, pitcherId), keyed on
+                                           person/season/group and batter/pitcher respectively. A failed
+                                           promise is evicted from the cache so a transient error is not
+                                           sticky for the session. Imported by App.tsx, MatchupSubTab,
+                                           PitchingSubTab.
 
   store/
     gameStore.ts                          Single zustand store (useGameStore). See section 6 for full shape.
@@ -121,6 +136,11 @@ src/
                                            REQUIRED_BASELINE_KEYS before use; an unrecognised shape (a cached
                                            payload outliving a pipeline schema change) is discarded rather than
                                            allowed to throw mid-render. Imported by GameSelect.
+    useStatBenchmarks.ts                  useStatBenchmarks(scope: BenchmarkScope) => { cohorts, loading }.
+                                           Fetches ActiveBenchmarkCohorts for the current year on mount; the
+                                           cohort object is null until the first successful resolution. Used
+                                           by PitcherVsBatter to pass season/career benchmark data to the
+                                           stat-card cells. Imported by PitcherVsBatter.
 
   utils/
     pitchConstants.ts                     Exports PITCH_COLORS (Record<string,string>, keys FF SI FC SL ST CU KC
@@ -154,6 +174,30 @@ src/
                                            (WEIGHTS, HOME_FIELD_ELO), and functions eloWinProbability, tierFor,
                                            computePregameScore, computeExcitementIndex, computeLiveScore,
                                            computeWatchability. Imported by useWatchability.
+    chartTheme.ts                         Single source of truth for all canvas/chart hex colors. Exports
+                                           PITCH_COLORS, PITCH_COLOR_LOOKUP, getPitchColor, CALL_COLORS,
+                                           HEAT_RAMP, HEAT_EMPTY, TEMP_COLORS, EVENT_COLORS, CHART, FIELD,
+                                           BASE_VALUE_COLORS, readableInkOn, and type PitchCode. Values
+                                           mirror DESIGN.md §2 (Color). Enforced by scripts/design-checks.mjs:
+                                           no raw hex literals may appear in Canvas/*.tsx or
+                                           pitchConstants.ts. Imported by ArsenalBars, HeatMap, SprayChart.
+    gameDay.ts                            Exports gameDateStr(now = new Date()): returns a YYYY-MM-DD string
+                                           anchored to a 6 AM local rollover (not midnight), so late West
+                                           Coast games that finish after midnight are not dropped from the
+                                           slate. Imported by GameSelect, useWatchability.
+    mlbAssets.ts                          MLB imagery URL builder (no fetch, no cache — pure string
+                                           composition). Exports teamLogoUrl(teamId, variant), where variant
+                                           is 'cap-on-light' | 'cap-on-dark' | 'primary-on-light' |
+                                           'primary-on-dark' | 'default'; playerHeadshotUrl(personId, size),
+                                           where size is 'sm' | 'md' | 'lg' | 'xl'; playerSpotUrl; and type
+                                           aliases TeamLogoVariant, HeadshotSize. Imported by PlayerAvatar,
+                                           TeamLogo.
+    percentile.ts                         Exports StatBenchmark (interface: percentile, sampleSize, cohort)
+                                           and percentileBenchmark(value, cohortValues, lowerIsBetter,
+                                           cohort) => StatBenchmark | undefined. Computes the percentile
+                                           rank of a value against a cohort array; returns undefined for
+                                           null/non-finite values or empty cohorts. Imported by
+                                           PvbBenchmarks, PvbCards, Stat (UI).
 
   components/
     GameSelect/GameSelect.tsx             Pre-game picker. Fetches fetchSchedule(todayStr()) on mount, groups
@@ -237,7 +281,12 @@ src/
                                            probables. Calls usePlayerStats(batterId, pitcherId) and
                                            fetchCareerStats independently for pitcher and batter career rows.
                                            Computes park-adjusted sabermetric cells for the swipe cards using
-                                           utils/sabermetrics.ts and utils/leagueConstants.ts. Dispatches to
+                                           utils/sabermetrics.ts and utils/leagueConstants.ts. Also calls
+                                           useStatBenchmarks(scope) to load league-wide percentile cohorts,
+                                           passing them to benchmarkBatterCells / benchmarkPitcherCells
+                                           (PvbBenchmarks.ts, which calls percentileBenchmark) so each stat
+                                           card displays its percentile band and heat colour (see DESIGN.md
+                                           §2.3 + §5). Dispatches to
                                            MatchupSubTab, PitchingSubTab, or BattingSubTab based on
                                            gameStore.activeSubTab. Imported by App.tsx.
     PitcherVsBatter/MatchupSubTab.tsx     H2H career/series toggle (gameStore-independent local `scope` state:
