@@ -415,8 +415,9 @@ functions/
   src/notify-live.ts                      Scheduled Cloud Function (every 1 min, America/New_York).
                                           Fetches MLB schedule, filters to live games, runs a 15-second
                                           polling loop (max 55s) fetching winProbability and computing
-                                          live watchability. Sends crossing (first score >= 65) and jump
-                                          (+10 from last notified) alerts, deduplicates via Firestore.
+                                          live watchability. Sends crossing (first score >= 65, re-fires if
+                                          score drops below 65 and recovers) and jump (+10 from last notified
+                                          score) alerts, deduplicates via Firestore.
 
 firebase.json                             Firebase config: functions source "functions", runtime nodejs22,
                                           Firestore rules and indexes paths. The predeploy hook invokes tsc
@@ -487,8 +488,9 @@ Baseball Savant (baseballsavant   ──┘                            │
   visibilitychange.
 - **Telegram notifications** run entirely server-side via Firebase Cloud Functions, separate from the browser.
   `notify-pregame` (10-min cron) checks pregame scores and sends alerts for games >= 65. `notify-live` (1-min
-  cron with 15s in-function polling loop) sends crossing alerts (first live score >= 65) and jump alerts (+10
-  from last notified score). `liveScores` (HTTP onRequest) serves the frontend's `useLiveScores` hook with
+  cron with 15s in-function polling loop) sends crossing alerts (live score crosses 65, re-fires after
+  dropping below 65) and jump alerts (+10 from last notified score). `liveScores` (HTTP onRequest) serves
+  the frontend's `useLiveScores` hook with
   per-game watchability scores and current pitcher info. Both notification functions deduplicate via Firestore
   `notifications/{date}/games/{gamePk}` documents. No notification logic runs in the browser. See
   `docs/LIVE_NOTIFICATIONS_PLAN.md` for the full design.

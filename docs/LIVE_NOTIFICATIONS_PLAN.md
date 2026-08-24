@@ -438,9 +438,12 @@ Logic:
 2. For each game in `payload.games`:
    - Compute pregame score using `shared/scoring.mjs` (park factor from
      the shared `PARK_FACTORS` record)
-   - If score >= 65 and `pregameNotified` is false in Firestore:
-     - Send Telegram notification (trigger: `pregame`)
-     - Set `pregameNotified: true`, `lastNotifiedScore: score` in Firestore
+    - If score >= 65 and `pregameNotified` is false in Firestore:
+      - Send Telegram notification (trigger: `pregame`)
+      - Set `pregameNotified: true`, `crossingNotified: true`,
+        `lastNotifiedScore: score` in Firestore
+        (`crossingNotified: true` suppresses the first live crossing alert
+        since pregame already notified the user)
 3. Skip games whose status is already Live or Final (check MLB schedule API
    for current status — or simply skip if the game's start time has passed)
 
@@ -480,13 +483,15 @@ Logic:
      - Compute `computeWatchability(inputs, baseline, plays, 'live')`
      - Check Firestore document `notifications/{today}/{gamePk}`:
        - **Crossing trigger:** score >= 65 and `crossingNotified` is false
-         and `pregameNotified` is false
-         → send notification, set `crossingNotified: true`
-         (skip crossing if pregame was already notified — avoids double-notify)
+         → send notification, set `crossingNotified: true`,
+         `lastNotifiedScore: score`
        - **Jump trigger:** score >= 65 and `lastNotifiedScore` exists and
          `score - lastNotifiedScore >= 10` and `lastNotifiedScore >= 65`
-         → send notification (trigger: `jump`, `previousScore`)
-       - Update `lastNotifiedScore: score` on every poll iteration
+         → send notification (trigger: `jump`, `previousScore`),
+         set `lastNotifiedScore: score`
+       - **Re-crossing reset:** score < 65 and `crossingNotified` is true
+         → set `crossingNotified: false` (allows a new crossing alert when
+         the score re-enters the 65+ zone)
    - Sleep 15s (using `await new Promise(r => setTimeout(r, 15000))`)
    - Exit before 60s elapsed (before next cron fires)
 
@@ -494,10 +499,15 @@ Logic:
 next 1-minute cron fires after the previous one exits. Firebase guarantees
 no concurrent executions of the same scheduled function.
 
-**Crossing trigger refinement:** If a game's pregame score was already >= 65
-and `pregameNotified` is true, the crossing trigger is suppressed. This
-prevents an immediate second alert when the live score kicks in above 65.
-The jump trigger still fires for these games if the score climbs +10 further.
+**`lastNotifiedScore` is only updated when a notification fires** (crossing
+or jump), not on every poll. This ensures the +10 jump delta is measured
+against the last *notified* score, not the last *seen* score.
+
+**Crossing trigger and pregame:** When pregame fires, it sets
+`crossingNotified: true`, which suppresses the first live crossing alert
+(avoiding a double-notify). If the live score later drops below 65, the
+re-crossing reset clears `crossingNotified`, and a new crossing alert fires
+when the score re-enters 65+.
 
 ### `functions/src/scoring.ts`
 
@@ -692,11 +702,11 @@ interface NotificationDoc {
   pregameNotified: boolean
   pregameScore: number | null
 
-  // Crossing notification (fired once when live score first crosses 65)
-  // Only fires if pregameNotified is false
+  // Crossing notification (fired when live score crosses 65)
+  // Reset to false when score drops below 65, allowing re-crossing alerts
   crossingNotified: boolean
 
-  // Jump tracking (updated every poll iteration while game is live)
+  // Jump tracking (only updated when a notification fires)
   lastNotifiedScore: number
   lastNotifiedAt: Timestamp
 
@@ -817,8 +827,8 @@ until the volume matters.
 5. **Implement `functions/src/notify-live.ts`**
    - Fetch schedule, filter live games
    - 15-second polling loop (fetch winProbability, compute live watchability)
-   - Crossing + jump triggers with dedup
-   - Crossing suppression when pregameNotified is true
+    - Crossing + jump triggers with dedup
+    - Re-crossing reset when score drops below 65
    - Deploy and test
 
 6. **Implement `src/hooks/useLiveSlate.ts`**

@@ -147,12 +147,11 @@ export const notifyLive = onSchedule(
         const docSnap = await docRef.get()
         const data = docSnap.exists ? docSnap.data() : null
 
-        const pregameNotified = data?.pregameNotified ?? false
         const crossingNotified = data?.crossingNotified ?? false
         const lastNotifiedScore = data?.lastNotifiedScore ?? null
 
-        // Crossing trigger: score >= 65, not yet notified, and pregame wasn't notified
-        if (score >= 65 && !crossingNotified && !pregameNotified) {
+        // Crossing trigger: score >= 65, not yet notified for this crossing
+        if (score >= 65 && !crossingNotified) {
           const notification: NotificationPayload = {
             gamePk: game.gamePk,
             date: today,
@@ -225,17 +224,10 @@ export const notifyLive = onSchedule(
           continue
         }
 
-        // Always update lastNotifiedScore on every poll iteration
-        if (lastNotifiedScore !== score) {
+        // Reset crossing flag when score drops below 65, allowing re-crossing alerts
+        if (score < 65 && crossingNotified) {
           await docRef.set(
-            {
-              lastNotifiedScore: score,
-              lastNotifiedAt: new Date(),
-              gamePk: game.gamePk,
-              awayAbbr: game.awayAbbr,
-              homeAbbr: game.homeAbbr,
-              createdAt: docSnap.exists ? data?.createdAt : new Date(),
-            },
+            { crossingNotified: false },
             { merge: true },
           )
         }

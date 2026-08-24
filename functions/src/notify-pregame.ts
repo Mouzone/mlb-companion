@@ -87,7 +87,7 @@ export const notifyPregame = onSchedule(
         {
           pregameNotified: true,
           pregameScore: score,
-          crossingNotified: false,
+          crossingNotified: true,
           lastNotifiedScore: score,
           lastNotifiedAt: new Date(),
           gamePk: game.gamePk,
