@@ -35,3 +35,4 @@ dist-ssr
 functions/lib/
 functions/node_modules/
 .firebase/
+shared/*.js

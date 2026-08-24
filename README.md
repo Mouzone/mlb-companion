@@ -389,7 +389,11 @@ functions/
                                           npm dependencies" constraint applies to src/, not to serverless
                                           functions.
   tsconfig.json                           Functions TS config: ESNext module, bundler resolution, ES2022
-                                          target, strict mode, outDir lib/.
+                                          target, strict mode, allowJs, outDir lib/. rootDir is ".." and
+                                          include covers ../shared so shared/scoring.mjs is compiled into
+                                          functions/lib — Firebase only uploads the functions/ directory,
+                                          so shared code must be emitted inside it. This nests the output,
+                                          hence "main": "lib/functions/src/index.js".
   src/index.ts                            Entry point. Exports notifyPregame and notifyLive.
   src/scoring.ts                          Re-export from ../../shared/scoring.mjs with type safety via
                                           ../../shared/scoring-types.ts. Exports computePregameScore,
@@ -404,7 +408,7 @@ functions/
   src/notify-pregame.ts                   Scheduled Cloud Function (every 10 min, America/New_York).
                                           Fetches watchability.json, computes pregame scores via
                                           shared/scoring.mjs, sends Telegram alerts for games scoring >= 65,
-                                          deduplicates via Firestore notifications/{date}/{gamePk}.
+                                          deduplicates via Firestore notifications/{date}/games/{gamePk}.
   src/notify-live.ts                      Scheduled Cloud Function (every 1 min, America/New_York).
                                           Fetches MLB schedule, filters to live games, runs a 15-second
                                           polling loop (max 55s) fetching winProbability and computing
@@ -412,8 +416,12 @@ functions/
                                           (+10 from last notified) alerts, deduplicates via Firestore.
 
 firebase.json                             Firebase config: functions source "functions", runtime nodejs22,
-                                          predeploy npm build. Firestore rules and indexes paths.
-firestore.rules                           Firestore security rules: notifications/{date}/{gamePk} allows
+                                          Firestore rules and indexes paths. The predeploy hook invokes tsc
+                                          directly instead of "npm run build" — npm crashes with "Cannot
+                                          read properties of undefined (reading 'stdin')" when spawned by
+                                          the Firebase CLI.
+.firebaserc                               Firebase project alias: default -> mlb-companion-pwa.
+firestore.rules                           Firestore security rules: notifications/{date}/games/{gamePk} allows
                                           read/write only from Cloud Functions (Admin SDK), no client access.
 firestore.indexes.json                    Empty — all queries are direct document lookups by {date}/{gamePk}.
 
@@ -476,7 +484,7 @@ Baseball Savant (baseballsavant   ──┘                            │
 - **Telegram notifications** run entirely server-side via Firebase Cloud Functions, separate from the browser.
   `notify-pregame` (10-min cron) checks pregame scores and sends alerts for games >= 65. `notify-live` (1-min
   cron with 15s in-function polling loop) sends crossing alerts (first live score >= 65) and jump alerts (+10
-  from last notified score). Both deduplicate via Firestore `notifications/{date}/{gamePk}` documents. No
+  from last notified score). Both deduplicate via Firestore `notifications/{date}/games/{gamePk}` documents. No
   notification logic runs in the browser. See `docs/LIVE_NOTIFICATIONS_PLAN.md` for the full design.
 
 ## 4. API Endpoints Reference

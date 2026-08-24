@@ -1,8 +1,26 @@
 # Live Game Experience Plan
 
-> **Status: Implemented** — All parts (1–7) are complete. Parts 2–3 (Firebase
-> project setup, Telegram bot creation) require one-time manual steps before
-> the functions can be deployed.
+> **Status: Deployed** — All parts (1–7) are complete and live in production.
+>
+> - Firebase project: `mlb-companion-pwa` (Blaze plan)
+> - Functions: `notifyPregame` (every 10 min) and `notifyLive` (every 1 min),
+>   both Node.js 22 gen-2 in `us-central1`, 256 MiB
+> - Secrets in Secret Manager: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`,
+>   `WATCHABILITY_JSON_URL`
+> - Telegram delivers to a private DM chat (not a channel), so no bot admin
+>   setup is required
+> - Firestore rules deployed: `notifications/{date}/games/{gamePk}` is
+>   Admin-SDK-only (`allow read, write: if false`)
+>
+> **Build note:** `functions/tsconfig.json` sets `rootDir: ".."` and includes
+> `../shared` so the shared scoring module is emitted into `functions/lib`.
+> Firebase only uploads the `functions/` directory, so the shared code must be
+> compiled inside it. This shifts the entry point, hence
+> `"main": "lib/functions/src/index.js"`.
+>
+> **Deploy note:** the `predeploy` hook invokes `tsc` directly rather than
+> `npm run build`; npm crashes with `Cannot read properties of undefined
+> (reading 'stdin')` when spawned by the Firebase CLI.
 
 Two related improvements bundled as one refactor:
 
@@ -54,7 +72,7 @@ Two related improvements bundled as one refactor:
 │  │                                      POST Telegram sendMessage│
 │  │                                    exit before next cron      │
 │  │                                                               │
-│  Firestore: notifications/{date}/{gamePk}                        │
+│  Firestore: notifications/{date}/games/{gamePk}                        │
 │    crossingNotified: boolean                                     │
 │    lastNotifiedScore: number                                     │
 │    pregameNotified: boolean                                      │
@@ -663,7 +681,7 @@ reasonable usage.
 
 ### Collection: `notifications`
 
-Document path: `notifications/{date}/{gamePk}`
+Document path: `notifications/{date}/games/{gamePk}`
 
 ```ts
 interface NotificationDoc {
@@ -696,7 +714,7 @@ interface NotificationDoc {
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /notifications/{date}/{gamePk} {
+    match /notifications/{date}/games/{gamePk} {
       // Only Cloud Functions can read/write (using Admin SDK)
       // No client access — the browser never touches Firestore directly
       allow read, write: if false;

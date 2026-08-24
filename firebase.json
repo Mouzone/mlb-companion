@@ -2,7 +2,7 @@
   "functions": {
     "source": "functions",
     "runtime": "nodejs22",
-    "predeploy": ["npm --prefix functions run build"]
+    "predeploy": ["$RESOURCE_DIR/node_modules/.bin/tsc -p $RESOURCE_DIR"]
   },
   "firestore": {
     "rules": "firestore.rules",
