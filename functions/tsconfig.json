@@ -5,8 +5,10 @@
     "target": "ES2022",
     "strict": true,
     "esModuleInterop": true,
+    "allowJs": true,
+    "rootDir": "..",
     "outDir": "lib",
     "skipLibCheck": true
   },
-  "include": ["src"]
+  "include": ["src", "../shared"]
 }

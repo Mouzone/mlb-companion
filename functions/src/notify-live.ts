@@ -17,7 +17,7 @@ import { initializeApp } from 'firebase-admin/app'
 import { computeWatchability, PARK_FACTORS, tierFor } from './scoring.js'
 import { sendTelegramNotification, type NotificationPayload } from './telegram.js'
 
-import type { WatchabilityPayload, WinProbabilityPlay } from '../../shared/scoring.mjs'
+import type { WatchabilityPayload, WinProbabilityPlay } from '../../shared/scoring-types.js'
 
 const POLL_INTERVAL_MS = 15_000
 const MAX_RUNTIME_MS = 55_000

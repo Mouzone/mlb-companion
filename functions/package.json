@@ -1,7 +1,7 @@
 {
   "name": "mlb-companion-functions",
   "type": "module",
-  "main": "lib/index.js",
+  "main": "lib/functions/src/index.js",
   "scripts": {
     "build": "tsc",
     "serve": "firebase emulators:start --only functions,firestore",

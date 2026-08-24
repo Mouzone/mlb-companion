@@ -12,7 +12,7 @@ import { initializeApp } from 'firebase-admin/app'
 import { computePregameScore, PARK_FACTORS } from './scoring.js'
 import { sendTelegramNotification, type NotificationPayload } from './telegram.js'
 
-import type { WatchabilityPayload, PayloadGame } from '../../shared/scoring.mjs'
+import type { WatchabilityPayload, PayloadGame } from '../../shared/scoring-types.js'
 
 initializeApp()
 
