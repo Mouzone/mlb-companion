@@ -141,18 +141,27 @@ src/
                                            cohort object is null until the first successful resolution. Used
                                            by PitcherVsBatter to pass season/career benchmark data to the
                                            stat-card cells. Imported by PitcherVsBatter.
+    useLiveSlate.ts                       useLiveSlate(date) => { games, loading, refresh }. Adaptive schedule
+                                           polling hook that replaces the one-shot fetchSchedule pattern in
+                                           GameSelect. Uses recursive setTimeout (not setInterval) so cadence
+                                           adapts after each fetch: 15s when any game is Live, 30s when all
+                                           Preview, stops when all Final. Pauses when document.hidden; resumes
+                                           with immediate refresh on visibilitychange. On fetch error keeps
+                                           existing games (does not clobber with empty array). Imported by
+                                           GameSelect.
 
   utils/
     pitchConstants.ts                     Exports PITCH_COLORS (Record<string,string>, keys FF SI FC SL ST CU KC
                                            CH FS KN FO SC EP) and getPitchColor(code): falls back to '#888888' for
                                            unknown codes. Imported by ArsenalBars, ZonePlot, BatterGameSubTab,
                                            MatchupSubTab.
-    leagueConstants.ts                    Exports LEAGUE_ERA (4.20), LEAGUE_WOBA (0.310), WOBA_SCALE (1.24),
-                                           LEAGUE_R_PER_PA (0.120), and PARK_FACTORS (Record<string, number>, 30
-                                           team-abbreviation keys). Hardcoded; must be updated annually before
-                                           each season (see section 9). Imported by PitcherVsBatter and (for
-                                           PARK_FACTORS only) useWatchability, which reattaches park factor onto
-                                           the watchability payload client-side.
+    leagueConstants.ts                    Thin re-export layer for constants in shared/scoring.mjs. Exports
+                                           LEAGUE_ERA (4.20), LEAGUE_WOBA (0.310), WOBA_SCALE (1.24),
+                                           LEAGUE_R_PER_PA (0.120), and PARK_FACTORS (Record<string, number>,
+                                           30 team-abbreviation keys). Hardcoded in the shared module; must be
+                                           updated annually before each season (see section 9). Imported by
+                                           PitcherVsBatter and (for PARK_FACTORS only) useWatchability, which
+                                           reattaches park factor onto the watchability payload client-side.
     sabermetrics.ts                       Pure computation functions: computeFIP, computeERAplus, computeWRCplus,
                                            computeISO, computeKpct, computeBBpct, computeHR9, computeGBpct,
                                            parseStat, ipToDecimal. See section 7 for formulas. Imported by
@@ -166,14 +175,17 @@ src/
                                            pitcher, (5) null. This replaces a copy-pasted 5-line fallback that was
                                            duplicated in App.tsx, PitcherVsBatter, PitchingSubTab, MatchupSubTab, and
                                            BattingSubTab. Imported by all five of those files.
-    watchability.ts                       Client-side watchability scoring engine (~640 lines, zero deps). See
-                                           section 12 for the full formula. Exports types (Baseline,
-                                           LeagueBaseline, TeamRating, PitcherRating, GameInputs, PayloadGame,
+    watchability.ts                       Thin re-export layer for the shared scoring module. Runtime math
+                                           and constants are imported from shared/scoring.mjs and re-exported
+                                           with explicit type annotations from shared/scoring-types.ts. All
+                                           existing exports preserved: types (Baseline, LeagueBaseline,
+                                           TeamRating, PitcherRating, GameInputs, PayloadGame,
                                            WatchabilityPayload, WinProbabilityPlay, ScoreBreakdown,
                                            WatchabilityResult, WatchabilityTier, GameProgressState), constants
                                            (WEIGHTS, HOME_FIELD_ELO), and functions eloWinProbability, tierFor,
                                            computePregameScore, computeExcitementIndex, computeLiveScore,
-                                           computeWatchability. Imported by useWatchability.
+                                           computeWatchability. Imported by useWatchability, ScoreRing,
+                                           mlb.ts (for WinProbabilityPlay type).
     chartTheme.ts                         Single source of truth for all canvas/chart hex colors. Exports
                                            PITCH_COLORS, PITCH_COLOR_LOOKUP, getPitchColor, CALL_COLORS,
                                            HEAT_RAMP, HEAT_EMPTY, TEMP_COLORS, EVENT_COLORS, CHART, FIELD,
@@ -200,18 +212,20 @@ src/
                                            PvbBenchmarks, PvbCards, Stat (UI).
 
   components/
-    GameSelect/GameSelect.tsx             Pre-game picker. Fetches fetchSchedule(todayStr()) on mount, groups
-                                           games into Live / Upcoming (Preview) / Final by
-                                           status.abstractGameState, renders GameCard buttons that call
-                                            gameStore.selectGame on click. Its `.game-select` container is this
-                                            screen's single scroll owner (see section 8). Calls
-                                            useWatchability(games) and passes each game's score down to its
-                                            GameCard. Renders a Segmented (Time | Watchability) sort control under
-                                            the date line; sorting happens within each Live/Upcoming/Final group
-                                            so that grouping survives a sort change, and scoreless games sort
-                                            last rather than as zero. Initial sort mode reads `?sort=watchability`
-                                            via initialSortMode(), which backs the PWA manifest shortcut (section
-                                            10). Imported by App.tsx.
+    GameSelect/GameSelect.tsx             Pre-game picker. Calls useLiveSlate(gameDateStr()) for adaptive
+                                           schedule polling (15s when any game is Live, 30s when all Preview,
+                                           stops when all Final), replacing the previous one-shot fetchSchedule
+                                           on mount. Groups games into Live / Upcoming (Preview) / Final by
+                                           status.abstractGameState (now reflects real-time status transitions),
+                                           renders GameCard buttons that call gameStore.selectGame on click. Its
+                                           `.game-select` container is this screen's single scroll owner (see
+                                           section 8). Calls useWatchability(games) and passes each game's score
+                                           down to its GameCard. Renders a Segmented (Time | Watchability) sort
+                                           control under the date line; sorting happens within each
+                                           Live/Upcoming/Final group so that grouping survives a sort change,
+                                           and scoreless games sort last rather than as zero. Initial sort mode
+                                           reads `?sort=watchability` via initialSortMode(), which backs the PWA
+                                           manifest shortcut (section 10). Imported by App.tsx.
     GameSelect/GameCard.tsx               Individual game card, rendered as a <button>. New optional prop
                                            `watchability?: number | null`, rendered via `<ScoreRing size="lg">`
                                            in a `.gc-head` row alongside `.gc-teams`. Each team row always
@@ -350,6 +364,59 @@ index.html                                Root HTML. Sets viewport-fit=cover and
                                            user-scalable=no on the viewport meta tag (viewport-fit=cover is
                                            required for env(safe-area-inset-*) to resolve to a non-zero value).
 
+shared/
+  scoring.mjs                             Pure watchability scoring math (~290 lines, zero deps, zero imports).
+                                          JSDoc-typed plain ESM JavaScript, importable by the frontend
+                                          (via src/utils/watchability.ts re-export), the Cloud Functions
+                                          (via functions/src/scoring.ts re-export), and the nightly build
+                                          script (scripts/build-watchability.mjs). Exports constants
+                                          (LEAGUE_ERA, LEAGUE_WOBA, WOBA_SCALE, LEAGUE_R_PER_PA,
+                                          PARK_FACTORS, WEIGHTS, HOME_FIELD_ELO) and functions
+                                          (computePregameScore, computeExcitementIndex, computeLiveScore,
+                                          computeWatchability, tierFor, eloWinProbability). See section 12
+                                          for formulas.
+  scoring-types.ts                        TypeScript type definitions for scoring.mjs (~130 lines). Exports
+                                          all interfaces and type aliases (Baseline, LeagueBaseline,
+                                          TeamRating, PitcherRating, GameInputs, PayloadGame,
+                                          WatchabilityPayload, WinProbabilityPlay, ScoreBreakdown,
+                                          WatchabilityResult, WatchabilityTier, GameProgressState). Imported
+                                          by src/utils/watchability.ts and functions/src/scoring.ts to type
+                                          the untyped .mjs runtime imports.
+
+functions/
+  package.json                            Functions package (firebase-admin ^13, firebase-functions ^6).
+                                          Separate from the root package.json — the frontend's "zero new
+                                          npm dependencies" constraint applies to src/, not to serverless
+                                          functions.
+  tsconfig.json                           Functions TS config: ESNext module, bundler resolution, ES2022
+                                          target, strict mode, outDir lib/.
+  src/index.ts                            Entry point. Exports notifyPregame and notifyLive.
+  src/scoring.ts                          Re-export from ../../shared/scoring.mjs with type safety via
+                                          ../../shared/scoring-types.ts. Exports computePregameScore,
+                                          computeExcitementIndex, computeLiveScore, computeWatchability,
+                                          tierFor, eloWinProbability, PARK_FACTORS, WOBA_SCALE,
+                                          LEAGUE_R_PER_PA.
+  src/telegram.ts                         Telegram message sender + HTML message builder. Exports
+                                          sendTelegramNotification(botToken, chatId, payload) and
+                                          NotificationPayload interface. Messages include inline keyboard
+                                          button deep-linking to the PWA. Three trigger types: pregame,
+                                          crossing, jump.
+  src/notify-pregame.ts                   Scheduled Cloud Function (every 10 min, America/New_York).
+                                          Fetches watchability.json, computes pregame scores via
+                                          shared/scoring.mjs, sends Telegram alerts for games scoring >= 65,
+                                          deduplicates via Firestore notifications/{date}/{gamePk}.
+  src/notify-live.ts                      Scheduled Cloud Function (every 1 min, America/New_York).
+                                          Fetches MLB schedule, filters to live games, runs a 15-second
+                                          polling loop (max 55s) fetching winProbability and computing
+                                          live watchability. Sends crossing (first score >= 65) and jump
+                                          (+10 from last notified) alerts, deduplicates via Firestore.
+
+firebase.json                             Firebase config: functions source "functions", runtime nodejs22,
+                                          predeploy npm build. Firestore rules and indexes paths.
+firestore.rules                           Firestore security rules: notifications/{date}/{gamePk} allows
+                                          read/write only from Cloud Functions (Admin SDK), no client access.
+firestore.indexes.json                    Empty — all queries are direct document lookups by {date}/{gamePk}.
+
 scripts/
   build-watchability.mjs                  Nightly watchability data pipeline (~480 lines, Node ESM, zero deps).
                                            See section 12. Run as `node scripts/build-watchability.mjs
@@ -395,11 +462,22 @@ Baseball Savant (baseballsavant   ──┘                            │
 - No data ever flows backward from components into the API layer; all fetchers are one-directional reads.
 - **Watchability is a separate, parallel data flow that never touches gameStore.** `scripts/build-watchability.mjs`
   runs nightly (outside the app, via GitHub Actions), computes league baselines and per-game inputs, and writes
-  `public/watchability.json`. `useWatchability`, called from `GameSelect`, fetches that static file once on mount,
-  reattaches `parkFactor` from `leagueConstants.ts`, and layers on live win-probability plays (polled every 30s via
-  `fetchWinProbability`) for games in progress. All scoring — pregame, live, and the crossfade between them — runs
-  in `src/utils/watchability.ts`, entirely in the browser. The pipeline emits inputs only; it never computes a
-  score. See section 12 for why that split matters.
+  `public/watchability.json`. The pure scoring math lives in `shared/scoring.mjs` (shared between frontend,
+  Cloud Functions, and build script). `useWatchability`, called from `GameSelect`, fetches that static file once
+  on mount, reattaches `parkFactor` from `leagueConstants.ts` (re-exported from the shared module), and layers on
+  live win-probability plays (polled every 30s via `fetchWinProbability`) for games in progress. All scoring —
+  pregame, live, and the crossfade between them — runs in `shared/scoring.mjs`, entirely in the browser for UI
+  display. The pipeline emits inputs only; it never computes a score. See section 12 for why that split matters.
+- **Live slate polling** is handled by `useLiveSlate`, called from `GameSelect`. It replaces the previous one-shot
+  `fetchSchedule` on mount with adaptive `setTimeout` polling: 15s when any game is Live, 30s when all Preview,
+  stops when all Final. This feeds fresh game status (Preview→Live→Final transitions), scores, and inning detail
+  to `GameSelect`'s grouping logic and to `useWatchability`, which automatically starts/stops win-probability
+  polling as games transition. Pauses when the tab is hidden; resumes with immediate refresh on visibilitychange.
+- **Telegram notifications** run entirely server-side via Firebase Cloud Functions, separate from the browser.
+  `notify-pregame` (10-min cron) checks pregame scores and sends alerts for games >= 65. `notify-live` (1-min
+  cron with 15s in-function polling loop) sends crossing alerts (first live score >= 65) and jump alerts (+10
+  from last notified score). Both deduplicate via Firestore `notifications/{date}/{gamePk}` documents. No
+  notification logic runs in the browser. See `docs/LIVE_NOTIFICATIONS_PLAN.md` for the full design.
 
 ## 4. API Endpoints Reference
 
@@ -436,7 +514,7 @@ Baseball Savant endpoints use `SAVANT_BASE = 'https://baseballsavant.mlb.com'` f
 main.tsx
   ErrorBoundary
     App.tsx
-    (no selectedGame) GameSelect -> GameCard -> ScoreRing
+    (no selectedGame) GameSelect (useLiveSlate → useWatchability) -> GameCard -> ScoreRing
     (selectedGame set)
       tab-bar (Live Game | Pitcher vs Batter buttons, with leading "← Games" back button)
       activeTab === 'live'
@@ -497,7 +575,7 @@ Actions and when each is dispatched:
 - `setError(err)` — called by `App.tsx`'s deep-link handler and by `useLiveFeed` on any fetch/poll failure.
 - `reset()` — called from the "← Games" back button in the tab bar (rendered by `App.tsx` as `leading` on `TabBar`). Clears `selectedGame`, `gamePk`, `liveFeed`, `currentPlay`, `lastTimecode`, `isPolling`, `gameFeedPitches`, `error`, returning the app to `GameSelect`.
 
-Watchability scores deliberately do **not** live in `gameStore`. `useWatchability` owns its own `scores`/`loading`/`stale` state local to `GameSelect`, the same pattern `usePlayerStats` already uses for `PitcherVsBatter` — the store holds cross-screen selection state, not per-fetch caches.
+Watchability scores deliberately do **not** live in `gameStore`. `useWatchability` owns its own `scores`/`loading`/`stale` state local to `GameSelect`, the same pattern `usePlayerStats` already uses for `PitcherVsBatter` — the store holds cross-screen selection state, not per-fetch caches. `useLiveSlate` similarly owns its own `games`/`loading`/`refresh` state local to `GameSelect`, independent of the store — the store holds `selectedGame` (a snapshot of one game), not the full slate array, so slate refreshes do not clobber the selected game.
 
 ## 7. Sabermetric Computations
 

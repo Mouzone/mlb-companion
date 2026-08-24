@@ -1,5 +1,9 @@
 # Live Game Experience Plan
 
+> **Status: Implemented** — All parts (1–7) are complete. Parts 2–3 (Firebase
+> project setup, Telegram bot creation) require one-time manual steps before
+> the functions can be deployed.
+
 Two related improvements bundled as one refactor:
 
 1. **Telegram Bot notifications** — push alerts to your phone when a game's

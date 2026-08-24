@@ -1,8 +1,8 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useMemo } from 'react'
 import type { ReactElement } from 'react'
-import { fetchSchedule } from '../../api/mlb'
 import { useGameStore } from '../../store/gameStore'
 import useWatchability from '../../hooks/useWatchability'
+import useLiveSlate from '../../hooks/useLiveSlate'
 import type { ScheduledGame } from '../../api/types'
 import { gameDateStr } from '../../utils/gameDay'
 import { EmptyPanel, Segmented, Skeleton } from '../ui'
@@ -102,31 +102,10 @@ function GameCardSkeleton(): ReactElement {
 }
 
 export function GameSelect(): ReactElement {
-  const [games, setGames] = useState<ScheduledGame[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const { games, loading } = useLiveSlate(gameDateStr())
   const [sortMode, setSortMode] = useState<SortMode>(initialSortMode)
   const selectGame = useGameStore((s) => s.selectGame)
   const { scores } = useWatchability(games)
-
-  useEffect(() => {
-    let cancelled = false
-    async function load() {
-      try {
-        setLoading(true)
-        const scheduled = await fetchSchedule(gameDateStr())
-        if (!cancelled) setGames(scheduled)
-      } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load schedule')
-      } finally {
-        if (!cancelled) setLoading(false)
-      }
-    }
-    load()
-    return () => {
-      cancelled = true
-    }
-  }, [])
 
   const today = new Date().toLocaleDateString('en-US', {
     weekday: 'long',
@@ -150,7 +129,7 @@ export function GameSelect(): ReactElement {
           <p className="date">{today}</p>
         </div>
 
-        {!loading && error === null && games.length > 0 ? (
+        {!loading && games.length > 0 ? (
           <div className="slate-sort">
             <Segmented
               options={SORT_OPTIONS}
@@ -171,11 +150,7 @@ export function GameSelect(): ReactElement {
         </div>
       ) : null}
 
-      {!loading && error !== null ? (
-        <EmptyPanel message="Could not load today&rsquo;s schedule." hint={error} />
-      ) : null}
-
-      {!loading && error === null && groups.length === 0 ? (
+      {!loading && groups.length === 0 ? (
         <EmptyPanel
           message="No games scheduled today."
           hint="Check back on the next game day, or open a game directly with ?gamePk=<id>."

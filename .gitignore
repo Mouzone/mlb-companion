@@ -30,3 +30,8 @@ dist-ssr
 
 # Root-level QA screenshot artifacts
 /*.png
+
+# Firebase
+functions/lib/
+functions/node_modules/
+.firebase/

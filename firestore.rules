@@ -1,0 +1,10 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /notifications/{date}/{gamePk} {
+      // Only Cloud Functions can read/write (using Admin SDK).
+      // No client access — the browser never touches Firestore directly.
+      allow read, write: if false;
+    }
+  }
+}

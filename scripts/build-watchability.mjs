@@ -44,9 +44,7 @@ const WOBA_2B = 1.27;
 const WOBA_3B = 1.62;
 const WOBA_HR = 2.1;
 
-/** Divisors that put wOBA on the wRC+ scale; mirrors src/utils/leagueConstants.ts. */
-const WOBA_SCALE = 1.24;
-const LEAGUE_R_PER_PA = 0.12;
+import { WOBA_SCALE, LEAGUE_R_PER_PA } from '../shared/scoring.mjs'
 
 // ---------------------------------------------------------------------------
 // fetch helpers
