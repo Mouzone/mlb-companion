@@ -4,6 +4,7 @@ import { fetchLiveFeed, fetchDiffPatch } from '../api/mlb'
 import type { LiveFeed, DiffPatchOperation, DiffPatchResponse } from '../api/types'
 
 const POLL_INTERVAL = 4000
+const PREVIEW_POLL_INTERVAL = 30_000
 
 function shallowClone(node: unknown): unknown {
   if (Array.isArray(node)) return [...node]
@@ -158,6 +159,29 @@ export function useLiveFeed() {
     }
   }, [gamePk, setLiveFeed, setTimecode, setError])
 
+  const previewPoll = useCallback(async () => {
+    if (!gamePk) return
+    if (typeof document !== 'undefined' && document.hidden) return
+    try {
+      const feed = await fetchLiveFeed(gamePk)
+      feedRef.current = feed
+      lastTimecodeRef.current = feed.metaData.timeStamp
+      setLiveFeed(feed)
+      setTimecode(feed.metaData.timeStamp)
+
+      const status = feed.gameData.status.abstractGameState
+      if (status === 'Live' && intervalRef.current !== null) {
+        clearInterval(intervalRef.current)
+        intervalRef.current = setInterval(poll, POLL_INTERVAL)
+      } else if (status === 'Final' && intervalRef.current !== null) {
+        clearInterval(intervalRef.current)
+        intervalRef.current = null
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Preview poll error')
+    }
+  }, [gamePk, setLiveFeed, setTimecode, setError, poll])
+
   useEffect(() => {
     if (!gamePk) return
 
@@ -177,6 +201,8 @@ export function useLiveFeed() {
           const status = existing.gameData.status.abstractGameState
           if (status === 'Live' && intervalRef.current === null) {
             intervalRef.current = setInterval(poll, POLL_INTERVAL)
+          } else if (status === 'Preview' && intervalRef.current === null) {
+            intervalRef.current = setInterval(previewPoll, PREVIEW_POLL_INTERVAL)
           }
           return
         }
@@ -190,6 +216,8 @@ export function useLiveFeed() {
         const status = feed.gameData.status.abstractGameState
         if (status === 'Live') {
           intervalRef.current = setInterval(poll, POLL_INTERVAL)
+        } else if (status === 'Preview') {
+          intervalRef.current = setInterval(previewPoll, PREVIEW_POLL_INTERVAL)
         }
       } catch (err) {
         if (!cancelled) {
@@ -209,7 +237,7 @@ export function useLiveFeed() {
         intervalRef.current = null
       }
     }
-  }, [gamePk, setLiveFeed, setPolling, setError, poll])
+  }, [gamePk, setLiveFeed, setPolling, setError, poll, previewPoll])
 
   return { isPolling }
 }

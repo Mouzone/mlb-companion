@@ -76,8 +76,13 @@ src/
   hooks/
     useLiveFeed.ts                        useLiveFeed(): fetches the initial live feed on gamePk change, then
                                            polls fetchDiffPatch every 4000ms (POLL_INTERVAL) and applies the diff
-                                           via applyDiff, but ONLY while
-                                           gameData.status.abstractGameState === 'Live'. The cursor is
+                                           via applyDiff while
+                                           gameData.status.abstractGameState === 'Live'. If the game is still in
+                                           Preview at init, a 30s preview-poll (PREVIEW_POLL_INTERVAL) re-fetches
+                                           the full feed until the game goes Live, at which point it switches to
+                                           the 4s diffPatch interval. This fixes the Preview→Live transition bug
+                                           where polling never started if a game was selected before first pitch.
+                                           The cursor is
                                            metaData.timeStamp (NOT metaData.timecode — that field does not exist
                                            on the MLB response; assuming it silently disabled polling entirely).
                                            diffPatch returns an ARRAY of { diff: RFC 6902 operations } patch sets,
@@ -119,23 +124,21 @@ src/
                                            evicted rather than cached. Exports
                                            preloadCareerMatchupStats(pitcherId, batterId), called from App.
     useWatchability.ts                    useWatchability(games) => { scores: ReadonlyMap<number,
-                                           WatchabilityResult>, loading, stale }. Fetches /watchability.json once
-                                           on mount (a missing payload degrades to cards with no score rather
-                                           than blocking the slate); polls fetchWinProbability every 30s
-                                           (LIVE_POLL_INTERVAL) for live games only, via Promise.allSettled so
-                                           one failed game keeps its prior plays. Deliberately far slower than
-                                           useLiveFeed's 4s single-game poll, because this covers the whole slate
-                                           and excitement is a game-shape measure, not a pitch-by-pitch one.
-                                           Reattaches parkFactor from leagueConstants.ts's PARK_FACTORS, since the
-                                           payload itself omits it (see section 12). Live plays are mirrored into
-                                           sessionStorage under 'mlb-watchability-plays' (versioned envelope,
-                                           stamped with a LOCAL date so it does not self-invalidate at 8pm ET)
-                                           and used to seed state on mount, so a reload shows the blended live
-                                           score immediately instead of flashing the pregame score while the
-                                           win-probability fetch is in flight. The payload is validated against
-                                           REQUIRED_BASELINE_KEYS before use; an unrecognised shape (a cached
-                                           payload outliving a pipeline schema change) is discarded rather than
-                                           allowed to throw mid-render. Imported by GameSelect.
+                                           WatchabilityResult>, loading, stale }. Legacy client-side watchability
+                                           hook. Fetches /watchability.json once on mount; polls
+                                           fetchWinProbability every 30s for live games. Now superseded by
+                                           useLiveScores for GameSelect, but retained as a fallback and for
+                                           potential future use. Not currently imported by any component.
+    useLiveScores.ts                      useLiveScores(dateStr) => { scores: ReadonlyMap<number, number>,
+                                           pitchers: ReadonlyMap<number, CurrentPitcher>, loading }. Polls the
+                                           liveScores Cloud Function HTTP endpoint every 15s
+                                           (LIVE_SCORES_INTERVAL), a single call that returns watchability scores
+                                           AND current pitcher info for all games on the slate. Replaces
+                                           useWatchability's per-game winProbability polling (N requests at 30s)
+                                           with one server-side call at 15s. Pauses when document.hidden; resumes
+                                           on visibilitychange. Graceful failure: keeps prior scores/pitchers if
+                                           the Cloud Function is unreachable. CurrentPitcher = { id, fullName,
+                                           fieldingSide: 'away'|'home' }. Imported by GameSelect.
     useStatBenchmarks.ts                  useStatBenchmarks(scope: BenchmarkScope) => { cohorts, loading }.
                                            Fetches ActiveBenchmarkCohorts for the current year on mount; the
                                            cohort object is null until the first successful resolution. Used
@@ -471,21 +474,24 @@ Baseball Savant (baseballsavant   ──┘                            │
 - **Watchability is a separate, parallel data flow that never touches gameStore.** `scripts/build-watchability.mjs`
   runs nightly (outside the app, via GitHub Actions), computes league baselines and per-game inputs, and writes
   `public/watchability.json`. The pure scoring math lives in `shared/scoring.mjs` (shared between frontend,
-  Cloud Functions, and build script). `useWatchability`, called from `GameSelect`, fetches that static file once
-  on mount, reattaches `parkFactor` from `leagueConstants.ts` (re-exported from the shared module), and layers on
-  live win-probability plays (polled every 30s via `fetchWinProbability`) for games in progress. All scoring —
-  pregame, live, and the crossfade between them — runs in `shared/scoring.mjs`, entirely in the browser for UI
-  display. The pipeline emits inputs only; it never computes a score. See section 12 for why that split matters.
+  Cloud Functions, and build script). `useLiveScores`, called from `GameSelect`, polls the `liveScores` Cloud
+  Function HTTP endpoint every 15s — a single server-side call that fetches winProbability + feed/live for all
+  games, computes `computeWatchability` server-side, and returns scores plus current pitcher info. This replaces
+  the previous client-side `useWatchability` which polled `fetchWinProbability` per-game at 30s. The nightly
+  pipeline emits inputs only; it never computes a score. See section 12 for why that split matters.
 - **Live slate polling** is handled by `useLiveSlate`, called from `GameSelect`. It replaces the previous one-shot
   `fetchSchedule` on mount with adaptive `setTimeout` polling: 15s when any game is Live, 30s when all Preview,
   stops when all Final. This feeds fresh game status (Preview→Live→Final transitions), scores, and inning detail
-  to `GameSelect`'s grouping logic and to `useWatchability`, which automatically starts/stops win-probability
-  polling as games transition. Pauses when the tab is hidden; resumes with immediate refresh on visibilitychange.
+  to `GameSelect`'s grouping logic. Watchability scores and current pitcher info are fetched in parallel by
+  `useLiveScores` (15s Cloud Function poll). Pauses when the tab is hidden; resumes with immediate refresh on
+  visibilitychange.
 - **Telegram notifications** run entirely server-side via Firebase Cloud Functions, separate from the browser.
   `notify-pregame` (10-min cron) checks pregame scores and sends alerts for games >= 65. `notify-live` (1-min
   cron with 15s in-function polling loop) sends crossing alerts (first live score >= 65) and jump alerts (+10
-  from last notified score). Both deduplicate via Firestore `notifications/{date}/games/{gamePk}` documents. No
-  notification logic runs in the browser. See `docs/LIVE_NOTIFICATIONS_PLAN.md` for the full design.
+  from last notified score). `liveScores` (HTTP onRequest) serves the frontend's `useLiveScores` hook with
+  per-game watchability scores and current pitcher info. Both notification functions deduplicate via Firestore
+  `notifications/{date}/games/{gamePk}` documents. No notification logic runs in the browser. See
+  `docs/LIVE_NOTIFICATIONS_PLAN.md` for the full design.
 
 ## 4. API Endpoints Reference
 
@@ -507,7 +513,7 @@ All MLB Stats API endpoints use `BASE = 'https://statsapi.mlb.com/api'` from `sr
 | `GET /v1/people/{batterId}/stats` | `stats=vsPlayerTotal&group=hitting&opposingPlayerId=<pitcherId>`, falling back to `stats=vsPlayer&group=hitting&opposingPlayerId=<pitcherId>` | `fetchCareerVsPlayer(batterId, pitcherId)` | Same `VsPlayerStat` shape; tries `vsPlayerTotal` first, falls back to `vsPlayer` on error |
 | `GET /v1/schedule` | `sportId=1&startDate=<-7d>&endDate=<+7d>` around the target game date | `fetchSeriesSchedule(gameDate, teamId, opponentId)` | Filters to games between the two teams, groups into consecutive-day runs, returns the run containing the target date as `{ gamePk, date }[]` |
 | `GET /v1/game/{gamePk}/playByPlay` | path param `gamePk` (note: **v1**, not v1.1) | `fetchPlayByPlay(gamePk)` / `fetchPlayByPlayBatch(gamePks)` | `PlayByPlayResponse`; batch version chunks requests at most 5 concurrent (`chunk(arr, 5)`) |
-| `GET /v1/game/{gamePk}/winProbability` | path param `gamePk` | `fetchWinProbability(gamePk)` | `WinProbabilityPlay[]`, one entry per play, carrying `leverageIndex`, `homeTeamWinProbability`, `homeTeamWinProbabilityAdded` (WPA in percentage points, not a fraction), `dramaIndex`, and `about.captivatingIndex`. `dramaIndex` and `captivatingIndex` are undocumented MLB fields, so the response is parsed through runtime guards and degrades to null components rather than throwing. Called by `useWatchability` every 30s for live games, feeding `computeExcitementIndex`/`computeLiveScore` in `watchability.ts` (section 12). This is a separate call rather than reusing `/v1.1/game/{gamePk}/feed/live`, which the app already fetches: that feed carries `about.captivatingIndex` but not `leverageIndex`, win probability, or `dramaIndex`. |
+| `GET /v1/game/{gamePk}/winProbability` | path param `gamePk` | `fetchWinProbability(gamePk)` | `WinProbabilityPlay[]`, one entry per play, carrying `leverageIndex`, `homeTeamWinProbability`, `homeTeamWinProbabilityAdded` (WPA in percentage points, not a fraction), `dramaIndex`, and `about.captivatingIndex`. `dramaIndex` and `captivatingIndex` are undocumented MLB fields, so the response is parsed through runtime guards and degrades to null components rather than throwing. Called by the `liveScores` Cloud Function for all live/final games, feeding `computeExcitementIndex`/`computeLiveScore` in `shared/scoring.mjs` (section 12). This is a separate call rather than reusing `/v1.1/game/{gamePk}/feed/live`, which the app already fetches: that feed carries `about.captivatingIndex` but not `leverageIndex`, win probability, or `dramaIndex`. |
 
 Baseball Savant endpoints use `SAVANT_BASE = 'https://baseballsavant.mlb.com'` from `src/api/savant.ts`.
 
@@ -516,13 +522,19 @@ Baseball Savant endpoints use `SAVANT_BASE = 'https://baseballsavant.mlb.com'` f
 | `GET /gf` | `game_pk=<gamePk>` | `fetchSavantGameFeed(gamePk)` | JSON `{ home_batters, away_batters }`, each a `Record<string, SavantGamePitch[]>`; flattened and concatenated into `SavantGamePitch[]` |
 | `GET /statcast_search/csv` | `all=true&type=details&hfSea=<season>%7C&player_type=<batter\|pitcher>&batters_lookup%5B%5D=<id>` (or `pitchers_lookup%5B%5D`) `&minPA=0`, plus `game_date_gt=<60-days-ago>` when `season` is the current year | `fetchSavantBattedBalls(playerId, season, playerType='batter')` | CSV text, parsed by `parseSavantCSV` into `SavantBattedBall[]` |
 
+Cloud Function endpoints (Firebase, `us-central1-mlb-companion-pwa`):
+
+| Endpoint | Params | Caller | Response shape (summary) |
+|---|---|---|---|
+| `GET liveScores` (`https://us-central1-mlb-companion-pwa.cloudfunctions.net/liveScores`) | `?date=YYYY-MM-DD` (defaults to today ET) | `useLiveScores` (every 15s) | `{ date, games: { [gamePk]: { score, tier, pregame, live, liveWeight, currentPitcher: { id, fullName, fieldingSide } \| null } } }`. Server fetches schedule + watchability.json + winProbability per live/final game + feed/live for current pitcher, computes `computeWatchability` server-side. 60s timeout, 512MiB memory. |
+
 ## 5. Component Hierarchy
 
 ```
 main.tsx
   ErrorBoundary
     App.tsx
-    (no selectedGame) GameSelect (useLiveSlate → useWatchability) -> GameCard -> ScoreRing
+    (no selectedGame) GameSelect (useLiveSlate → useLiveScores) -> GameCard (currentPitcher) -> ScoreRing
     (selectedGame set)
       tab-bar (Live Game | Pitcher vs Batter buttons, with leading "← Games" back button)
       activeTab === 'live'
@@ -738,7 +750,7 @@ Three further runtime rules exist, and rule order matters — Workbox takes the 
 
 Every game card on `GameSelect` shows a 0-100 watchability score in a `ScoreRing` (DESIGN.md §5.14) at the right of the card. It answers one question: is this game worth watching? Before first pitch the score is predictive, built from team and pitcher quality; once the game starts it crossfades into a measure of actual, in-progress excitement. Users can sort the slate by Time or Watchability.
 
-**Architecture rule.** The nightly pipeline (`scripts/build-watchability.mjs`) emits inputs only — team ratings, pitcher ratings, Elo, stakes context. All scoring math lives in `src/utils/watchability.ts` and runs in the browser. This split means the formula can be retuned in a normal deploy; it never requires re-running the pipeline. Every league baseline (means and standard deviations for wRC+, FIP, ISO, and the rest) is computed nightly across all 30 teams — never hardcoded from outside literature — so the score is always calibrated against the current season, not a fixed historical bar.
+**Architecture rule.** The nightly pipeline (`scripts/build-watchability.mjs`) emits inputs only — team ratings, pitcher ratings, Elo, stakes context. All scoring math lives in `shared/scoring.mjs`, shared between the frontend and Cloud Functions. For live and final games, the `liveScores` Cloud Function computes scores server-side (fetching winProbability + feed/live per game) and returns them to the frontend via `useLiveScores` every 15s. For preview games, the Cloud Function uses the pregame inputs from `watchability.json` with `plays=null`, returning the pure pregame score. This split means the formula can be retuned in a normal deploy; it never requires re-running the pipeline. Every league baseline (means and standard deviations for wRC+, FIP, ISO, and the rest) is computed nightly across all 30 teams — never hardcoded from outside literature — so the score is always calibrated against the current season, not a fixed historical bar.
 
 ### 12.1 Pregame score
 
@@ -792,7 +804,7 @@ All of it runs through a bounded-concurrency `mapLimit` helper (5 concurrent req
 
 **wRC+** is derived as `100 * (1 + (wOBA - lgWOBA) / (WOBA_SCALE * LEAGUE_R_PER_PA))`, algebraically identical to the canonical FanGraphs formula at a park factor of 1. Park factor is deliberately excluded here — the pregame scoring formula (12.1) applies its own park term, so folding one into wRC+ as well would apply it twice. wOBA itself uses linear weights uBB .69, HBP .72, 1B .89, 2B 1.27, 3B 1.62, HR 2.10, scaled by `WOBA_SCALE 1.24` against `LEAGUE_R_PER_PA 0.12`.
 
-**Live plays** come from `GET /v1/game/{gamePk}/winProbability` (section 4), polled by `useWatchability` every 30 seconds.
+**Live plays** come from `GET /v1/game/{gamePk}/winProbability` (section 4), fetched by the `liveScores` Cloud Function for all live and final games. The Cloud Function polls every 15s when called by `useLiveScores`, replacing the previous client-side `useWatchability` which polled every 30s per game.
 
 ### 12.5 Regenerating the data
 

@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react'
 import type { ReactElement } from 'react'
 import { useGameStore } from '../../store/gameStore'
-import useWatchability from '../../hooks/useWatchability'
+import useLiveScores from '../../hooks/useLiveScores'
 import useLiveSlate from '../../hooks/useLiveSlate'
 import type { ScheduledGame } from '../../api/types'
 import { gameDateStr } from '../../utils/gameDay'
@@ -102,10 +102,11 @@ function GameCardSkeleton(): ReactElement {
 }
 
 export function GameSelect(): ReactElement {
-  const { games, loading } = useLiveSlate(gameDateStr())
+  const dateStr = gameDateStr()
+  const { games, loading } = useLiveSlate(dateStr)
   const [sortMode, setSortMode] = useState<SortMode>(initialSortMode)
   const selectGame = useGameStore((s) => s.selectGame)
-  const { scores } = useWatchability(games)
+  const { scores, pitchers } = useLiveScores(dateStr)
 
   const today = new Date().toLocaleDateString('en-US', {
     weekday: 'long',
@@ -113,13 +114,7 @@ export function GameSelect(): ReactElement {
     day: 'numeric',
   })
 
-  const scoreMap = useMemo(() => {
-    const map = new Map<number, number>()
-    for (const [gamePk, result] of scores) map.set(gamePk, result.score)
-    return map
-  }, [scores])
-
-  const groups = useMemo(() => groupsOf(games, sortMode, scoreMap), [games, sortMode, scoreMap])
+  const groups = useMemo(() => groupsOf(games, sortMode, scores), [games, sortMode, scores])
 
   return (
     <div className="game-select">
@@ -168,7 +163,8 @@ export function GameSelect(): ReactElement {
               key={game.gamePk}
               game={game}
               onSelect={selectGame}
-              watchability={scoreMap.get(game.gamePk) ?? null}
+              watchability={scores.get(game.gamePk) ?? null}
+              currentPitcher={pitchers.get(game.gamePk) ?? null}
             />
           ))}
         </div>

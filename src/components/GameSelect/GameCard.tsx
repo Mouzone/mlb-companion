@@ -2,6 +2,7 @@ import type { ReactElement } from 'react'
 import { Badge, PlayerAvatar, ScoreRing, TeamLogo } from '../ui'
 import type { BadgeTone } from '../ui'
 import type { ScheduledGame } from '../../api/types'
+import type { CurrentPitcher } from '../../hooks/useLiveScores'
 
 /**
  * GameCard (DESIGN.md §6.5).
@@ -124,9 +125,11 @@ export interface GameCardProps {
   readonly onSelect: (game: ScheduledGame) => void
   /** 0-100 watchability. `null` while the nightly payload is loading or absent. */
   readonly watchability?: number | null
+  /** Current pitcher on the mound for live games, from the Cloud Function. */
+  readonly currentPitcher?: CurrentPitcher | null
 }
 
-export function GameCard({ game, onSelect, watchability = null }: GameCardProps): ReactElement {
+export function GameCard({ game, onSelect, watchability = null, currentPitcher = null }: GameCardProps): ReactElement {
   const away = game.teams.away
   const home = game.teams.home
   const line = readLinescore(game)
@@ -140,6 +143,10 @@ export function GameCard({ game, onSelect, watchability = null }: GameCardProps)
 
   const awayProbable = probableFor(game, 'away')
   const homeProbable = probableFor(game, 'home')
+
+  const isLive = chip.tone === 'live'
+  const livePitcherSide: Side | null =
+    isLive && currentPitcher !== null ? currentPitcher.fieldingSide : null
 
   const label = scores
     ? `${away.team.name} ${scores.away}, ${home.team.name} ${scores.home}. ${chip.text}`
@@ -165,13 +172,13 @@ export function GameCard({ game, onSelect, watchability = null }: GameCardProps)
     )
   }
 
-  function probable(side: Side, pitcher: { id: number; fullName: string }): ReactElement {
+  function probable(side: Side, pitcher: { id: number; fullName: string }, role: string = 'SP'): ReactElement {
     return (
       <span className="gc-probable">
         <PlayerAvatar personId={pitcher.id} name={pitcher.fullName} size="sm" />
         <span className="gc-probable-text">
           <span className="gc-probable-name">{shortenName(pitcher.fullName)}</span>
-          <span className="gc-probable-role">{game.teams[side].team.abbreviation} SP</span>
+          <span className="gc-probable-role">{game.teams[side].team.abbreviation} {role}</span>
         </span>
       </span>
     )
@@ -193,10 +200,18 @@ export function GameCard({ game, onSelect, watchability = null }: GameCardProps)
         {venue !== null ? <span className="gc-venue">{venue}</span> : null}
       </span>
 
-      {awayProbable !== null || homeProbable !== null ? (
+      {awayProbable !== null || homeProbable !== null || livePitcherSide !== null ? (
         <span className="gc-probables">
-          {awayProbable !== null ? probable('away', awayProbable) : <span className="gc-probable" />}
-          {homeProbable !== null ? probable('home', homeProbable) : <span className="gc-probable" />}
+          {livePitcherSide === 'away' && currentPitcher !== null
+            ? probable('away', currentPitcher, 'P')
+            : awayProbable !== null
+              ? probable('away', awayProbable)
+              : <span className="gc-probable" />}
+          {livePitcherSide === 'home' && currentPitcher !== null
+            ? probable('home', currentPitcher, 'P')
+            : homeProbable !== null
+              ? probable('home', homeProbable)
+              : <span className="gc-probable" />}
         </span>
       ) : null}
     </button>
