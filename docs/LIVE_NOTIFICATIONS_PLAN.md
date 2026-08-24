@@ -471,8 +471,10 @@ export const notifyLive = onSchedule(
 ```
 
 Logic:
-1. Fetch today's schedule from
-   `statsapi.mlb.com/api/v1/schedule?sportId=1&date={today}`
+1. Fetch both today's and yesterday's schedule from
+   `statsapi.mlb.com/api/v1/schedule?sportId=1&date={today}` and
+   `?date={yesterday}` (yesterday catches late West Coast games still
+   in progress after midnight ET)
 2. Filter to games with `abstractGameState === 'Live'`
 3. If no live games → exit immediately (sub-second, negligible cost)
 4. Fetch `watchability.json` for inputs (once, not per poll iteration)
@@ -481,7 +483,8 @@ Logic:
      - Fetch `winProbability` from
        `statsapi.mlb.com/api/v1/game/{gamePk}/winProbability`
      - Compute `computeWatchability(inputs, baseline, plays, 'live')`
-     - Check Firestore document `notifications/{today}/{gamePk}`:
+     - Check Firestore document `notifications/{scheduleDate}/{gamePk}`
+       (keyed by the game's original schedule date, not current ET date):
        - **Crossing trigger:** score >= 65 and `crossingNotified` is false
          → send notification, set `crossingNotified: true`,
          `lastNotifiedScore: score`
@@ -691,12 +694,14 @@ reasonable usage.
 
 ### Collection: `notifications`
 
-Document path: `notifications/{date}/games/{gamePk}`
+Document path: `notifications/{scheduleDate}/games/{gamePk}`
 
 ```ts
 interface NotificationDoc {
-  // Date string YYYY-MM-DD (the game's date, not when the notification fired)
-  // Used as the document ID at the collection-group level
+  // scheduleDate: YYYY-MM-DD from the MLB schedule API (the game's original
+  // date, not when the notification fired). Used as the Firestore doc ID at
+  // the collection-group level. This keeps notification state stable across
+  // midnight ET rollover for late West Coast games.
 
   // Pre-game notification (fired once when pregame score >= 65)
   pregameNotified: boolean

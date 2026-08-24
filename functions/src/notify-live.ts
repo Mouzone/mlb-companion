@@ -27,6 +27,7 @@ interface LiveGame {
   gamePk: number
   awayAbbr: string
   homeAbbr: string
+  scheduleDate: string
 }
 
 initializeApp()
@@ -36,15 +37,16 @@ async function fetchLiveGames(date: string): Promise<LiveGame[]> {
     `${MLB_API}/schedule?sportId=1&date=${date}&hydrate=probablePitcher,team`,
   )
   if (!res.ok) throw new Error(`Schedule fetch failed: ${res.status}`)
-  const data = await res.json() as { dates: { games: any[] }[] }
+  const data = await res.json() as { dates: { date: string; games: any[] }[] }
 
   return data.dates
-    .flatMap((d) => d.games ?? [])
+    .flatMap((d) => (d.games ?? []).map((g) => ({ ...g, _scheduleDate: d.date })))
     .filter((g) => g.status?.abstractGameState === 'Live')
     .map((g) => ({
       gamePk: g.gamePk,
       awayAbbr: g.teams?.away?.team?.abbreviation ?? '',
       homeAbbr: g.teams?.home?.team?.abbreviation ?? '',
+      scheduleDate: g._scheduleDate,
     }))
 }
 
@@ -105,9 +107,17 @@ export const notifyLive = onSchedule(
       return
     }
 
-    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' })
+    const nowET = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }))
+    const today = nowET.toLocaleDateString('en-CA')
+    const yesterdayDate = new Date(nowET)
+    yesterdayDate.setDate(yesterdayDate.getDate() - 1)
+    const yesterday = yesterdayDate.toLocaleDateString('en-CA')
 
-    const liveGames = await fetchLiveGames(today)
+    const [todayGames, yesterdayGames] = await Promise.all([
+      fetchLiveGames(today),
+      fetchLiveGames(yesterday),
+    ])
+    const liveGames = [...todayGames, ...yesterdayGames]
     if (liveGames.length === 0) {
       console.log('[notify-live] No live games, exiting')
       return
@@ -123,7 +133,11 @@ export const notifyLive = onSchedule(
     const startTime = Date.now()
 
     while (Date.now() - startTime < MAX_RUNTIME_MS) {
-      const scores = await fetchScheduleScores(today)
+      const [todayScores, yesterdayScores] = await Promise.all([
+        fetchScheduleScores(today),
+        fetchScheduleScores(yesterday),
+      ])
+      const scores = new Map([...yesterdayScores, ...todayScores])
 
       for (const game of liveGames) {
         const inputs = inputsByGame.get(game.gamePk)
@@ -143,7 +157,7 @@ export const notifyLive = onSchedule(
 
         const scoreInfo = scores.get(game.gamePk)
 
-        const docRef = db.collection('notifications').doc(today).collection('games').doc(String(game.gamePk))
+        const docRef = db.collection('notifications').doc(game.scheduleDate).collection('games').doc(String(game.gamePk))
         const docSnap = await docRef.get()
         const data = docSnap.exists ? docSnap.data() : null
 
@@ -154,7 +168,7 @@ export const notifyLive = onSchedule(
         if (score >= 65 && !crossingNotified) {
           const notification: NotificationPayload = {
             gamePk: game.gamePk,
-            date: today,
+            date: game.scheduleDate,
             awayTeam: game.awayAbbr,
             homeTeam: game.homeAbbr,
             awayAbbr: game.awayAbbr,
@@ -193,7 +207,7 @@ export const notifyLive = onSchedule(
         if (score >= 65 && lastNotifiedScore !== null && score - lastNotifiedScore >= 10 && lastNotifiedScore >= 65) {
           const notification: NotificationPayload = {
             gamePk: game.gamePk,
-            date: today,
+            date: game.scheduleDate,
             awayTeam: game.awayAbbr,
             homeTeam: game.homeAbbr,
             awayAbbr: game.awayAbbr,
