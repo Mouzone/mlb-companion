@@ -210,14 +210,15 @@ src/
                                            PvbBenchmarks, PvbCards, Stat (UI).
 
   components/
-    GameScreen.tsx                       Single-scroll game screen container. Renders MiniNav (sticky top)
-                                           and .game-scroll (the scroll owner) containing <section> elements
-                                           for ab, matchup, game, and a .pb-carousel for pitching/batting.
-                                           Nav buttons call scrollIntoView on section refs. Imports gameStore,
-                                           MiniNav, LiveAtBat, MatchupSubTab, PitcherGameSubTab,
-                                           BatterGameSubTab, PitchingSubTab, BattingSubTab. Imported by App.tsx.
-    ui/MiniNav.tsx                       Sticky 44px nav bar with [AB|Matchup|Game|Pit|Bat] buttons (role=tablist,
-                                           equal-flex). Active state from gameStore.scrollAnchor. Imported by
+    GameScreen.tsx                       Page-based game screen container. Renders MiniNav (sticky top) and
+                                           .game-page (the scroll owner) which conditionally mounts exactly
+                                           one <section> at a time for ab, matchup, game, or logs. Nav buttons
+                                           call gameStore.setActiveTab; there is no scrolling between sections.
+                                           Imports gameStore, MiniNav, LiveAtBat, MatchupSubTab,
+                                           PitcherGameSubTab, BatterGameSubTab, PitchingSubTab, BattingSubTab.
+                                           Imported by App.tsx.
+    ui/MiniNav.tsx                       Sticky 44px nav bar with [AB|Matchup|Game|Logs] buttons (role=tablist,
+                                           equal-flex). Active state from gameStore.activeTab. Imported by
                                            GameScreen.
     ui/FloatingGamesButton.tsx           Fixed bottom-left pill button (chevron-left + "Games"), calls
                                            gameStore.reset. Imported by App.tsx.
@@ -580,9 +581,9 @@ main.tsx
     (no selectedGame) GameSelect (useLiveSlate → useLiveScores) -> GameCard (currentPitcher, currentBatter) -> ScoreRing
     (selectedGame set)
       GameScreen
-        MiniNav (AB | Matchup | Game | Pit | Bat -- scroll anchors, not tabs)
-        .game-scroll  <- THE scroll owner
-          section#ab       -> LiveAtBat -> ScoreboardCard, MatchupCard,
+        MiniNav (AB | Matchup | Game | Logs -- real tabs, one section mounted at a time)
+        .game-page  <- THE scroll owner
+          section#ab       -> LiveAtBat -> StatusStrip, MatchupCard,
                                            AtBatPanel -> ZonePlot (pitcher view),
                                            LastPitchStrip, ContactStrip
           section#matchup  -> MatchupSubTab -> MatchupHeader, H2HPanel,
@@ -591,11 +592,10 @@ main.tsx
           section#game     -> PitcherGameSubTab -> GameIdentity, Command panel
                               BatterGameSubTab  -> GameIdentity, Plate Discipline,
                                                   At Bats DataTable
-          .pb-carousel (horizontal scroll-snap, one card per viewport)
-            section#pitching -> PitchingSubTab -> PvbCard,
-                                             ColorCodedArsenal (Segended All/RHB/LHB),
+          section#logs     -> PitchingSubTab -> PvbCard,
+                                             ColorCodedArsenal (Segmented All/RHB/LHB),
                                              TablePanel (splits), TablePanel (game log)
-            section#batting  -> BattingSubTab  -> PvbCard,
+                              BattingSubTab  -> PvbCard,
                                              TablePanel (splits), TablePanel (game log)
       FloatingGamesButton (fixed bottom-left, calls store.reset())
       StatsGuide          (fixed bottom-right FAB)
@@ -617,7 +617,7 @@ interface GameState {
   currentPlay: CurrentPlay | null
   lastTimecode: string | null
   isPolling: boolean
-  scrollAnchor: ScrollAnchor
+  activeTab: ActiveTab
   globalScope: GlobalScope
   zonePerspective: ZonePerspective
   recentFormGames: number
@@ -630,7 +630,7 @@ interface GameState {
 }
 ```
 
-Defaults: `scrollAnchor: 'ab'`, `globalScope: 'thisGame'`, `zonePerspective: 'pitcher'`, `recentFormGames: 7`, `scoreCache`/`pitcherCache`/`batterCache` empty `Map`s, everything else `null`/`false`/`[]`.
+Defaults: `activeTab: 'ab'`, `globalScope: 'thisGame'`, `zonePerspective: 'pitcher'`, `recentFormGames: 7`, `scoreCache`/`pitcherCache`/`batterCache` empty `Map`s, everything else `null`/`false`/`[]`.
 
 Actions and when each is dispatched:
 
@@ -639,14 +639,14 @@ Actions and when each is dispatched:
 - `setCurrentPlay(play)` — declared for direct overrides; not currently dispatched outside `setLiveFeed`'s derivation.
 - `setTimecode(tc)` — called by `useLiveFeed`'s poll loop with the `metaData.timeStamp` of the folded diffPatch result.
 - `setPolling(polling)` — called by `useLiveFeed` around its live-feed initialization (`true` at start, `false` in the `finally` block).
-- `setScrollAnchor(anchor)` — called by the `MiniNav` buttons in `GameScreen`, which then `scrollIntoView` the matching section. The anchor is display state for the nav's active mark, not a mount switch: every section stays mounted.
+- `setActiveTab(tab)` — called by the `MiniNav` buttons in `GameScreen`. This is a mount switch: exactly one section (`ab`, `matchup`, `game`, or `logs`) is rendered at a time; the others are unmounted.
 - `setGlobalScope(scope)` — the single This Game / Season switch that drives the scoped sections.
 - `setZonePerspective(perspective)` — swaps whether the Matchup zone shows the pitcher's or the batter's hot/cold grid.
 - `setRecentFormGames(games)` — declared but currently unused; the Recent Form panel was removed from `PitchingSubTab` and `BattingSubTab` in the single-scroll redesign. Kept in the store for potential re-introduction.
 - `setGameFeedPitches(pitches)` — called by `App.tsx`'s Savant game-feed effect on every `gamePk` change (success sets the rows, failure sets `[]`).
 - `setError(err)` — called by `App.tsx`'s deep-link handler and by `useLiveFeed` on any fetch/poll failure.
 - `setLiveScoresCache(scores, pitchers, batters)` — called by `useLiveScores` after each successful Cloud Function poll. Persists the three `ReadonlyMap`s so that returning to `GameSelect` from a game detail screen shows cached scores instantly instead of dashes.
-- `reset()` — called from `FloatingGamesButton` (fixed bottom-left, rendered by `App.tsx`). Clears `selectedGame`, `gamePk`, `liveFeed`, `currentPlay`, `lastTimecode`, `isPolling`, `gameFeedPitches`, `error`, and returns `scrollAnchor`, `globalScope` and `zonePerspective` to their defaults, returning the app to `GameSelect`. Does **not** clear `scoreCache`/`pitcherCache`/`batterCache` so the slate repopulates instantly.
+- `reset()` — called from `FloatingGamesButton` (fixed bottom-left, rendered by `App.tsx`). Clears `selectedGame`, `gamePk`, `liveFeed`, `currentPlay`, `lastTimecode`, `isPolling`, `gameFeedPitches`, `error`, and returns `activeTab`, `globalScope` and `zonePerspective` to their defaults, returning the app to `GameSelect`. Does **not** clear `scoreCache`/`pitcherCache`/`batterCache` so the slate repopulates instantly.
 
 Watchability scores are cached in `gameStore` via `scoreCache`/`pitcherCache`/`batterCache`. `useLiveScores` initializes its local state from these maps on mount and writes back to the store after each successful poll, so navigating between `GameSelect` and a game detail screen preserves scores without a re-fetch dash. `useLiveSlate` similarly owns its own `games`/`loading`/`refresh` state local to `GameSelect`, independent of the store — the store holds `selectedGame` (a snapshot of one game), not the full slate array, so slate refreshes do not clobber the selected game.
 
@@ -740,7 +740,7 @@ The guard is deliberately **not** wired into `npm run build`: Vercel runs `tsc -
 
 **Adding a new canvas component.** Follow the pattern in `src/components/Canvas/*.tsx`: a `useRef<HTMLCanvasElement>` plus a `useEffect` that gets the 2D context, scales for `window.devicePixelRatio`, and draws. Accept a `size`/`width`/`height` prop with a default. If the component does not set an explicit CSS height on its `<canvas>` (as `ArsenalBars` does not), add a descendant clamp in `App.css` following the `.arsenal-canvas > canvas { max-height: 186px }` pattern, or the canvas will render at its raw pixel height. Read colors from the chart theme, never as hex literals — the `no-canvas-hex` guard scans `src/components/Canvas/*.tsx`.
 
-**Adding a new section.** Add the id to the `scrollAnchor` union type in `gameStore.ts`, add a descriptor to the `NAV_ITEMS` array in `GameScreen.tsx`, add a `<section>` with a ref to the `.game-scroll` container, and add a new component file under `src/components/`. Do not give the new component a height — `.game-scroll` is the scroll owner and content sizes to content (see section 8). Run `npm run check:design` afterwards.
+**Adding a new tab.** Add the id to the `ActiveTab` union type in `gameStore.ts`, add a descriptor to the `NAV_ITEMS` array in `GameScreen.tsx`, add a conditional `<section>` branch inside the `.game-page` container, and add a new component file under `src/components/`. Do not give the new component a height — `.game-page` is the scroll owner and content sizes to content (see section 8). Run `npm run check:design` afterwards.
 
 ## 10. Build & Deploy
 

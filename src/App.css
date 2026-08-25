@@ -11,9 +11,9 @@
       .app                 flex column; 100dvh; overflow:hidden; safe-area pad
         .game-screen       flex:1 1 auto; min-height:0; overflow:hidden
           .ui-mini-nav     flex:0 0 var(--mini-nav-h)             ← fixed chrome
-          .game-scroll     flex:1 1 auto; min-height:0; overflow-y:auto  ← SCROLL
+          .game-page       flex:1 1 auto; min-height:0; overflow-y:auto  ← SCROLL
 
-    EXACTLY ONE vertical scroll owner per screen: .game-scroll. On the
+    EXACTLY ONE vertical scroll owner per screen: .game-page. On the
     GameSelect screen — which has no mini nav — the scroll owner is
     `.game-select`. `min-height: 0` on every flex ancestor of a scroll owner
     is a hard requirement; without it the box refuses to shrink and clips
@@ -76,7 +76,7 @@
    introducing a second, horizontal scrollbar on the panel itself; strips that
    genuinely need to pan declare their own `overflow-x: auto`. */
 
-.game-scroll {
+.game-page {
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;
@@ -89,7 +89,7 @@
   -webkit-overflow-scrolling: touch;
 }
 
-.game-scroll > * {
+.game-page > * {
   flex: 0 0 auto;
 }
 
@@ -104,29 +104,6 @@
   display: flex;
   flex-direction: column;
   gap: var(--sp-4);
-}
-
-/* --- Pitching/Batting horizontal carousel -------------------------------- */
-.pb-carousel {
-  display: flex;
-  flex: 0 0 auto;
-  gap: var(--sp-3);
-  overflow-x: auto;
-  overflow-y: hidden;
-  scroll-snap-type: x mandatory;
-  scrollbar-width: none;
-  -webkit-overflow-scrolling: touch;
-}
-
-.pb-carousel::-webkit-scrollbar {
-  display: none;
-}
-
-.pb-card {
-  flex: 0 0 100%;
-  min-width: 0;
-  scroll-snap-align: center;
-  scroll-snap-stop: always;
 }
 
 /* --- Floating Games button ----------------------------------------------- */
@@ -347,13 +324,13 @@ button:focus-visible,
 }
 
 @media (min-width: 768px) {
-  .game-scroll {
+  .game-page {
     padding-inline: max(var(--sp-4), calc((100% - 720px) / 2));
   }
 }
 
 @media (min-width: 1024px) {
-  .game-scroll {
+  .game-page {
     padding-inline: max(var(--sp-4), calc((100% - 960px) / 2));
   }
 }

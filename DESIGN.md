@@ -398,16 +398,15 @@ cards free of repeated help icons while making every displayed abbreviation disc
                 padding: env(safe-area-inset-*)
   .game-screen  flex:1 1 auto; min-height:0; overflow:hidden; display:flex; flex-direction:column
     .ui-mini-nav  flex:0 0 var(--mini-nav-h)                    ← fixed chrome (sticky nav)
-    .game-scroll  flex:1 1 auto; min-height:0; overflow-y:auto  ← THE scroll owner
+    .game-page    flex:1 1 auto; min-height:0; overflow-y:auto  ← THE scroll owner
       .game-section    flex:0 0 auto; scroll-margin-top: var(--mini-nav-h)
-      .pb-carousel     flex:0 0 auto; overflow-x:auto; scroll-snap-type:x mandatory
-        .pb-card       flex:0 0 100%; scroll-snap-align:center; scroll-snap-stop:always
+        .game-subsection flex:0 0 auto
 ```
 
-**Exactly one scroll owner per screen: `.game-scroll`.** `min-height: 0` on every flex ancestor of a
+**Exactly one scroll owner per screen: `.game-page`.** `min-height: 0` on every flex ancestor of a
 scroll container is a hard requirement — without it the container refuses to shrink and content
-is clipped instead of scrolled. The `.pb-carousel` is a horizontal scroll-snap container for the
-Pitching/Batting cards; each card is full-width with mandatory snap.
+is clipped instead of scrolled. `.game-page` mounts exactly one `.game-section` at a time, chosen
+by `gameStore.activeTab`; the MiniNav switches tabs rather than scrolling between anchors.
 
 ### 6.2 Height tokens
 

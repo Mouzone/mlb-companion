@@ -1,5 +1,5 @@
-import { useRef, useCallback } from 'react'
-import type { ReactElement, RefObject } from 'react'
+import { useCallback } from 'react'
+import type { ReactElement } from 'react'
 import { useGameStore } from '../store/gameStore'
 import { MiniNav, type MiniNavItem } from './ui'
 import { LiveAtBat } from './LiveAtBat/LiveAtBat'
@@ -13,58 +13,51 @@ const NAV_ITEMS: ReadonlyArray<MiniNavItem> = [
   { id: 'ab', label: 'AB' },
   { id: 'matchup', label: 'Matchup' },
   { id: 'game', label: 'Game' },
-  { id: 'pitching', label: 'Pit' },
-  { id: 'batting', label: 'Bat' },
+  { id: 'logs', label: 'Logs' },
 ]
 
 export function GameScreen(): ReactElement {
-  const scrollAnchor = useGameStore((s) => s.scrollAnchor)
-  const setScrollAnchor = useGameStore((s) => s.setScrollAnchor)
-
-  const abRef = useRef<HTMLElement>(null)
-  const matchupRef = useRef<HTMLElement>(null)
-  const gameRef = useRef<HTMLElement>(null)
-  const pitchingRef = useRef<HTMLElement>(null)
-  const battingRef = useRef<HTMLElement>(null)
+  const activeTab = useGameStore((s) => s.activeTab)
+  const setActiveTab = useGameStore((s) => s.setActiveTab)
 
   const handleNav = useCallback((id: string) => {
-    setScrollAnchor(id as typeof scrollAnchor)
-    const refMap: Record<string, RefObject<HTMLElement | null>> = {
-      ab: abRef,
-      matchup: matchupRef,
-      game: gameRef,
-      pitching: pitchingRef,
-      batting: battingRef,
-    }
-    refMap[id]?.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-  }, [setScrollAnchor])
+    setActiveTab(id as typeof activeTab)
+  }, [setActiveTab])
 
   return (
     <div className="game-screen">
-      <MiniNav items={NAV_ITEMS} activeId={scrollAnchor} onSelect={handleNav} />
-      <div className="game-scroll">
-        <section id="ab" ref={abRef} className="game-section">
-          <LiveAtBat />
-        </section>
-        <section id="matchup" ref={matchupRef} className="game-section">
-          <MatchupSubTab />
-        </section>
-        <section id="game" ref={gameRef} className="game-section">
-          <div className="game-subsection">
-            <PitcherGameSubTab />
-          </div>
-          <div className="game-subsection">
-            <BatterGameSubTab />
-          </div>
-        </section>
-        <div className="pb-carousel">
-          <section id="pitching" ref={pitchingRef} className="pb-card game-subsection">
-            <PitchingSubTab />
+      <MiniNav items={NAV_ITEMS} activeId={activeTab} onSelect={handleNav} />
+      <div className="game-page">
+        {activeTab === 'ab' ? (
+          <section id="ab" className="game-section">
+            <LiveAtBat />
           </section>
-          <section id="batting" ref={battingRef} className="pb-card game-subsection">
-            <BattingSubTab />
+        ) : null}
+        {activeTab === 'matchup' ? (
+          <section id="matchup" className="game-section">
+            <MatchupSubTab />
           </section>
-        </div>
+        ) : null}
+        {activeTab === 'game' ? (
+          <section id="game" className="game-section">
+            <div className="game-subsection">
+              <PitcherGameSubTab />
+            </div>
+            <div className="game-subsection">
+              <BatterGameSubTab />
+            </div>
+          </section>
+        ) : null}
+        {activeTab === 'logs' ? (
+          <section id="logs" className="game-section">
+            <div className="game-subsection">
+              <PitchingSubTab />
+            </div>
+            <div className="game-subsection">
+              <BattingSubTab />
+            </div>
+          </section>
+        ) : null}
       </div>
     </div>
   )

@@ -15,7 +15,7 @@
     SHELL ARITHMETIC (DESIGN.md §6.2):
       .app is 100dvh minus the safe-area insets, divided by flexbox:
         var(--mini-nav-h)  44px   .ui-mini-nav    ← fixed chrome
-        the remainder             .game-scroll    ← THE scroll owner
+        the remainder             .game-page      ← THE scroll owner
 
    The remainder is deliberately NOT a token. The panel claims it with
    `flex: 1 1 auto; min-height: 0; overflow-y: auto`, so changing either bar
