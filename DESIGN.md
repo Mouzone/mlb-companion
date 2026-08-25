@@ -38,7 +38,7 @@ All tokens live in `src/index.css` under `:root`. Canvas renderers import the sa
 | Token | Value | Use |
 |---|---|---|
 | `--c-bg` | `#ffffff` | Page canvas, card surface |
-| `--c-surface-sunken` | `#f6f8fa` | Sub-tab bar, table zebra, recessed wells, canvas backgrounds |
+| `--c-surface-sunken` | `#f6f8fa` | Mini-nav bar, table zebra, recessed wells, canvas backgrounds |
 | `--c-surface-hover` | `#eef2f6` | Hover / pressed fill on interactive rows |
 | `--c-border` | `#e3e8ee` | Default 1px hairline: cards, dividers, table rules |
 | `--c-border-strong` | `#cdd5df` | Emphasized edges, input borders, segmented-control track |
@@ -283,22 +283,25 @@ The atom of the entire app.
 - Variants: `live` (`--c-live` on `--c-live-bg`) · `final` (`--c-neutral-badge` on `--c-neutral-badge-bg`) ·
   `preview` (`--c-brand-700` on `--c-brand-100`) · `positive` · `negative`.
 
-### 5.5 `TabBar` — primary navigation
-- Fixed `--tab-bar-h`. Equal-width flex children (`flex: 1 1 0`) so labels are optically centered
-  in exact fractions — this fixes the "Pitching sits left of center" defect.
-- Active: label `--c-brand-700` 600, 2px bottom rule in `--c-brand-600` spanning the **full** tab
+### 5.5 `MiniNav` — section navigation
+- Fixed `--mini-nav-h` (44px). Equal-width flex children (`flex: 1 1 0`) so labels are optically centered.
+- Active: label `--c-brand-700` 600, 2px bottom rule in `--c-brand-600` spanning the **full** button
   width (no asymmetric inset).
 - Inactive: `--c-ink-muted` 500. Hover `--c-ink-secondary`. Focus: `--shadow-focus`.
-- Optional `leading` slot renders a non-growing (`flex: 0 0 auto`) element before the tabs — used
-  for the "← Games" back button, which calls `gameStore.reset()` to return to `GameSelect`. The
-  back button is fixed chrome, always visible on every game screen regardless of active tab or
-  sub-tab, so navigation back to the game slate is never lost.
+- Buttons are scroll anchors, not tab mounts — every section stays mounted; clicking a button
+  calls `scrollIntoView({ behavior: 'smooth', block: 'start' })` on the matching `<section>` ref.
 
-### 5.6 `SubTabNav` — secondary navigation
-- Same equal-fraction rule as `TabBar`, `--sub-tab-h`, `--c-surface-sunken` background,
-  `1px solid var(--c-border)` bottom.
+### 5.6 `FloatingGamesButton` — back navigation
+- Fixed bottom-left pill button (chevron-left + "Games"), calls `gameStore.reset()`.
+- `position: fixed`, `z-index: 20`, 48px height, `--c-brand-900` background, uppercase label.
+- Balanced by `StatsGuide` FAB at bottom-right.
 
-### 5.7 `Segmented` — scope switcher (Career/Series, L/R splits)
+### 5.7 `SubTabNav` — secondary navigation (legacy)
+- Same equal-fraction rule as `MiniNav`, `--mini-nav-h`, `--c-surface-sunken` background,
+  `1px solid var(--c-border)` bottom. No longer rendered by any section after the single-scroll
+  redesign; kept for potential re-use.
+
+### 5.8 `Segmented` — scope switcher (Season/Career, All/RHB/LHB)
 - Track: `--c-surface-sunken`, `1px solid var(--c-border-strong)`, `--radius-pill`, height 32px
   (touch-safe; the old 22px was below target).
 - Thumb: `--c-bg`, `--shadow-xs`, `--radius-pill`.
@@ -386,24 +389,26 @@ cards free of repeated help icons while making every displayed abbreviation disc
 ```
 .app            height:100dvh; display:flex; flex-direction:column; overflow:hidden;
                 padding: env(safe-area-inset-*)
-  .tab-bar      flex:0 0 var(--tab-bar-h)                    ← fixed chrome
-  .tab-content  flex:1 1 auto; min-height:0; overflow:hidden ← must keep min-height:0
-    .sub-tab-nav  flex:0 0 var(--sub-tab-h)                  ← fixed chrome
-    .panel        flex:1 1 auto; min-height:0; overflow-y:auto  ← THE scroll owner
+  .game-screen  flex:1 1 auto; min-height:0; overflow:hidden; display:flex; flex-direction:column
+    .ui-mini-nav  flex:0 0 var(--mini-nav-h)                    ← fixed chrome (sticky nav)
+    .game-scroll  flex:1 1 auto; min-height:0; overflow-y:auto  ← THE scroll owner
+      .game-section    flex:0 0 auto; scroll-margin-top: var(--mini-nav-h)
+      .pb-carousel     flex:0 0 auto; overflow-x:auto; scroll-snap-type:x mandatory
+        .pb-card       flex:0 0 100%; scroll-snap-align:center; scroll-snap-stop:always
 ```
 
-**Exactly one scroll owner per screen: the panel.** `min-height: 0` on every flex ancestor of a
+**Exactly one scroll owner per screen: `.game-scroll`.** `min-height: 0` on every flex ancestor of a
 scroll container is a hard requirement — without it the container refuses to shrink and content
-is clipped instead of scrolled.
+is clipped instead of scrolled. The `.pb-carousel` is a horizontal scroll-snap container for the
+Pitching/Batting cards; each card is full-width with mandatory snap.
 
 ### 6.2 Height tokens
 
 | Token | Value |
 |---|---|
-| `--tab-bar-h` | `48px` |
-| `--sub-tab-h` | `44px` |
+| `--mini-nav-h` | `44px` |
 
-Those two bars are the only heights the shell names. The panel below them is **not** a token: it
+The mini-nav bar is the only height the shell names. The scroll owner below it is **not** a token: it
 claims whatever is left via `flex: 1 1 auto; min-height: 0; overflow-y: auto`. An earlier draft of
 this spec defined a `--content-h` calc for it; that token was removed once every consumer was
 converted to flex, because a computed height re-introduces the clipping this section forbids.
@@ -466,7 +471,7 @@ The app previously had **zero** width breakpoints. Three are introduced:
   indicators ≥ 3:1. `--c-ink-subtle` (`#8792a2`, 3.6:1 on white) is permitted **only** at
   `--fs-body` and larger, never for `--fs-label` or `--fs-micro`.
 - **Touch targets:** every interactive element ≥ 44×44 CSS px of hit area, padding included.
-  This is why `--sub-tab-h` moved to 44 and the segmented control to 32px + vertical padding.
+  This is why `--mini-nav-h` is 44 and the segmented control is 32px + vertical padding.
 - **Focus:** every focusable element shows `--shadow-focus`. Focus is never removed without a
   same-or-better replacement.
 - **Color is never the sole channel.** Positive/negative stats carry a sign, arrow, or explicit
