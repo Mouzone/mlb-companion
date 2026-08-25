@@ -397,44 +397,6 @@ export interface SavantGamePitch {
   }[]
 }
 
-export interface CareerPitcherStat {
-  era: string
-  whip: string
-  strikeOuts: number
-  baseOnBalls: number
-  inningsPitched: string
-  hits: number
-  earnedRuns: number
-  homeRuns: number
-  hitBatsmen: number
-  gamesPlayed: number
-  gamesStarted?: number
-  gamesPitched?: number
-  avg: string
-  battersFaced?: number
-  fip?: number
-  kPct?: number
-  bbPct?: number
-  hr9?: number
-}
-
-export interface CareerBatterStat {
-  avg: string
-  obp: string
-  slg: string
-  ops: string
-  homeRuns: number
-  rbi: number
-  strikeOuts: number
-  baseOnBalls: number
-  atBats: number
-  plateAppearances: number
-  hits: number
-  iso?: number
-  kPct?: number
-  bbPct?: number
-}
-
 export interface InGameH2HAtBat {
   inning: number
   result: string

@@ -1,14 +1,13 @@
-import { useMemo, useState, type ReactElement } from 'react'
-import type { CareerBatterStat, SeasonStat, StatSplit } from '../../api/types'
+import { useMemo, type ReactElement } from 'react'
+import type { SeasonStat, StatSplit } from '../../api/types'
 import { usePlayerStats } from '../../hooks/usePlayerStats'
 import { useStatBenchmarks } from '../../hooks/useStatBenchmarks'
-import { useCareerMatchupStats } from '../../hooks/useCareerMatchupStats'
 import { useGameStore } from '../../store/gameStore'
 import { derivePitcher } from '../../utils/derivePitcher'
 import type { DataTableColumn, DataTableRow } from '../ui'
-import { EmptyPanel, Segmented } from '../ui'
+import { EmptyPanel } from '../ui'
 import { PvbCard } from './PvbCard'
-import { batterCareerCells, batterSeasonCells, type Cell } from './PvbCards'
+import { batterSeasonCells, type Cell } from './PvbCards'
 import { benchmarkBatterCells, type BatterBenchmarkContext } from './PvbBenchmarks'
 import { Panel, TablePanel } from './PvbPanels'
 import {
@@ -20,11 +19,6 @@ import {
 } from './PvbShared'
 
 const SEASON = new Date().getFullYear().toString()
-
-const STAT_SCOPE_OPTIONS = [
-  { id: 'season', label: 'Season' },
-  { id: 'career', label: 'Career' },
-]
 
 const SITUATIONS: ReadonlyArray<{ code: string; label: string }> = [
   { code: 'vl', label: 'vs LHP' },
@@ -84,25 +78,15 @@ export function BattingSubTab(): ReactElement {
   const pitcherId = derivePitcher(currentPlay, liveFeed, selectedGame)?.id ?? null
 
   const { batterSeason, batterSplits, gameLog, vsPlayer, loading } = usePlayerStats(batterId, pitcherId)
-  const { batter: careerBatter } = useCareerMatchupStats(pitcherId, batterId)
-
-  const [statScope, setStatScope] = useState<'season' | 'career'>('season')
-  const { cohorts, loading: benchmarkLoading } = useStatBenchmarks(statScope)
+  const { cohorts, loading: benchmarkLoading } = useStatBenchmarks('season')
 
   const statCard = useMemo(() => {
-    if (statScope === 'career') {
-      if (careerBatter === null) return { cells: [] as Cell[], loading: true }
-      const cells = batterCareerCells(careerBatter)
-      if (cohorts === null || cohorts.scope !== 'career') return { cells, loading: benchmarkLoading }
-      const ctx: BatterBenchmarkContext<CareerBatterStat> = { scope: 'career', cohort: cohorts.batters }
-      return { cells: benchmarkBatterCells(cells, careerBatter, ctx), loading: false }
-    }
     if (batterSeason === null) return { cells: [] as Cell[], loading: true }
     const cells = batterSeasonCells(batterSeason)
     if (cohorts === null || cohorts.scope !== 'season') return { cells, loading: benchmarkLoading }
     const ctx: BatterBenchmarkContext<SeasonStat> = { scope: 'season', cohort: cohorts.batters }
     return { cells: benchmarkBatterCells(cells, batterSeason, ctx), loading: false }
-  }, [statScope, careerBatter, batterSeason, cohorts, benchmarkLoading])
+  }, [batterSeason, cohorts, benchmarkLoading])
 
   const splitRows = useMemo<DataTableRow[]>(() => {
     const byCode = new Map<string, StatSplit>()
@@ -150,16 +134,11 @@ export function BattingSubTab(): ReactElement {
 
   return (
     <div>
-      <Segmented
-        options={STAT_SCOPE_OPTIONS}
-        activeId={statScope}
-        onSelect={(id) => setStatScope(id as 'season' | 'career')}
-      />
       <PvbCard
         personId={batter.id}
         name={batter.fullName}
         strap={`${(side === undefined ? undefined : HANDEDNESS[side]) ?? 'Batter'} \u00b7 ${SEASON}`}
-        scopeLabel={statScope === 'season' ? 'Season' : 'Career'}
+        scopeLabel="Season"
         role="batter"
         cells={statCard.cells}
         platoon={null}

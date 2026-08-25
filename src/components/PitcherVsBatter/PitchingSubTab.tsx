@@ -1,15 +1,14 @@
 import { useEffect, useMemo, useState, type ReactElement } from 'react'
 import { fetchCachedGameLog } from '../../api/playerStatsCache'
-import type { CareerPitcherStat, GameLogEntry, PitcherSeasonStat, StatSplit } from '../../api/types'
+import type { GameLogEntry, PitcherSeasonStat, StatSplit } from '../../api/types'
 import type { PitcherRole } from '../../api/benchmarks'
 import { usePlayerStats } from '../../hooks/usePlayerStats'
 import { useStatBenchmarks } from '../../hooks/useStatBenchmarks'
-import { useCareerMatchupStats } from '../../hooks/useCareerMatchupStats'
 import { useGameStore } from '../../store/gameStore'
 import { derivePitcher } from '../../utils/derivePitcher'
 import { PARK_FACTORS } from '../../utils/leagueConstants'
 import type { DataTableRow } from '../ui'
-import { EmptyPanel, Segmented } from '../ui'
+import { EmptyPanel } from '../ui'
 import {
   buildGameArsenalRows,
   buildSeasonArsenalRows,
@@ -18,7 +17,6 @@ import {
 import { ColorCodedArsenal } from './ColorCodedArsenal'
 import { PvbCard } from './PvbCard'
 import {
-  pitcherCareerCells,
   pitcherSeasonCells,
   type Cell,
 } from './PvbCards'
@@ -34,11 +32,6 @@ import {
 import { monthDay, splitCode, whole } from './PvbShared'
 
 const SEASON = new Date().getFullYear().toString()
-
-const STAT_SCOPE_OPTIONS = [
-  { id: 'season', label: 'Season' },
-  { id: 'career', label: 'Career' },
-]
 
 const SITUATIONS: ReadonlyArray<{ code: string; label: string }> = [
   { code: 'vl', label: 'vs L' },
@@ -66,9 +59,6 @@ export function PitchingSubTab(): ReactElement {
   const pitcherId = pitcher?.id ?? null
 
   const { pitchArsenal, pitcherSplits, pitcherSeason, loading } = usePlayerStats(batterId, pitcherId)
-  const { pitcher: careerPitcher } = useCareerMatchupStats(pitcherId, batterId)
-
-  const [statScope, setStatScope] = useState<'season' | 'career'>('season')
   const [handedness, setHandedness] = useState<HandednessFilter>('all')
   const [log, setLog] = useState<GameLogEntry[]>([])
   const [logLoading, setLogLoading] = useState(false)
@@ -95,18 +85,9 @@ export function PitchingSubTab(): ReactElement {
     }
   }, [pitcherId])
 
-  const { cohorts, loading: benchmarkLoading } = useStatBenchmarks(statScope)
+  const { cohorts, loading: benchmarkLoading } = useStatBenchmarks('season')
 
   const statCard = useMemo(() => {
-    if (statScope === 'career') {
-      if (careerPitcher === null) return { cells: [] as Cell[], loading: true }
-      const cells = pitcherCareerCells(careerPitcher)
-      if (cohorts === null || cohorts.scope !== 'career') return { cells, loading: benchmarkLoading }
-      const role = resolvePitcherRole(pitcherSeason)
-      const cohort = role === 'starter' ? cohorts.starters : cohorts.relievers
-      const ctx: PitcherBenchmarkContext<CareerPitcherStat> = { scope: 'career', role, cohort }
-      return { cells: benchmarkPitcherCells(cells, careerPitcher, ctx), loading: false }
-    }
     if (pitcherSeason === null) return { cells: [] as Cell[], loading: true }
     const parkFactor = PARK_FACTORS[selectedGame?.venue?.name ?? ''] ?? 1.0
     const cells = pitcherSeasonCells(pitcherSeason, parkFactor)
@@ -115,7 +96,7 @@ export function PitchingSubTab(): ReactElement {
     const cohort = role === 'starter' ? cohorts.starters : cohorts.relievers
     const ctx: PitcherBenchmarkContext<PitcherSeasonStat> = { scope: 'season', role, cohort }
     return { cells: benchmarkPitcherCells(cells, pitcherSeason, ctx), loading: false }
-  }, [statScope, careerPitcher, pitcherSeason, cohorts, benchmarkLoading, selectedGame])
+  }, [pitcherSeason, cohorts, benchmarkLoading, selectedGame])
 
   const arsenalRows = useMemo(() => {
     if (globalScope === 'thisGame') {
@@ -185,20 +166,15 @@ export function PitchingSubTab(): ReactElement {
 
   const hand = matchup?.pitchHand.code
   const scopeLabel =
-    globalScope === 'thisGame' ? 'This Game' : globalScope === 'season' ? 'Season' : 'Career'
+    globalScope === 'thisGame' ? 'This Game' : 'Season'
 
   return (
     <div>
-      <Segmented
-        options={STAT_SCOPE_OPTIONS}
-        activeId={statScope}
-        onSelect={(id) => setStatScope(id as 'season' | 'career')}
-      />
       <PvbCard
         personId={pitcher.id}
         name={pitcher.fullName}
         strap={`${hand === undefined ? 'Pitcher' : `${hand}HP`} \u00b7 ${SEASON}`}
-        scopeLabel={statScope === 'season' ? 'Season' : 'Career'}
+        scopeLabel="Season"
         role="pitcher"
         cells={statCard.cells}
         platoon={null}

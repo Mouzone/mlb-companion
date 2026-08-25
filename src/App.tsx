@@ -6,10 +6,9 @@ import { FloatingGamesButton } from './components/ui'
 import { fetchLiveFeed } from './api/mlb'
 import { fetchSavantGameFeed } from './api/savant'
 import { fetchActiveBenchmarkCohorts } from './api/benchmarks'
-import { fetchCachedGameLog, fetchCachedCareerVsPlayer } from './api/playerStatsCache'
+import { fetchCachedGameLog } from './api/playerStatsCache'
 import { useLiveFeed } from './hooks/useLiveFeed'
 import { preloadPlayerStats } from './hooks/usePlayerStats'
-import { preloadCareerMatchupStats } from './hooks/useCareerMatchupStats'
 import { derivePitcher } from './utils/derivePitcher'
 import type { LiveFeed, ScheduledGame } from './api/types'
 import { StatsGuide } from './components/StatsGuide/StatsGuide'
@@ -102,8 +101,6 @@ function App() {
     }
     if (pvbBatterId !== null && pvbPitcherId !== null) {
       preloadPlayerStats(pvbBatterId, pvbPitcherId)
-      preloadCareerMatchupStats(pvbPitcherId, pvbBatterId)
-      void fetchCachedCareerVsPlayer(pvbBatterId, pvbPitcherId)
     }
   }, [pvbBatterId, pvbPitcherId])
 

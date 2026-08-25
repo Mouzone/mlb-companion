@@ -1,6 +1,4 @@
 import type {
-  CareerBatterStat,
-  CareerPitcherStat,
   DiffPatchResponse,
   GameLogEntry,
   HotColdZone,
@@ -93,25 +91,11 @@ export async function fetchSeasonStats(
   personId: number,
   group: 'hitting' | 'pitching',
   season: string,
-  mode: 'season' | 'career' = 'season',
-): Promise<SeasonStat | PitcherSeasonStat | CareerBatterStat | CareerPitcherStat | null> {
-  if (mode === 'career') return fetchCareerStats(personId, group)
+): Promise<SeasonStat | PitcherSeasonStat | null> {
   const res = await fetch(
     `${BASE}/v1/people/${personId}/stats?stats=season&group=${group}&season=${season}`,
   )
   if (!res.ok) throw new Error(`Season stats fetch failed: ${res.status}`)
-  const data = await res.json()
-  const splits = data.stats?.[0]?.splits
-  if (!splits || splits.length === 0) return null
-  return splits[0].stat
-}
-
-export async function fetchCareerStats(
-  personId: number,
-  group: 'hitting' | 'pitching',
-): Promise<CareerBatterStat | CareerPitcherStat | null> {
-  const res = await fetch(`${BASE}/v1/people/${personId}/stats?stats=career&group=${group}`)
-  if (!res.ok) throw new Error(`Career stats fetch failed: ${res.status}`)
   const data = await res.json()
   const splits = data.stats?.[0]?.splits
   if (!splits || splits.length === 0) return null
@@ -189,9 +173,7 @@ export async function fetchVsPlayer(
   batterId: number,
   pitcherId: number,
   season: string,
-  mode: 'season' | 'career' = 'season',
 ): Promise<VsPlayerStat | null> {
-  if (mode === 'career') return fetchCareerVsPlayer(batterId, pitcherId)
   return fetchVsPlayerQuery(batterId, pitcherId, `stats=vsPlayer&group=hitting&season=${season}`)
 }
 
@@ -219,25 +201,6 @@ async function fetchVsPlayerQuery(
     ops: stat.ops ?? '---',
     strikeOuts: stat.strikeOuts ?? 0,
     baseOnBalls: stat.baseOnBalls ?? 0,
-  }
-}
-
-export async function fetchCareerVsPlayer(
-  batterId: number,
-  pitcherId: number,
-): Promise<VsPlayerStat | null> {
-  try {
-    const total = await fetchVsPlayerQuery(batterId, pitcherId, 'stats=vsPlayerTotal&group=hitting')
-    if (total) return total
-  } catch (error) {
-    if (!(error instanceof Error)) throw error
-  }
-
-  try {
-    return await fetchVsPlayerQuery(batterId, pitcherId, 'stats=vsPlayer&group=hitting')
-  } catch (error) {
-    if (error instanceof Error) return null
-    throw error
   }
 }
 

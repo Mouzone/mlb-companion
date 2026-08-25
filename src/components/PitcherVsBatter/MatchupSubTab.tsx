@@ -1,5 +1,4 @@
-import { useEffect, useMemo, useState, type ReactElement } from 'react'
-import { fetchCachedCareerVsPlayer } from '../../api/playerStatsCache'
+import { useMemo, type ReactElement } from 'react'
 import type { StatSplit, VsPlayerStat } from '../../api/types'
 import { usePlayerStats } from '../../hooks/usePlayerStats'
 import { useGameStore } from '../../store/gameStore'
@@ -19,12 +18,9 @@ import {
 import { TablePanel, ZonePanel } from './PvbPanels'
 import { rateText, splitCode } from './PvbShared'
 
-type Status = 'idle' | 'loading' | 'ready' | 'error'
-
 const SCOPES: ReadonlyArray<SegmentedOption> = [
   { id: 'thisGame', label: 'This Game' },
   { id: 'season', label: 'Season' },
-  { id: 'career', label: 'Career' },
 ]
 
 const ZONE_OPTIONS: ReadonlyArray<SegmentedOption> = [
@@ -52,9 +48,6 @@ export function MatchupSubTab(): ReactElement {
   const zonePerspective = useGameStore((s) => s.zonePerspective)
   const setZonePerspective = useGameStore((s) => s.setZonePerspective)
 
-  const [career, setCareer] = useState<VsPlayerStat | null>(null)
-  const [careerStatus, setCareerStatus] = useState<Status>('idle')
-
   const matchup = currentPlay?.matchup ?? null
   const pitcher = derivePitcher(currentPlay, liveFeed, selectedGame)
   const batter = matchup?.batter ?? null
@@ -72,30 +65,6 @@ export function MatchupSubTab(): ReactElement {
     vsPlayer,
     loading,
   } = usePlayerStats(batterId, pitcherId)
-
-  useEffect(() => {
-    if (batterId === null || pitcherId === null) {
-      setCareer(null)
-      setCareerStatus('idle')
-      return
-    }
-    let cancelled = false
-    setCareerStatus('loading')
-    fetchCachedCareerVsPlayer(batterId, pitcherId)
-      .then((stat) => {
-        if (cancelled) return
-        setCareer(stat)
-        setCareerStatus('ready')
-      })
-      .catch(() => {
-        if (cancelled) return
-        setCareer(null)
-        setCareerStatus('error')
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [batterId, pitcherId])
 
   const hand = matchup?.pitchHand.code ?? 'R'
   const side = effectiveSide(matchup?.batSide.code ?? 'R', hand)
@@ -143,29 +112,15 @@ export function MatchupSubTab(): ReactElement {
     return deriveThisGameH2H(liveFeed.liveData.plays.allPlays, batterId, pitcherId)
   }, [liveFeed, batterId, pitcherId])
 
-  const h2hStat =
-    globalScope === 'thisGame' ? thisGameH2H : globalScope === 'season' ? vsPlayer : career
-  const h2hLoading = globalScope === 'career' ? careerStatus === 'loading' : loading
-  const h2hTitle =
-    globalScope === 'thisGame'
-      ? 'This Game H2H'
-      : globalScope === 'season'
-        ? 'Season H2H'
-        : 'Career H2H'
+  const h2hStat = globalScope === 'thisGame' ? thisGameH2H : vsPlayer
+  const h2hLoading = loading
+  const h2hTitle = globalScope === 'thisGame' ? 'This Game H2H' : 'Season H2H'
   const h2hEmpty =
-    globalScope === 'thisGame'
-      ? 'No meetings in this game yet'
-      : globalScope === 'season'
-        ? 'No meetings this season'
-        : careerStatus === 'error'
-          ? 'Head-to-head data unavailable'
-          : 'No matchup history'
+    globalScope === 'thisGame' ? 'No meetings in this game yet' : 'No meetings this season'
   const h2hHint =
     globalScope === 'thisGame'
       ? 'H2H updates as the batter faces this pitcher.'
-      : globalScope === 'season'
-        ? 'Career totals still cover every prior meeting.'
-        : 'These two have not shared a completed plate appearance.'
+      : 'Season totals cover every meeting this year.'
 
   const activeZones = zonePerspective === 'pitcher' ? pitcherHotCold : batterHotCold
   const zoneTitle = zonePerspective === 'pitcher' ? 'Pitcher Zones' : 'Batter Zones'

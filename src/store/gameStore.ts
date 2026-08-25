@@ -3,7 +3,7 @@ import type { LiveFeed, ScheduledGame, CurrentPlay, SavantGamePitch } from '../a
 import type { CurrentPitcher, CurrentBatter } from '../hooks/useLiveScores'
 
 type ScrollAnchor = 'ab' | 'matchup' | 'game' | 'pitching' | 'batting'
-type GlobalScope = 'thisGame' | 'season' | 'career'
+type GlobalScope = 'thisGame' | 'season'
 type ZonePerspective = 'pitcher' | 'batter'
 
 interface GameState {

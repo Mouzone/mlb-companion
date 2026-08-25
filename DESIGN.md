@@ -261,7 +261,7 @@ The atom of the entire app.
   including metrics where lower raw values are favorable.
 - Benchmark metadata names both population and sample size, for example “P87 among 164 active
   MLB starting pitchers (season).” Starter/bullpen identity follows current-season usage and is
-  reused for career comparisons; batter cohorts contain active MLB hitters only.
+  batter cohorts contain active MLB hitters only.
 - Rule: label and value share a left edge. In a grid, all values share a baseline.
 
 ### 5.2 `StatGrid` — responsive stat matrix
@@ -301,7 +301,7 @@ The atom of the entire app.
   `1px solid var(--c-border)` bottom. No longer rendered by any section after the single-scroll
   redesign; kept for potential re-use.
 
-### 5.8 `Segmented` — scope switcher (Season/Career, All/RHB/LHB)
+### 5.8 `Segmented` — scope switcher (This Game/Season, All/RHB/LHB)
 - Track: `--c-surface-sunken`, `1px solid var(--c-border-strong)`, `--radius-pill`, height 32px
   (touch-safe; the old 22px was below target).
 - Thumb: `--c-bg`, `--shadow-xs`, `--radius-pill`.

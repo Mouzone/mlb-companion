@@ -1,6 +1,4 @@
 import type {
-  CareerBatterStat,
-  CareerPitcherStat,
   PitcherSeasonStat,
   SeasonStat,
 } from '../../api/types'
@@ -22,8 +20,8 @@ import { percentileBenchmark } from '../../utils/percentile'
 import type { Cell } from './PvbCards'
 import { extraStat } from './PvbCards'
 
-type BatterStat = SeasonStat | CareerBatterStat
-type PitcherStat = PitcherSeasonStat | CareerPitcherStat
+type BatterStat = SeasonStat
+type PitcherStat = PitcherSeasonStat
 
 interface MetricValue {
   readonly value: number | null

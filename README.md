@@ -23,9 +23,8 @@ src/
                                            Calls useLiveFeed() (the single call site) so live polling is tied to
                                            the selected game rather than to the Live tab being mounted. Warms
                                             every stat cache as soon as a matchup is known —
-                                            fetchActiveBenchmarkCohorts on gamePk, then preloadPlayerStats,
-                                            preloadCareerMatchupStats, fetchCachedGameLog, and
-                                            fetchCachedCareerVsPlayer once currentPlay.matchup resolves — so that
+                                            fetchActiveBenchmarkCohorts on gamePk, then preloadPlayerStats
+                                            and fetchCachedGameLog once currentPlay.matchup resolves — so that
                                             any section opens without a loading pass. Every preload is idempotent
                                             (module-cache guarded) and swallows its own rejection; the hooks
                                             surface real failures when the section actually mounts.
@@ -39,13 +38,13 @@ src/
                                            ScheduleResponse, PlayerInfo, PitchArsenalItem, HotColdZone, StatSplit,
                                            GameLogEntry, VsPlayerStat, SeasonStat, PitcherSeasonStat, PlayEvent,
                                            CurrentPlay, LiveFeed, DiffPatchResponse, SavantBattedBall,
-                                           SavantGamePitch, CareerPitcherStat, CareerBatterStat, InGameH2HAtBat,
+                                           SavantGamePitch, InGameH2HAtBat,
                                            SeriesH2HGame, H2HAggregate, PlayByPlayResponse. Imported by every
                                            fetcher, hook, and component that touches API data.
     mlb.ts                                MLB Stats API client. BASE = 'https://statsapi.mlb.com/api'. Exports
                                            fetchSchedule, fetchLiveFeed, fetchDiffPatch, fetchPlayer,
-                                           fetchSeasonStats, fetchCareerStats, fetchPitchArsenal, fetchHotColdZones,
-                                           fetchStatSplits, fetchGameLog, fetchVsPlayer, fetchCareerVsPlayer,
+                                           fetchSeasonStats, fetchPitchArsenal, fetchHotColdZones,
+                                           fetchStatSplits, fetchGameLog, fetchVsPlayer,
                                            fetchSeriesSchedule, fetchPlayByPlay, chunk, fetchPlayByPlayBatch.
                                             Imported by App.tsx, useLiveFeed, usePlayerStats, GameScreen,
                                            MatchupSubTab, PitchingSubTab, BattingSubTab, GameSelect.
@@ -57,14 +56,13 @@ src/
                                            fetchActiveBenchmarkCohorts(scope: BenchmarkScope, season:
                                            string), which batches ~200 players per call into batters,
                                            starters, and relievers cohorts. Also exports types
-                                           BenchmarkScope, PitcherRole, BenchmarkPlayerStat<T>,
-                                           SeasonBenchmarkCohorts, CareerBenchmarkCohorts, and
-                                           ActiveBenchmarkCohorts (union of the two). Imported by App.tsx
+                                           BenchmarkScope ('season'), PitcherRole, BenchmarkPlayerStat<T>,
+                                           SeasonBenchmarkCohorts, and ActiveBenchmarkCohorts.
+                                           Imported by App.tsx
                                            (preload) and useStatBenchmarks.
-    playerStatsCache.ts                   Module-level promise caches for game-log and career-vs-player
-                                           fetches. Exports fetchCachedGameLog(personId, season, group)
-                                           and fetchCachedCareerVsPlayer(batterId, pitcherId), keyed on
-                                           person/season/group and batter/pitcher respectively. A failed
+    playerStatsCache.ts                   Module-level promise cache for game-log fetches. Exports
+                                           fetchCachedGameLog(personId, season, group), keyed on
+                                           person/season/group. A failed
                                            promise is evicted from the cache so a transient error is not
                                            sticky for the session. Imported by App.tsx, MatchupSubTab,
                                            PitchingSubTab.
@@ -118,11 +116,6 @@ src/
                                            card resolves on its own. Also exports preloadPlayerStats(batterId,
                                             pitcherId), called from App. Imported by PitchingSubTab,
                                             BattingSubTab, MatchupSubTab.
-    useCareerMatchupStats.ts              useCareerMatchupStats(pitcherId, batterId) => { pitcher, batter }.
-                                           Two module-level caches keyed on the bare player ID, so swapping one
-                                           side of the matchup leaves the other untouched. Empty results are
-                                           evicted rather than cached. Exports
-                                           preloadCareerMatchupStats(pitcherId, batterId), called from App.
     useWatchability.ts                    useWatchability(games) => { scores: ReadonlyMap<number,
                                            WatchabilityResult>, loading, stale }. Legacy client-side watchability
                                            hook. Fetches /watchability.json once on mount; polls
@@ -144,7 +137,7 @@ src/
     useStatBenchmarks.ts                  useStatBenchmarks(scope: BenchmarkScope) => { cohorts, loading }.
                                            Fetches ActiveBenchmarkCohorts for the current year on mount; the
                                            cohort object is null until the first successful resolution. Used
-                                            by PitchingSubTab and BattingSubTab to pass season/career benchmark
+                                            by PitchingSubTab and BattingSubTab to pass season benchmark
                                             data to the stat-card cells. Imported by PitchingSubTab, BattingSubTab.
     useLiveSlate.ts                       useLiveSlate(date) => { games, loading, refresh }. Adaptive schedule
                                            polling hook that replaces the one-shot fetchSchedule pattern in
@@ -323,21 +316,21 @@ src/
                                             beneath the grid.
      PitcherVsBatter/PvbCard.tsx            Exports PvbCard (a swipeable stat card). Renders a player identity
      PitcherVsBatter/MatchupSubTab.tsx     H2H scope toggle driven by gameStore.globalScope ('thisGame' |
-                                           'season' | 'career', default 'thisGame'). This-game H2H derived from
+                                           'season', default 'thisGame'). This-game H2H derived from
                                            liveFeed allPlays via deriveThisGameH2H; season via vsPlayer from
-                                           usePlayerStats; career via fetchCachedCareerVsPlayer. Zone toggle
+                                           usePlayerStats. Zone toggle
                                            (gameStore.zonePerspective 'pitcher'|'batter') swaps which HotCold
                                            array feeds ZonePanel/HeatMap (always pitcher-perspective orientation).
                                            Platoon matchup table, arsenal faced. Imported by GameScreen.
-    PitcherVsBatter/PitchingSubTab.tsx    Pitcher stat card (local Season/Career toggle with
-                                           benchmark percentile coloring via PvbCard + benchmarkPitcherCells)
+    PitcherVsBatter/PitchingSubTab.tsx    Pitcher season stat card (benchmark percentile coloring via
+                                           PvbCard + benchmarkPitcherCells)
                                            + color-coded arsenal (globalScope-driven: This Game shows
                                            in-game velo/spin/break color-coded vs season avg per pitch type,
-                                           with vs All/RHB/LHB handedness filter; Season/Career shows plain
+                                           with vs All/RHB/LHB handedness filter; Season shows plain
                                            arsenal from pitchArsenal) + opponent splits DataTable + game log
                                            DataTable. Imported by GameScreen.
-     PitcherVsBatter/BattingSubTab.tsx     Batter stat card (local Season/Career toggle with benchmark
-                                           percentile coloring via PvbCard + benchmarkBatterCells) + splits
+     PitcherVsBatter/BattingSubTab.tsx     Batter season stat card (benchmark percentile coloring via
+                                           PvbCard + benchmarkBatterCells) + splits
                                            DataTable + game log DataTable. Imported by GameScreen.
      PitcherVsBatter/ArsenalColorCoding.ts Pure functions: buildGameArsenalRows (filters SavantGamePitch
                                            by current pitcher via allPlays matchup cross-ref, groups by
@@ -514,7 +507,7 @@ Baseball Savant (baseballsavant   ──┘                            │
 
 - `App.tsx` is the only place that writes `selectedGame`/`gamePk` from a URL (`?gamePk=`) or from `GameSelect`'s picker, and the only place that populates `gameFeedPitches` from `fetchSavantGameFeed`.
 - `useLiveFeed` is the only source of live-feed polling; it is invoked exactly once, inside `App`, so the 4s interval is tied to the selected game rather than to which tab happens to be mounted. Switching tabs no longer tears down and refetches the feed.
-- `usePlayerStats` is called independently by `PitchingSubTab`, `BattingSubTab`, and `MatchupSubTab` with the same `(batterId, pitcherId)` pair. Module-level promise caches keyed per player mean only the first caller fetches; the rest await the same promise. `App` warms these caches (`preloadPlayerStats`, `preloadCareerMatchupStats`, `fetchCachedGameLog`, `fetchCachedCareerVsPlayer`, `fetchActiveBenchmarkCohorts`) as soon as the live feed yields a matchup, so opening any section is generally instant.
+- `usePlayerStats` is called independently by `PitchingSubTab`, `BattingSubTab`, and `MatchupSubTab` with the same `(batterId, pitcherId)` pair. Module-level promise caches keyed per player mean only the first caller fetches; the rest await the same promise. `App` warms these caches (`preloadPlayerStats`, `fetchCachedGameLog`, `fetchActiveBenchmarkCohorts`) as soon as the live feed yields a matchup, so opening any section is generally instant.
 - **Pitcher selection** in the Pitcher vs Batter tab and the `App` preload uses a shared `derivePitcher(currentPlay, liveFeed, selectedGame)` helper (`src/utils/derivePitcher.ts`) with a 4-step fallback: (1) `currentPlay.matchup.pitcher` — the pitcher in the current at-bat, (2) `liveFeed.linescore.defense.pitcher` — the MLB API's linescore defense field, always populated once the feed loads (even in Preview state or between at-bats when `currentPlay` is transiently null), (3) home probable pitcher, (4) away probable pitcher, (5) null. This ensures the PVB tab shows the actual pitcher on the mound — including relievers after a pitching change — rather than defaulting to the scheduled starter. The Live Game tab (At Bat / Pitcher / Batter sub-tabs) already used `currentPlay.matchup.pitcher` directly with no fallback; only the PVB tab had the copy-pasted probable fallback.
 - Because the caches are keyed per player rather than per matchup, a pitching change refetches only the pitcher bundle and a new batter refetches only the batter bundle.
 - Sabermetric derivations (FIP, ERA+, wRC+, ISO, K%, BB%, HR/9, GB%) happen in the consuming components (`PitchingSubTab`/`BattingSubTab` via `PvbCards` cell builders), not inside the store or the fetchers — raw stat objects are stored/passed as-is and computed on render.
@@ -556,13 +549,11 @@ All MLB Stats API endpoints use `BASE = 'https://statsapi.mlb.com/api'` from `sr
 | `GET /v1.1/game/{gamePk}/feed/live/diffPatch` | `startTimecode=<metaData.timeStamp>` | `fetchDiffPatch(gamePk, startTimecode)` | `DiffPatchResponse` = `DiffPatchEntry[]` (`[{ diff: [{op,path,value?,from?}] }]`, RFC 6902) **or** a full `LiveFeed` when nothing changed |
 | `GET /v1/people/{personId}` | path param `personId` | `fetchPlayer(personId)` | `{ people: [PlayerInfo] }` (first element returned) |
 | `GET /v1/people/{personId}/stats` | `stats=season&group=<hitting\|pitching>&season=<year>` | `fetchSeasonStats(personId, group, season, mode='season')` | `stats[0].splits[0].stat` → `SeasonStat \| PitcherSeasonStat` |
-| `GET /v1/people/{personId}/stats` | `stats=career&group=<hitting\|pitching>` | `fetchCareerStats(personId, group)` / `fetchSeasonStats(..., mode='career')` | `stats[0].splits[0].stat` → `CareerBatterStat \| CareerPitcherStat` |
 | `GET /v1/people/{personId}/stats` | `stats=pitchArsenal&group=pitching&season=<year>` | `fetchPitchArsenal(personId, season)` | `stats[0].splits[].stat`, with `percentage` multiplied by 100 → `PitchArsenalItem[]` |
 | `GET /v1/people/{personId}/stats` | `stats=hotColdZones&group=<hitting\|pitching>&season=<year>` | `fetchHotColdZones(personId, group, season)` | Selects the split named `battingAverage` by name (falls back to `splits[0]`), never by index → `HotColdZone[]` |
 | `GET /v1/people/{personId}/stats` | `stats=statSplits&group=<hitting\|pitching>&season=<year>&sitCodes=vl,vr,risp` (default sitCodes) | `fetchStatSplits(personId, group, season, sitCodes?)` | `stats[0].splits` → `StatSplit[]` |
 | `GET /v1/people/{personId}/stats` | `stats=gameLog&group=<hitting\|pitching>&season=<year>` (group defaults to `hitting`) | `fetchGameLog(personId, season, group?)` | `stats[0].splits` → `GameLogEntry[]` |
 | `GET /v1/people/{batterId}/stats` | `stats=vsPlayer&group=hitting&season=<year>&opposingPlayerId=<pitcherId>` | `fetchVsPlayer(batterId, pitcherId, season, mode='season')` | `stats[0].splits[0].stat`, normalized into `VsPlayerStat` |
-| `GET /v1/people/{batterId}/stats` | `stats=vsPlayerTotal&group=hitting&opposingPlayerId=<pitcherId>`, falling back to `stats=vsPlayer&group=hitting&opposingPlayerId=<pitcherId>` | `fetchCareerVsPlayer(batterId, pitcherId)` | Same `VsPlayerStat` shape; tries `vsPlayerTotal` first, falls back to `vsPlayer` on error |
 | `GET /v1/schedule` | `sportId=1&startDate=<-7d>&endDate=<+7d>` around the target game date | `fetchSeriesSchedule(gameDate, teamId, opponentId)` | Filters to games between the two teams, groups into consecutive-day runs, returns the run containing the target date as `{ gamePk, date }[]` |
 | `GET /v1/game/{gamePk}/playByPlay` | path param `gamePk` (note: **v1**, not v1.1) | `fetchPlayByPlay(gamePk)` / `fetchPlayByPlayBatch(gamePks)` | `PlayByPlayResponse`; batch version chunks requests at most 5 concurrent (`chunk(arr, 5)`) |
 | `GET /v1/game/{gamePk}/winProbability` | path param `gamePk` | `fetchWinProbability(gamePk)` | `WinProbabilityPlay[]`, one entry per play, carrying `leverageIndex`, `homeTeamWinProbability`, `homeTeamWinProbabilityAdded` (WPA in percentage points, not a fraction), `dramaIndex`, and `about.captivatingIndex`. `dramaIndex` and `captivatingIndex` are undocumented MLB fields, so the response is parsed through runtime guards and degrades to null components rather than throwing. Called by the `liveScores` Cloud Function for all live/final games, feeding `computeExcitementIndex`/`computeLiveScore` in `shared/scoring.mjs` (section 12). This is a separate call rather than reusing `/v1.1/game/{gamePk}/feed/live`, which the app already fetches: that feed carries `about.captivatingIndex` but not `leverageIndex`, win probability, or `dramaIndex`. |
@@ -601,10 +592,10 @@ main.tsx
                               BatterGameSubTab  -> GameIdentity, Plate Discipline,
                                                   At Bats DataTable
           .pb-carousel (horizontal scroll-snap, one card per viewport)
-            section#pitching -> PitchingSubTab -> Segmented (Season/Career), PvbCard,
+            section#pitching -> PitchingSubTab -> PvbCard,
                                              ColorCodedArsenal (Segended All/RHB/LHB),
                                              TablePanel (splits), TablePanel (game log)
-            section#batting  -> BattingSubTab  -> Segmented (Season/Career), PvbCard,
+            section#batting  -> BattingSubTab  -> PvbCard,
                                              TablePanel (splits), TablePanel (game log)
       FloatingGamesButton (fixed bottom-left, calls store.reset())
       StatsGuide          (fixed bottom-right FAB)
@@ -616,7 +607,7 @@ main.tsx
 
 ```ts
 type ScrollAnchor = 'ab' | 'matchup' | 'game' | 'pitching' | 'batting'
-type GlobalScope = 'thisGame' | 'season' | 'career'
+type GlobalScope = 'thisGame' | 'season'
 type ZonePerspective = 'pitcher' | 'batter'
 
 interface GameState {
@@ -649,7 +640,7 @@ Actions and when each is dispatched:
 - `setTimecode(tc)` — called by `useLiveFeed`'s poll loop with the `metaData.timeStamp` of the folded diffPatch result.
 - `setPolling(polling)` — called by `useLiveFeed` around its live-feed initialization (`true` at start, `false` in the `finally` block).
 - `setScrollAnchor(anchor)` — called by the `MiniNav` buttons in `GameScreen`, which then `scrollIntoView` the matching section. The anchor is display state for the nav's active mark, not a mount switch: every section stays mounted.
-- `setGlobalScope(scope)` — the single This Game / Season / Career switch that drives the scoped sections.
+- `setGlobalScope(scope)` — the single This Game / Season switch that drives the scoped sections.
 - `setZonePerspective(perspective)` — swaps whether the Matchup zone shows the pitcher's or the batter's hot/cold grid.
 - `setRecentFormGames(games)` — declared but currently unused; the Recent Form panel was removed from `PitchingSubTab` and `BattingSubTab` in the single-scroll redesign. Kept in the store for potential re-introduction.
 - `setGameFeedPitches(pitches)` — called by `App.tsx`'s Savant game-feed effect on every `gamePk` change (success sets the rows, failure sets `[]`).
@@ -793,12 +784,12 @@ Three further runtime rules exist, and rule order matters — Workbox takes the 
 7. **`fetchHotColdZones` splits arrive in a fixed but undocumented order, and `value` is a string.** The fetcher selects by `stat?.name === 'battingAverage'` (falling back to `splits[0]`), never by index.
 8. **`fetchPitchArsenal` percentages are multiplied by 100** inside the fetcher (raw API values are fractional), so `ArsenalBars` consumes a 0-100 scale. Do not confuse this with `PitcherGameModel.buildArsenal`, which is unrelated: it derives an *in-game* pitch mix from live `PlayEvent`s grouped by `details.type.code` and emits its own `share` rate.
 9. **MLB API field casing is inconsistent.** Pitchers return `strikeOuts` (capital O) and `avg` (which for pitchers is opponent batting average) — there is no `strikeouts` or `oppAvg` field.
-10. **Career ERA+ and career wRC+ are structurally uncomputable** and render `—` by design: there is no park-adjusted career ERA endpoint, and the Savant CSV (needed for career wOBA) is single-season only. **Career FIP IS computable**, because the career pitching endpoint does return `hitBatsmen` and `homeRuns`.
+10. **wRC+ is structurally uncomputable** and renders `—` by design: the batting endpoint publishes no wOBA and the Savant CSV only carries wOBA on batted balls.
 11. **`babip_denom` is not present in the Savant CSV.** BABIP comes from the MLB Stats API's `SeasonStat.babip` field, parsed with `parseStat()`.
 12. **The play-by-play endpoint is `/v1/game/{gamePk}/playByPlay` — v1, not v1.1.** `fetchPlayByPlayBatch` caps concurrency at 5 requests via `chunk(gamePks, 5)`.
 13. **ERA+/wRC+ park factor uses the current game's home park** (`PARK_FACTORS[selectedGame.teams.home.team.abbreviation] ?? 1.00`) as an approximation of the player's own home park; it is not looked up per-player.
 14. **`env(safe-area-inset-*)` resolves to 0 in headless Chrome**, so QA there renders a marginally taller `.app` than a real iPhone does. Because the layout is flex-based with no fixed budgets (section 8), this only changes how much of the panel is visible before scrolling begins — it is a headless-browser artifact, not a layout violation.
-15. **Module-level promise caches have no TTL and are never cleared.** `usePlayerStats`, `useCareerMatchupStats`, `playerStatsCache`, and `benchmarks` all dedupe via `Map`s that live for the lifetime of the page. This is what makes tab and sub-tab switching free, but it also means a starter's season line fetched at first pitch never updates for the rest of the broadcast, and nothing evicts entries on `reset()`. Failed/empty results *are* evicted so they can be retried; successful ones are frozen. `currentYear` is likewise computed once at module load, so an installed PWA left resident across a season boundary would query the wrong season.
+15. **Module-level promise caches have no TTL and are never cleared.** `usePlayerStats`, `playerStatsCache`, and `benchmarks` all dedupe via `Map`s that live for the lifetime of the page. This is what makes tab and sub-tab switching free, but it also means a starter's season line fetched at first pitch never updates for the rest of the broadcast, and nothing evicts entries on `reset()`. Failed/empty results *are* evicted so they can be retried; successful ones are frozen. `currentYear` is likewise computed once at module load, so an installed PWA left resident across a season boundary would query the wrong season.
 16. **The `recentFormGames` store field is vestigial.** The Recent Form panel was removed from `PitchingSubTab` and `BattingSubTab` in the single-scroll redesign. The field and `setRecentFormGames` action remain in the store but are not dispatched by any component.
 17. **No test framework, no client-side router, and no backend exist in this project**, by design; do not introduce any of the three without updating this document and `vercel.json`'s SPA rewrite assumption.
 18. **Manifest `screenshots` are still missing.** The repo-root `memo-desktop.png` (1280x4044) and `memo-mobile.png` (397x5288) are full-page captures whose aspect ratios exceed Chrome's 2.3 limit for install-prompt screenshots; properly-sized viewport captures are still needed to unlock the rich install prompt.

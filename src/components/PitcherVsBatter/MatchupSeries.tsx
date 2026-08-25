@@ -211,7 +211,7 @@ export function SeriesPanels({
         ) : (
           <EmptyPanel
             message={emptyMessage}
-            hint="Career totals cover every prior meeting between these two."
+            hint="Season totals cover every meeting between these two this year."
           />
         )}
       </Panel>

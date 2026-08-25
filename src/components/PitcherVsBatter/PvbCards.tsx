@@ -1,6 +1,4 @@
 import type {
-  CareerBatterStat,
-  CareerPitcherStat,
   PitcherSeasonStat,
   SeasonStat,
   StatSplit,
@@ -93,32 +91,6 @@ export function pitcherSeasonCells(stat: PitcherSeasonStat, parkFactor: number):
 }
 
 /**
- * Career ERA+ needs a park-adjusted career ERA the API does not expose, so the
- * cell is dropped rather than printed as a permanent em dash.
- */
-export function pitcherCareerCells(stat: CareerPitcherStat): Cell[] {
-  const innings = ipToDecimal(stat.inningsPitched)
-  const battersFaced = stat.battersFaced ?? null
-  return [
-    { label: 'ERA', value: rateText(stat.era) },
-    { label: 'WHIP', value: rateText(stat.whip) },
-    { label: 'K%', value: percent(computeKpct(stat.strikeOuts, battersFaced)) },
-    {
-      label: 'FIP',
-      value: fixed(
-        computeFIP(stat.homeRuns, stat.baseOnBalls, stat.hitBatsmen, stat.strikeOuts, innings),
-        2,
-      ),
-    },
-    { label: 'BB%', value: percent(computeBBpct(stat.baseOnBalls, battersFaced)) },
-    { label: 'HR/9', value: fixed(computeHR9(stat.homeRuns, innings), 2) },
-    { label: 'Opp AVG', value: rateText(stat.avg) },
-    { label: 'SV', value: whole(extraStat(stat, 'saves')) },
-    { label: 'H', value: whole(stat.hits) },
-  ]
-}
-
-/**
  * wRC+ and wOBA are absent. The batting endpoint publishes no wOBA, and the
  * Savant CSV only carries wOBA on batted balls — summing it would understate
  * the rate by excluding walks and strikeouts. Both cells are dropped rather
@@ -135,20 +107,6 @@ export function batterSeasonCells(stat: SeasonStat): Cell[] {
     { label: 'K%', value: percent(computeKpct(stat.strikeOuts, stat.plateAppearances)) },
     { label: 'BB%', value: percent(computeBBpct(stat.baseOnBalls, stat.plateAppearances)) },
     { label: 'BABIP', value: rateText(stat.babip) },
-  ]
-}
-
-export function batterCareerCells(stat: CareerBatterStat): Cell[] {
-  return [
-    { label: 'AVG', value: rateText(stat.avg) },
-    { label: 'OBP', value: rateText(stat.obp) },
-    { label: 'SLG', value: rateText(stat.slg) },
-    { label: 'OPS', value: rateText(stat.ops) },
-    { label: 'ISO', value: rate3(computeISO(parseStat(stat.avg), parseStat(stat.slg))) },
-    { label: 'HR', value: whole(stat.homeRuns) },
-    { label: 'K%', value: percent(computeKpct(stat.strikeOuts, stat.plateAppearances)) },
-    { label: 'BB%', value: percent(computeBBpct(stat.baseOnBalls, stat.plateAppearances)) },
-    { label: 'BABIP', value: rate3(extraStat(stat, 'babip')) },
   ]
 }
 
