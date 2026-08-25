@@ -22,6 +22,16 @@
 > **Deploy note:** the `predeploy` hook invokes `tsc` directly rather than
 > `npm run build`; npm crashes with `Cannot read properties of undefined
 > (reading 'stdin')` when spawned by the Firebase CLI.
+>
+> **Bug-fix (2026-08-25):** The pregame idempotency field was renamed from
+> `pregameNotified` to `pregameReminderSent`. An earlier revision without the
+> 30-min window check fired a pregame alert 12h before first pitch and set
+> `pregameNotified: true`, which then permanently suppressed the corrected
+> 30-min-window reminder. The rename ensures stale docs from old semantics
+> cannot block the new logic. The morning digest now initializes
+> `pregameReminderSent: false` when it writes the Firestore doc. Per-run
+> summary logging was also added to `notify-pregame.ts` so every skip reason
+> is visible in Firebase logs.
 
 Two related improvements bundled as one refactor:
 
@@ -72,7 +82,7 @@ Two related improvements bundled as one refactor:
 │  │  │  scores, filter ≥ 65, check if game    scores              │
 │  │  │  starts within 30 min → send            │                  │
 │  │  │  "Starting Soon" reminder, set          ▼                  │
-│  │  │  pregameNotified in Firestore    query Firestore for dedup │
+│  │  │  pregameReminderSent in Firestore query Firestore for dedup│
 │  │  │                                    POST Telegram sendMessage│
 │  │                                                               │
 │  ├── notify-live     ──cron 1min───▶ fetch MLB schedule         │
@@ -89,7 +99,7 @@ Two related improvements bundled as one refactor:
 │    digestNotified: boolean                                       │
 │    crossingNotified: boolean                                     │
 │    lastNotifiedScore: number                                     │
-│    pregameNotified: boolean                                      │
+│    pregameReminderSent: boolean                                 │
 └──────────────────────────────────────────────────────────────────┘
 
 ┌──────────────────────────────────────────────────────────────────┐
@@ -526,11 +536,11 @@ Logic:
 3. For each game in `payload.games`:
    - Compute pregame score using `shared/scoring.mjs` (park factor from
      the shared `PARK_FACTORS` record)
-   - If score >= 65 and `pregameNotified` is false in Firestore:
+   - If score >= 65 and `pregameReminderSent` is false in Firestore:
      - Calculate lead time: `firstPitchMs - nowMs`
      - If lead is between 0 and 30 minutes (0 < lead ≤ 30 min):
        - Send Telegram notification (trigger: `pregame`, includes ET start time)
-       - Set `pregameNotified: true`, `crossingNotified: true`,
+        - Set `pregameReminderSent: true`, `crossingNotified: true`,
          `lastNotifiedScore: score` in Firestore
          (`crossingNotified: true` suppresses the first live crossing alert
          since pregame already notified the user)
@@ -800,7 +810,7 @@ interface NotificationDoc {
 
   // Pre-game "Starting Soon" reminder (fired once ~30 min before first pitch
   // when pregame score >= 65)
-  pregameNotified: boolean
+  pregameReminderSent: boolean
   pregameScore: number | null
 
   // Crossing notification (fired when live score crosses 65)

@@ -78,6 +78,7 @@ export const notifyMorningDigest = onSchedule(
     }
 
     const schedule = await fetchSchedule(today)
+    const db = getFirestore()
 
     const entries: DigestEntry[] = []
 
@@ -100,6 +101,21 @@ export const notifyMorningDigest = onSchedule(
         tier: tierFor(score),
         startTimeET,
       })
+
+      const docRef = db.collection('notifications').doc(today).collection('games').doc(String(game.gamePk))
+      const docSnap = await docRef.get()
+      await docRef.set(
+        {
+          digestNotified: true,
+          pregameReminderSent: false,
+          pregameScore: score,
+          gamePk: game.gamePk,
+          awayAbbr: game.away.abbreviation,
+          homeAbbr: game.home.abbreviation,
+          createdAt: docSnap.exists ? docSnap.data()?.createdAt : new Date(),
+        },
+        { merge: true },
+      )
     }
 
     if (entries.length === 0) {
@@ -111,29 +127,5 @@ export const notifyMorningDigest = onSchedule(
 
     await sendTelegramDigest(botToken, chatId, today, entries)
     console.log(`[notify-morning-digest] Sent digest with ${entries.length} games`)
-
-    const db = getFirestore()
-    for (const game of payload.games) {
-      const inputs = {
-        ...game,
-        parkFactor: PARK_FACTORS[game.home.abbreviation] ?? 1,
-      }
-      const { score } = computePregameScore(inputs, payload.baseline)
-      if (score < 65) continue
-
-      const docRef = db.collection('notifications').doc(today).collection('games').doc(String(game.gamePk))
-      const docSnap = await docRef.get()
-      await docRef.set(
-        {
-          digestNotified: true,
-          pregameScore: score,
-          gamePk: game.gamePk,
-          awayAbbr: game.away.abbreviation,
-          homeAbbr: game.home.abbreviation,
-          createdAt: docSnap.exists ? docSnap.data()?.createdAt : new Date(),
-        },
-        { merge: true },
-      )
-    }
   },
 )

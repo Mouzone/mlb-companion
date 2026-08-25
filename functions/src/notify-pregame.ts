@@ -87,6 +87,12 @@ export const notifyPregame = onSchedule(
     const nowMs = Date.now()
     const db = getFirestore()
 
+    let belowThreshold = 0
+    let alreadySent = 0
+    let noGameDate = 0
+    let outsideWindow = 0
+    let sent = 0
+
     for (const game of payload.games) {
       const inputs = {
         ...game,
@@ -95,20 +101,32 @@ export const notifyPregame = onSchedule(
 
       const { score } = computePregameScore(inputs, payload.baseline)
 
-      if (score < 65) continue
+      if (score < 65) {
+        belowThreshold++
+        continue
+      }
 
       const docRef = db.collection('notifications').doc(today).collection('games').doc(String(game.gamePk))
       const docSnap = await docRef.get()
 
-      if (docSnap.exists && docSnap.data()?.pregameNotified) continue
+      if (docSnap.exists && docSnap.data()?.pregameReminderSent) {
+        alreadySent++
+        continue
+      }
 
       const gameDate = schedule.get(game.gamePk)
-      if (!gameDate) continue
+      if (!gameDate) {
+        noGameDate++
+        continue
+      }
 
       const firstPitchMs = new Date(gameDate).getTime()
       const leadMs = firstPitchMs - nowMs
 
-      if (leadMs < 0 || leadMs > REMINDER_WINDOW_MS) continue
+      if (leadMs < 0 || leadMs > REMINDER_WINDOW_MS) {
+        outsideWindow++
+        continue
+      }
 
       const startTimeET = formatTimeET(gameDate)
       const tierStr = score >= 80 ? 'elite' : 'great'
@@ -132,10 +150,11 @@ export const notifyPregame = onSchedule(
 
       await sendTelegramNotification(botToken, chatId, notification)
       console.log(`[notify-pregame] Sent pregame reminder for ${game.gamePk}: score ${score}, starts in ${Math.round(leadMs / 60000)} min`)
+      sent++
 
       await docRef.set(
         {
-          pregameNotified: true,
+          pregameReminderSent: true,
           pregameScore: score,
           crossingNotified: true,
           lastNotifiedScore: score,
@@ -148,5 +167,9 @@ export const notifyPregame = onSchedule(
         { merge: true },
       )
     }
+
+    console.log(
+      `[notify-pregame] Run complete: ${payload.games.length} games, ${sent} sent, ${belowThreshold} below 65, ${alreadySent} already sent, ${noGameDate} no gameDate, ${outsideWindow} outside window`,
+    )
   },
 )
