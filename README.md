@@ -397,21 +397,32 @@ functions/
                                           functions/lib — Firebase only uploads the functions/ directory,
                                           so shared code must be emitted inside it. This nests the output,
                                           hence "main": "lib/functions/src/index.js".
-  src/index.ts                            Entry point. Exports notifyPregame and notifyLive.
+  src/index.ts                            Entry point. Exports notifyMorningDigest, notifyPregame,
+                                          notifyLive, and liveScores.
   src/scoring.ts                          Re-export from ../../shared/scoring.mjs with type safety via
                                           ../../shared/scoring-types.ts. Exports computePregameScore,
                                           computeExcitementIndex, computeLiveScore, computeWatchability,
                                           tierFor, eloWinProbability, PARK_FACTORS, WOBA_SCALE,
                                           LEAGUE_R_PER_PA.
   src/telegram.ts                         Telegram message sender + HTML message builder. Exports
-                                          sendTelegramNotification(botToken, chatId, payload) and
-                                          NotificationPayload interface. Messages include inline keyboard
-                                          button deep-linking to the PWA. Three trigger types: pregame,
-                                          crossing, jump.
+                                          sendTelegramNotification(botToken, chatId, payload),
+                                          sendTelegramDigest(botToken, chatId, date, entries),
+                                          NotificationPayload interface, and DigestEntry interface.
+                                          Messages include inline keyboard button deep-linking to the
+                                          PWA. NotificationPayload trigger types: pregame, crossing,
+                                          jump. Digest sends a single message with all qualifying games.
+  src/notify-morning-digest.ts            Scheduled Cloud Function (daily 9 AM ET). Fetches
+                                          watchability.json + MLB schedule, computes pregame scores,
+                                          filters to ≥ 65, sorts by score descending, sends a single
+                                          Telegram message listing all qualifying games with ET start
+                                          times. Sets digestNotified flag per game in Firestore
+                                          notifications/{date}/games/{gamePk}.
   src/notify-pregame.ts                   Scheduled Cloud Function (every 10 min, America/New_York).
-                                          Fetches watchability.json, computes pregame scores via
-                                          shared/scoring.mjs, sends Telegram alerts for games scoring >= 65,
-                                          deduplicates via Firestore notifications/{date}/games/{gamePk}.
+                                          Fetches watchability.json + MLB schedule for start times.
+                                          Sends "Starting Soon" Telegram reminders for games scoring
+                                          ≥ 65 that start within the next 30 minutes and haven't been
+                                          notified yet. Deduplicates via Firestore
+                                          notifications/{date}/games/{gamePk}.
   src/notify-live.ts                      Scheduled Cloud Function (every 1 min, America/New_York).
                                           Fetches MLB schedule for both today and yesterday (to catch
                                           late West Coast games that span midnight ET), filters to live
@@ -490,15 +501,16 @@ Baseball Savant (baseballsavant   ──┘                            │
   `useLiveScores` (15s Cloud Function poll). Pauses when the tab is hidden; resumes with immediate refresh on
   visibilitychange.
 - **Telegram notifications** run entirely server-side via Firebase Cloud Functions, separate from the browser.
-  `notify-pregame` (10-min cron) checks pregame scores and sends alerts for games >= 65. `notify-live` (1-min
-  cron with 15s in-function polling loop) fetches both today's and yesterday's MLB schedule (to catch late
-  West Coast games that span midnight ET), sends crossing alerts (live score crosses 65, re-fires after
-  dropping below 65) and jump alerts (+10 from last notified score). `liveScores` (HTTP onRequest) serves
-  the frontend's `useLiveScores` hook with
-  per-game watchability scores and current pitcher info. Both notification functions deduplicate via Firestore
+  `notify-morning-digest` (daily 9 AM ET cron) fetches watchability.json + the MLB schedule, computes pregame
+  scores, filters to ≥ 65, sorts by score descending, and sends a single Telegram message listing all qualifying
+  games with their ET start times. `notify-pregame` (10-min cron) sends a per-game "Starting Soon" reminder when
+  a game scoring ≥ 65 is within 30 minutes of first pitch. `notify-live` (1-min cron with 15s in-function
+  polling loop) fetches both today's and yesterday's MLB schedule (to catch late West Coast games that span
+  midnight ET), sends crossing alerts (live score crosses 65, re-fires after dropping below 65) and jump alerts
+  (+10 from last notified score). `liveScores` (HTTP onRequest) serves the frontend's `useLiveScores` hook with
+  per-game watchability scores and current pitcher info. All notification functions deduplicate via Firestore
   `notifications/{scheduleDate}/games/{gamePk}` documents, keyed by the game's original schedule date. No
-  notification logic runs in the browser. See
-  `docs/LIVE_NOTIFICATIONS_PLAN.md` for the full design.
+  notification logic runs in the browser. See `docs/LIVE_NOTIFICATIONS_PLAN.md` for the full design.
 
 ## 4. API Endpoints Reference
 

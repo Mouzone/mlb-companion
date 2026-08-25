@@ -4,6 +4,11 @@
  * Sends push alerts to a Telegram channel when a game's watchability score
  * reaches 65+ (Great or Elite tier). Messages include an inline keyboard
  * button that deep-links to the PWA.
+ *
+ * Three notification flows:
+ *  - Morning digest (single message with all qualifying games + start times)
+ *  - Pregame reminder (per-game, ~30 min before first pitch)
+ *  - Live alerts (crossing / jump triggers, handled by notify-live)
  */
 
 export interface NotificationPayload {
@@ -24,6 +29,15 @@ export interface NotificationPayload {
   inning?: number | null
   awayScore?: number | null
   homeScore?: number | null
+  startTimeET?: string | null
+}
+
+export interface DigestEntry {
+  awayAbbr: string
+  homeAbbr: string
+  score: number
+  tier: string
+  startTimeET: string | null
 }
 
 const PWA_URL = 'https://mlb-companion.vercel.app'
@@ -58,10 +72,11 @@ function buildMessage(payload: NotificationPayload): string {
   const matchup = `<b>${payload.awayAbbr} @ ${payload.homeAbbr}</b>`
 
   if (payload.trigger === 'pregame') {
+    const timeLine = payload.startTimeET ? ` — ${payload.startTimeET}` : ''
     return [
-      `⚾ <b>Pregame Alert</b> ${emoji}`,
+      `⚾ <b>Starting Soon</b> ${emoji}`,
       '',
-      `${matchup}`,
+      `${matchup}${timeLine}`,
       `Watchability: <b>${payload.score}</b> (${capitalize(payload.tier)})`,
       '',
       `MLB Companion · ${payload.date}`,
@@ -125,13 +140,55 @@ function buildInlineKeyboard(gamePk: number) {
   }
 }
 
-export async function sendTelegramNotification(
+function formatTimeET(startTimeET: string | null): string {
+  if (!startTimeET) return 'TBD'
+  return startTimeET
+}
+
+function buildDigestMessage(date: string, entries: DigestEntry[]): string {
+  const dateObj = new Date(date + 'T00:00:00-04:00')
+  const dateLabel = dateObj.toLocaleDateString('en-US', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    timeZone: 'America/New_York',
+  })
+
+  const lines: string[] = [
+    `⚾ <b>Today's Top Games</b> · ${dateLabel}`,
+    '',
+  ]
+
+  for (const entry of entries) {
+    const emoji = tierEmoji(entry.tier)
+    const time = formatTimeET(entry.startTimeET)
+    lines.push(`${emoji} <b>${entry.awayAbbr} @ ${entry.homeAbbr}</b> — ${time} ET`)
+    lines.push(`   Watchability: <b>${entry.score}</b> (${capitalize(entry.tier)})`)
+  }
+
+  lines.push('')
+  lines.push('MLB Companion')
+
+  return lines.join('\n')
+}
+
+export async function sendTelegramDigest(
   botToken: string,
   chatId: string,
-  payload: NotificationPayload,
+  date: string,
+  entries: DigestEntry[],
 ): Promise<void> {
-  const text = buildMessage(payload)
-  const replyMarkup = buildInlineKeyboard(payload.gamePk)
+  const text = buildDigestMessage(date, entries)
+  const replyMarkup = {
+    inline_keyboard: [
+      [
+        {
+          text: '⚾ Open MLB Companion',
+          url: PWA_URL,
+        },
+      ],
+    ],
+  }
 
   const url = `https://api.telegram.org/bot${botToken}/sendMessage`
   const res = await fetch(url, {

@@ -3,8 +3,9 @@
 > **Status: Deployed** — All parts (1–7) are complete and live in production.
 >
 > - Firebase project: `mlb-companion-pwa` (Blaze plan)
-> - Functions: `notifyPregame` (every 10 min) and `notifyLive` (every 1 min),
->   both Node.js 22 gen-2 in `us-central1`, 256 MiB
+> - Functions: `notifyMorningDigest` (daily 9 AM ET), `notifyPregame`
+>   (every 10 min), and `notifyLive` (every 1 min), all Node.js 22 gen-2
+>   in `us-central1`, 256 MiB
 > - Secrets in Secret Manager: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`,
 >   `WATCHABILITY_JSON_URL`
 > - Telegram delivers to a private DM chat (not a channel), so no bot admin
@@ -25,10 +26,13 @@
 Two related improvements bundled as one refactor:
 
 1. **Telegram Bot notifications** — push alerts to your phone when a game's
-   watchability score reaches 65+ (Great or Elite tier). Two serverless
+   watchability score reaches 65+ (Great or Elite tier). Three serverless
    functions handle everything — no frontend notification code needed. A
-   10-minute cron covers pregame alerts, and a 1-minute cron with a 15-second
-   in-function polling loop covers live games with near-real-time updates.
+   daily 9 AM ET cron sends a morning digest summarizing the day's top
+   games with start times in a single message. A 10-minute cron sends
+   per-game "Starting Soon" reminders ~30 min before first pitch. A
+   1-minute cron with a 15-second in-function polling loop covers live
+   games with near-real-time updates.
 
 2. **Live slate polling** — GameSelect currently fetches the schedule once
    on mount and never refreshes. Scores, game status (Preview→Live→Final),
@@ -57,10 +61,19 @@ Two related improvements bundled as one refactor:
 ┌──────────────────────────────────────────────────────────────────┐
 │ NEW — Backend (Firebase Cloud Functions, free tier)              │
 │                                                                  │
+│  ├── notify-morning-digest ──cron 9AM ET──▶ fetch /watchability  │
+│  │    + MLB schedule (for start times)        .json               │
+│  │    compute pregame scores, filter ≥ 65      │                  │
+│  │    sort by score desc, single Telegram msg  ▼                  │
+│  │    set digestNotified per game in Firestore                    │
+│  │                                                               │
 │  ├── notify-pregame  ──cron 10min──▶ fetch /watchability.json   │
-│  │                                    compute pregame scores     │
-│  │                                    query Firestore for dedup  │
-│  │                                    POST Telegram sendMessage  │
+│  │  │  + MLB schedule (for start times)     compute pregame      │
+│  │  │  scores, filter ≥ 65, check if game    scores              │
+│  │  │  starts within 30 min → send            │                  │
+│  │  │  "Starting Soon" reminder, set          ▼                  │
+│  │  │  pregameNotified in Firestore    query Firestore for dedup │
+│  │  │                                    POST Telegram sendMessage│
 │  │                                                               │
 │  ├── notify-live     ──cron 1min───▶ fetch MLB schedule         │
 │  │                                    if no live games → exit    │
@@ -72,7 +85,8 @@ Two related improvements bundled as one refactor:
 │  │                                      POST Telegram sendMessage│
 │  │                                    exit before next cron      │
 │  │                                                               │
-│  Firestore: notifications/{date}/games/{gamePk}                        │
+│  Firestore: notifications/{date}/games/{gamePk}                  │
+│    digestNotified: boolean                                       │
 │    crossingNotified: boolean                                     │
 │    lastNotifiedScore: number                                     │
 │    pregameNotified: boolean                                      │
@@ -355,12 +369,28 @@ interface NotificationPayload {
   inning?: number | null
   awayScore?: number | null
   homeScore?: number | null
+  startTimeET?: string | null
+}
+
+interface DigestEntry {
+  awayAbbr: string
+  homeAbbr: string
+  score: number
+  tier: string
+  startTimeET: string | null
 }
 
 export async function sendTelegramNotification(
   botToken: string,
   chatId: string,
   payload: NotificationPayload,
+): Promise<void>
+
+export async function sendTelegramDigest(
+  botToken: string,
+  chatId: string,
+  date: string,
+  entries: DigestEntry[],
 ): Promise<void>
 ```
 
@@ -377,14 +407,36 @@ All messages include an inline keyboard button:
 }
 ```
 
-**Pregame:**
+**Pregame "Starting Soon":**
 ```
-⚾ <b>Pregame Alert</b> ⚡
+⚾ <b>Starting Soon</b> ⚡
 
 <b>NYY @ BOS</b> — 7:05 PM ET
 Watchability: <b>72</b> (Great)
 
 MLB Companion · 2024-08-22
+```
+
+**Pregame "Starting Soon" reminder:**
+```
+⚾ Starting Soon ⚡
+
+LAD @ SF — 9:40 PM ET
+Watchability: 72 (Great)
+
+MLB Companion · 2024-08-22
+```
+
+**Morning digest:**
+```
+⚾ Today's Top Games · Tue Aug 22
+
+🔥 LAD @ SF — 9:40 PM ET
+   Watchability: 82 (Elite)
+⚡ NYY @ BOS — 7:10 PM ET
+   Watchability: 71 (Great)
+
+MLB Companion
 ```
 
 **Live crossing:**
@@ -413,10 +465,45 @@ LAD 4 - SF 4
 MLB Companion · 2024-08-22
 ```
 
+### `functions/src/notify-morning-digest.ts`
+
+Scheduled function, runs daily at 9:00 AM ET. Sends a single Telegram message
+listing the day's top games sorted by watchability score.
+
+```ts
+import { onSchedule } from 'firebase-functions/v2/scheduler'
+
+export const notifyMorningDigest = onSchedule(
+  {
+    schedule: 'every day 09:00',
+    timeZone: 'America/New_York',
+    secrets: ['TELEGRAM_BOT_TOKEN', 'TELEGRAM_CHAT_ID', 'WATCHABILITY_JSON_URL'],
+    memory: '256MiB',
+    timeoutSeconds: 30,
+  },
+  async () => { ... }
+)
+```
+
+Logic:
+1. Fetch `watchability.json` from Vercel (the `WATCHABILITY_JSON_URL` secret)
+2. Fetch MLB schedule for today (`statsapi.mlb.com/api/v1/schedule?sportId=1&date={today}`)
+   to get each game's `gameDate` (ISO timestamp for start time)
+3. For each game in `payload.games`:
+   - Compute pregame score using `shared/scoring.mjs` (park factor from
+     the shared `PARK_FACTORS` record)
+   - If score >= 65: add to digest entries with ET-formatted start time
+4. Sort entries by score descending
+5. If entries is non-empty: send a single Telegram message via
+   `sendTelegramDigest()` (one message, no per-game inline keyboard — a
+   single button links to the PWA root)
+6. Set `digestNotified: true` per qualifying game in Firestore
+   `notifications/{date}/games/{gamePk}`
+
 ### `functions/src/notify-pregame.ts`
 
-Scheduled function, runs every 10 minutes. Checks pre-game scores for today's
-slate.
+Scheduled function, runs every 10 minutes. Sends "Starting Soon" reminders for
+games that start within the next 30 minutes.
 
 ```ts
 import { onSchedule } from 'firebase-functions/v2/scheduler'
@@ -429,28 +516,32 @@ export const notifyPregame = onSchedule(
     memory: '256MiB',
     timeoutSeconds: 30,
   },
-  async (event) => { ... }
+  async () => { ... }
 )
 ```
 
 Logic:
 1. Fetch `watchability.json` from Vercel (the `WATCHABILITY_JSON_URL` secret)
-2. For each game in `payload.games`:
+2. Fetch MLB schedule for today to get each game's `gameDate` (start time)
+3. For each game in `payload.games`:
    - Compute pregame score using `shared/scoring.mjs` (park factor from
      the shared `PARK_FACTORS` record)
-    - If score >= 65 and `pregameNotified` is false in Firestore:
-      - Send Telegram notification (trigger: `pregame`)
-      - Set `pregameNotified: true`, `crossingNotified: true`,
-        `lastNotifiedScore: score` in Firestore
-        (`crossingNotified: true` suppresses the first live crossing alert
-        since pregame already notified the user)
-3. Skip games whose status is already Live or Final (check MLB schedule API
-   for current status — or simply skip if the game's start time has passed)
+   - If score >= 65 and `pregameNotified` is false in Firestore:
+     - Calculate lead time: `firstPitchMs - nowMs`
+     - If lead is between 0 and 30 minutes (0 < lead ≤ 30 min):
+       - Send Telegram notification (trigger: `pregame`, includes ET start time)
+       - Set `pregameNotified: true`, `crossingNotified: true`,
+         `lastNotifiedScore: score` in Firestore
+         (`crossingNotified: true` suppresses the first live crossing alert
+         since pregame already notified the user)
+4. Skip games that have already started or are beyond the 30-min window
 
-**Why not just check all games?** The nightly build runs at 07:00 and 12:00 ET.
-A game at 1:05 PM ET won't be in the payload until the 12:00 build. The
-10-minute cron catches anything that was added late and sends the pre-game
-notification before first pitch.
+**Why the 30-min window?** The morning digest at 9 AM gives the day's overview.
+The 10-minute cron with a 30-minute lead window ensures the reminder fires
+close enough to first pitch to be actionable (e.g. "LAD @ SF starting in ~20
+min") rather than hours ahead. Games starting before 9 AM ET won't get a
+digest entry but will still get a pregame reminder if the 10-min cron catches
+them within the 30-min window.
 
 ### `functions/src/notify-live.ts`
 
@@ -528,6 +619,7 @@ export {
 ### `functions/src/index.ts`
 
 ```ts
+export { notifyMorningDigest } from './notify-morning-digest'
 export { notifyPregame } from './notify-pregame'
 export { notifyLive } from './notify-live'
 ```
@@ -703,7 +795,11 @@ interface NotificationDoc {
   // the collection-group level. This keeps notification state stable across
   // midnight ET rollover for late West Coast games.
 
-  // Pre-game notification (fired once when pregame score >= 65)
+  // Morning digest (fired once at 9 AM ET for games ≥ 65)
+  digestNotified: boolean
+
+  // Pre-game "Starting Soon" reminder (fired once ~30 min before first pitch
+  // when pregame score >= 65)
   pregameNotified: boolean
   pregameScore: number | null
 

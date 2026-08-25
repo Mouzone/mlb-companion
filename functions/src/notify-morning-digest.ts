@@ -1,26 +1,22 @@
 /**
- * notify-pregame — scheduled Cloud Function (every 10 minutes).
+ * notify-morning-digest — scheduled Cloud Function (daily at 9 AM ET).
  *
- * Checks pre-game watchability scores for today's slate. Sends a Telegram
- * "Starting Soon" reminder for any game scoring ≥ 65 that hasn't been
- * notified yet and starts within the next 30 minutes.
- *
- * The morning digest (notify-morning-digest) runs at 9 AM ET to summarize
- * the day's top games. This function handles the per-game reminder close
- * to first pitch.
+ * Fetches today's watchability.json + MLB schedule, computes pregame scores
+ * for every game, filters to score ≥ 65, sorts by score descending, and
+ * sends a single Telegram message listing all qualifying games with their
+ * ET start times.
  */
 
 import { onSchedule } from 'firebase-functions/v2/scheduler'
 import { getFirestore } from 'firebase-admin/firestore'
 import { initializeApp } from 'firebase-admin/app'
 
-import { computePregameScore, PARK_FACTORS } from './scoring.js'
-import { sendTelegramNotification, type NotificationPayload } from './telegram.js'
+import { computePregameScore, PARK_FACTORS, tierFor } from './scoring.js'
+import { sendTelegramDigest, type DigestEntry } from './telegram.js'
 
 import type { WatchabilityPayload } from '../../shared/scoring-types.js'
 
 const MLB_API = 'https://statsapi.mlb.com/api/v1'
-const REMINDER_WINDOW_MS = 30 * 60 * 1000
 
 initializeApp()
 
@@ -52,9 +48,9 @@ function formatTimeET(gameDate: string): string {
   })
 }
 
-export const notifyPregame = onSchedule(
+export const notifyMorningDigest = onSchedule(
   {
-    schedule: 'every 10 minutes',
+    schedule: 'every day 09:00',
     timeZone: 'America/New_York',
     secrets: ['TELEGRAM_BOT_TOKEN', 'TELEGRAM_CHAT_ID', 'WATCHABILITY_JSON_URL'],
     memory: '256MiB' as const,
@@ -66,26 +62,24 @@ export const notifyPregame = onSchedule(
     const payloadUrl = process.env.WATCHABILITY_JSON_URL
 
     if (!botToken || !chatId || !payloadUrl) {
-      console.warn('[notify-pregame] Missing secrets, skipping')
+      console.warn('[notify-morning-digest] Missing secrets, skipping')
       return
     }
 
-    const nowET = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }))
-    const today = nowET.toLocaleDateString('en-CA')
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' })
 
     const res = await fetch(payloadUrl, { cache: 'no-cache' })
     if (!res.ok) throw new Error(`watchability.json fetch failed: ${res.status}`)
     const payload = (await res.json()) as WatchabilityPayload
 
     if (payload.date !== today) {
-      console.log(`[notify-pregame] Payload date ${payload.date} ≠ today ${today}, skipping`)
+      console.log(`[notify-morning-digest] Payload date ${payload.date} ≠ today ${today}, skipping`)
       return
     }
 
     const schedule = await fetchSchedule(today)
 
-    const nowMs = Date.now()
-    const db = getFirestore()
+    const entries: DigestEntry[] = []
 
     for (const game of payload.games) {
       const inputs = {
@@ -94,52 +88,45 @@ export const notifyPregame = onSchedule(
       }
 
       const { score } = computePregameScore(inputs, payload.baseline)
+      if (score < 65) continue
 
+      const gameDate = schedule.get(game.gamePk)
+      const startTimeET = gameDate ? formatTimeET(gameDate) : null
+
+      entries.push({
+        awayAbbr: game.away.abbreviation,
+        homeAbbr: game.home.abbreviation,
+        score,
+        tier: tierFor(score),
+        startTimeET,
+      })
+    }
+
+    if (entries.length === 0) {
+      console.log('[notify-morning-digest] No games ≥ 65 today, skipping')
+      return
+    }
+
+    entries.sort((a, b) => b.score - a.score)
+
+    await sendTelegramDigest(botToken, chatId, today, entries)
+    console.log(`[notify-morning-digest] Sent digest with ${entries.length} games`)
+
+    const db = getFirestore()
+    for (const game of payload.games) {
+      const inputs = {
+        ...game,
+        parkFactor: PARK_FACTORS[game.home.abbreviation] ?? 1,
+      }
+      const { score } = computePregameScore(inputs, payload.baseline)
       if (score < 65) continue
 
       const docRef = db.collection('notifications').doc(today).collection('games').doc(String(game.gamePk))
       const docSnap = await docRef.get()
-
-      if (docSnap.exists && docSnap.data()?.pregameNotified) continue
-
-      const gameDate = schedule.get(game.gamePk)
-      if (!gameDate) continue
-
-      const firstPitchMs = new Date(gameDate).getTime()
-      const leadMs = firstPitchMs - nowMs
-
-      if (leadMs < 0 || leadMs > REMINDER_WINDOW_MS) continue
-
-      const startTimeET = formatTimeET(gameDate)
-      const tierStr = score >= 80 ? 'elite' : 'great'
-
-      const notification: NotificationPayload = {
-        gamePk: game.gamePk,
-        date: today,
-        awayTeam: game.away.abbreviation,
-        homeTeam: game.home.abbreviation,
-        awayAbbr: game.away.abbreviation,
-        homeAbbr: game.home.abbreviation,
-        score,
-        tier: tierStr,
-        pregame: score,
-        live: null,
-        liveWeight: 0,
-        state: 'preview',
-        trigger: 'pregame',
-        startTimeET,
-      }
-
-      await sendTelegramNotification(botToken, chatId, notification)
-      console.log(`[notify-pregame] Sent pregame reminder for ${game.gamePk}: score ${score}, starts in ${Math.round(leadMs / 60000)} min`)
-
       await docRef.set(
         {
-          pregameNotified: true,
+          digestNotified: true,
           pregameScore: score,
-          crossingNotified: true,
-          lastNotifiedScore: score,
-          lastNotifiedAt: new Date(),
           gamePk: game.gamePk,
           awayAbbr: game.away.abbreviation,
           homeAbbr: game.home.abbreviation,
