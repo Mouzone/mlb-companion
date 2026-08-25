@@ -1,10 +1,11 @@
 import type { ReactElement } from 'react'
-import type { HotColdZone, PitchArsenalItem, VsPlayerStat } from '../../api/types'
+import type { HotColdZone, VsPlayerStat } from '../../api/types'
 import { parseStat } from '../../utils/sabermetrics'
-import type { DataTableColumn, DataTableRow, StatTone } from '../ui'
-import { EmptyPanel, PlayerAvatar, Stat, StatGrid } from '../ui'
+import type { DataTableColumn, DataTableRow, SegmentedOption, StatTone } from '../ui'
+import { EmptyPanel, PlayerAvatar, Segmented, Stat, StatGrid } from '../ui'
+import type { ColorCodedArsenalRow, HandednessFilter } from './ArsenalColorCoding'
 import { extraStat, extraText } from './PvbCards'
-import { Panel, SkeletonRows, TablePanel } from './PvbPanels'
+import { Panel, SkeletonRows } from './PvbPanels'
 import { compareTo, fixed, percent, rate3, rateText, whole } from './PvbShared'
 
 /**
@@ -27,13 +28,6 @@ export const SPLIT_COLUMNS: ReadonlyArray<DataTableColumn> = [
   { key: 'ops', label: 'OPS', align: 'right' },
   { key: 'hr', label: 'HR', align: 'right' },
   { key: 'k', label: 'K', align: 'right' },
-]
-
-const ARSENAL_COLUMNS: ReadonlyArray<DataTableColumn> = [
-  { key: 'pitch', label: 'Pitch' },
-  { key: 'use', label: 'Use', align: 'right' },
-  { key: 'velo', label: 'Velo', align: 'right' },
-  { key: 'count', label: 'No.', align: 'right' },
 ]
 
 /**
@@ -176,28 +170,99 @@ export function H2HPanel({
   )
 }
 
-export interface ArsenalFacedPanelProps {
-  readonly arsenal: ReadonlyArray<PitchArsenalItem>
-  readonly loading: boolean
+const HANDEDNESS_OPTIONS: ReadonlyArray<SegmentedOption> = [
+  { id: 'all', label: 'All' },
+  { id: 'RHB', label: 'RHB' },
+  { id: 'LHB', label: 'LHB' },
+]
+
+function metricToneClass(tone: StatTone): string {
+  return tone === 'default' ? '' : `arsenal-cc__metric--${tone}`
 }
 
-export function ArsenalFacedPanel({ arsenal, loading }: ArsenalFacedPanelProps): ReactElement {
-  const ranked = [...arsenal].sort((left, right) => right.percentage - left.percentage)
+export interface ArsenalFacedPanelProps {
+  readonly rows: ReadonlyArray<ColorCodedArsenalRow>
+  readonly loading: boolean
+  /** Names the scope the numbers describe, e.g. "This Game". */
+  readonly scopeLabel: string
+  /** Handedness only narrows a live game's pitches; a season line has no per-batter detail. */
+  readonly showHandednessToggle: boolean
+  readonly handedness: HandednessFilter
+  readonly onHandednessChange: (handedness: HandednessFilter) => void
+  readonly totalPitches: number
+}
+
+/**
+ * The pitcher's mix as the batter meets it. Spin and break are tracked per
+ * pitch, so they populate only in game scope; the season endpoint publishes
+ * usage and velocity alone and those cells stay empty rather than invented.
+ */
+export function ArsenalFacedPanel({
+  rows,
+  loading,
+  scopeLabel,
+  showHandednessToggle,
+  handedness,
+  onHandednessChange,
+  totalPitches,
+}: ArsenalFacedPanelProps): ReactElement {
+  const meta =
+    totalPitches > 0 ? `${scopeLabel} \u00b7 ${String(totalPitches)} pitches` : scopeLabel
+
   return (
-    <TablePanel
-      title="Arsenal Faced"
-      meta={`${String(ranked.length)} types`}
-      columns={ARSENAL_COLUMNS}
-      rows={ranked.map((item) => ({
-        pitch: item.type.description,
-        use: percent(item.percentage),
-        velo: fixed(item.averageSpeed, 1),
-        count: whole(item.count),
-      }))}
-      loading={loading}
-      emptyMessage="No pitch-tracking data for this season"
-      emptyHint="Arsenal appears once the pitcher has tracked pitches on record."
-    />
+    <Panel title="Arsenal Faced" meta={meta}>
+      {showHandednessToggle ? (
+        <Segmented
+          options={HANDEDNESS_OPTIONS}
+          activeId={handedness}
+          onSelect={(id) => { onHandednessChange(id as HandednessFilter) }}
+        />
+      ) : null}
+      {rows.length > 0 ? (
+        <div className="arsenal-cc" role="table" aria-label="Arsenal faced">
+          <div className="arsenal-cc__head" role="row">
+            <span role="columnheader">Pitch</span>
+            <span role="columnheader">Use</span>
+            <span role="columnheader">Velo</span>
+            <span role="columnheader">Spin</span>
+            <span role="columnheader">V-Brk</span>
+            <span role="columnheader">H-Brk</span>
+          </div>
+          {rows.map((row) => (
+            <div key={row.pitchType} className="arsenal-cc__row" role="row">
+              <span className="arsenal-cc__name" role="rowheader">
+                {row.pitchDescription}
+              </span>
+              <span className="arsenal-cc__usage" role="cell">
+                {percent(row.usage, 0)}
+              </span>
+              <div className={`arsenal-cc__metric ${metricToneClass(row.velo.tone)}`} role="cell">
+                <span className="arsenal-cc__value">{fixed(row.velo.value, 1)}</span>
+                {row.velo.delta === null ? null : (
+                  <span className="arsenal-cc__delta">{row.velo.delta}</span>
+                )}
+              </div>
+              <div className="arsenal-cc__metric" role="cell">
+                <span className="arsenal-cc__value">{fixed(row.spin.value, 0)}</span>
+              </div>
+              <div className="arsenal-cc__metric" role="cell">
+                <span className="arsenal-cc__value">{fixed(row.breakVertical.value, 1)}</span>
+              </div>
+              <div className="arsenal-cc__metric" role="cell">
+                <span className="arsenal-cc__value">{fixed(row.breakHorizontal.value, 1)}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : loading ? (
+        <SkeletonRows rows={4} />
+      ) : (
+        <EmptyPanel
+          message={`No arsenal data for ${scopeLabel.toLowerCase()}`}
+          hint="Arsenal appears once the pitcher has tracked pitches on record."
+        />
+      )}
+    </Panel>
   )
 }
 

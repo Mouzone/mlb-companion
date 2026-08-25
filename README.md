@@ -325,9 +325,16 @@ src/
                                            This-game H2H derived from liveFeed allPlays via
                                            deriveThisGameH2H; season via vsPlayer from
                                            usePlayerStats. Zone toggle
-                                           (gameStore.zonePerspective 'pitcher'|'batter') swaps which HotCold
-                                           array feeds ZonePanel/HeatMap (always pitcher-perspective orientation).
-                                           Platoon matchup table, arsenal faced. Imported by GameScreen.
+                                            (gameStore.zonePerspective 'pitcher'|'batter') swaps which HotCold
+                                            array feeds ZonePanel/HeatMap (always pitcher-perspective orientation).
+                                            Render order: MatchupHeader, zone Segmented + ZonePanel, H2HPanel,
+                                            split Segmented + Splits table, ArsenalFacedPanel. Splits table is
+                                            one side at a time (gameStore.splitPerspective 'pitcher'|'batter')
+                                            with rows Season / vs L / vs R / RISP / Home / Away; Home and Away
+                                            are aggregated locally from fetchCachedGameLog entries grouped by
+                                            isHome, since neither is a published split. Arsenal follows
+                                            globalScope via buildGameArsenalRows / buildSeasonArsenalRows.
+                                            Imported by GameScreen.
     PitcherVsBatter/PitchingSubTab.tsx    Pitcher season stat card (benchmark percentile coloring via
                                            PvbCard + benchmarkPitcherCells)
                                            + color-coded arsenal (globalScope-driven: This Game shows
@@ -342,8 +349,12 @@ src/
                                            by current pitcher via allPlays matchup cross-ref, groups by
                                            pitch_type, color-codes velo vs avg_pitch_speed season baseline)
                                            and buildSeasonArsenalRows (maps PitchArsenalItem[] to
-                                           ColorCodedArsenalRow[]). Export types: HandednessFilter,
-                                           ArsenalMetric, ColorCodedArsenalRow. Imported by PitchingSubTab.
+                                            ColorCodedArsenalRow[]). Each row carries velo, spin, breakVertical
+                                            and breakHorizontal as ArsenalMetric {value, tone, delta}; the season
+                                            builder leaves spin and both breaks null because the MLB arsenal
+                                            endpoint publishes only usage and average speed. Export types:
+                                            HandednessFilter, ArsenalMetric, ColorCodedArsenalRow. Imported by
+                                            MatchupSubTab and PitchingSubTab.
      PitcherVsBatter/ColorCodedArsenal.tsx ColorCodedArsenal({ rows, loading, scopeLabel,
                                            showHandednessToggle, handedness, onHandednessChange,
                                            totalPitches }). Renders a CSS-grid arsenal table with colored
@@ -592,10 +603,14 @@ main.tsx
                                            AtBatPanel -> ZonePlot (pitcher view),
                                            LastPitchStrip, ContactStrip
           section#matchup  -> MatchupSubTab -> MatchupHeader (scope arrows),
-                                           H2HPanel, TablePanel (Platoon Matchup),
-                                           ArsenalFacedPanel,
                                            Segmented (zone toggle),
-                                           ZonePanel -> HeatMap (pitcher view)
+                                           ZonePanel -> HeatMap (pitcher view),
+                                           H2HPanel,
+                                           Segmented (split perspective),
+                                           TablePanel (Splits: Season/vs L/vs R/
+                                             RISP/Home/Away for one side),
+                                           ArsenalFacedPanel (Segmented All/RHB/LHB
+                                             in game scope)
           section#game     -> PitcherGameSubTab -> GameIdentity, Command panel
                               BatterGameSubTab  -> GameIdentity, Plate Discipline,
                                                   At Bats DataTable
@@ -627,6 +642,7 @@ interface GameState {
   activeTab: ActiveTab
   globalScope: GlobalScope
   zonePerspective: ZonePerspective
+  splitPerspective: SplitPerspective
   recentFormGames: number
   gameFeedPitches: SavantGamePitch[]
   error: string | null
@@ -637,7 +653,7 @@ interface GameState {
 }
 ```
 
-Defaults: `activeTab: 'ab'`, `globalScope: 'thisGame'`, `zonePerspective: 'pitcher'`, `recentFormGames: 7`, `scoreCache`/`pitcherCache`/`batterCache` empty `Map`s, everything else `null`/`false`/`[]`.
+Defaults: `activeTab: 'ab'`, `globalScope: 'thisGame'`, `zonePerspective: 'pitcher'`, `splitPerspective: 'pitcher'`, `recentFormGames: 7`, `scoreCache`/`pitcherCache`/`batterCache` empty `Map`s, everything else `null`/`false`/`[]`.
 
 Actions and when each is dispatched:
 
@@ -649,11 +665,12 @@ Actions and when each is dispatched:
 - `setActiveTab(tab)` — called by the `MiniNav` buttons in `GameScreen`. This is a mount switch: exactly one section (`ab`, `matchup`, `game`, or `logs`) is rendered at a time; the others are unmounted.
 - `setGlobalScope(scope)` — the single This Game / Season switch that drives the scoped sections. In `MatchupSubTab` it is written only by the `MatchupHeader` face-card arrows, which step through `SCOPE_CYCLE` (`['thisGame', 'season']`) and wrap at both ends; the scope rewrites both face-card statlines as well as the H2H panel.
 - `setZonePerspective(perspective)` — swaps whether the Matchup zone shows the pitcher's or the batter's hot/cold grid.
+- `setSplitPerspective(perspective)` — swaps whether the Matchup Splits table shows the pitcher's or the batter's Season / vs L / vs R / RISP / Home / Away rows. Kept separate from `zonePerspective` so switching the heat map does not silently rewrite the table below it.
 - `setRecentFormGames(games)` — declared but currently unused; the Recent Form panel was removed from `PitchingSubTab` and `BattingSubTab` in the single-scroll redesign. Kept in the store for potential re-introduction.
 - `setGameFeedPitches(pitches)` — called by `App.tsx`'s Savant game-feed effect on every `gamePk` change (success sets the rows, failure sets `[]`).
 - `setError(err)` — called by `App.tsx`'s deep-link handler and by `useLiveFeed` on any fetch/poll failure.
 - `setLiveScoresCache(scores, pitchers, batters)` — called by `useLiveScores` after each successful Cloud Function poll. Persists the three `ReadonlyMap`s so that returning to `GameSelect` from a game detail screen shows cached scores instantly instead of dashes.
-- `reset()` — called from `FloatingGamesButton` (fixed bottom-left, rendered by `App.tsx`). Clears `selectedGame`, `gamePk`, `liveFeed`, `currentPlay`, `lastTimecode`, `isPolling`, `gameFeedPitches`, `error`, and returns `activeTab`, `globalScope` and `zonePerspective` to their defaults, returning the app to `GameSelect`. Does **not** clear `scoreCache`/`pitcherCache`/`batterCache` so the slate repopulates instantly.
+- `reset()` — called from `FloatingGamesButton` (fixed bottom-left, rendered by `App.tsx`). Clears `selectedGame`, `gamePk`, `liveFeed`, `currentPlay`, `lastTimecode`, `isPolling`, `gameFeedPitches`, `error`, and returns `activeTab`, `globalScope`, `zonePerspective` and `splitPerspective` to their defaults, returning the app to `GameSelect`. Does **not** clear `scoreCache`/`pitcherCache`/`batterCache` so the slate repopulates instantly.
 
 Watchability scores are cached in `gameStore` via `scoreCache`/`pitcherCache`/`batterCache`. `useLiveScores` initializes its local state from these maps on mount and writes back to the store after each successful poll, so navigating between `GameSelect` and a game detail screen preserves scores without a re-fetch dash. `useLiveSlate` similarly owns its own `games`/`loading`/`refresh` state local to `GameSelect`, independent of the store — the store holds `selectedGame` (a snapshot of one game), not the full slate array, so slate refreshes do not clobber the selected game.
 

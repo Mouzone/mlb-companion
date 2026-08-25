@@ -1279,7 +1279,7 @@ button:focus-visible,
 .arsenal-cc__head,
 .arsenal-cc__row {
   display: grid;
-  grid-template-columns: 1fr auto auto auto auto;
+  grid-template-columns: 1fr auto auto auto auto auto;
   gap: var(--sp-2);
   align-items: center;
   padding: var(--sp-2) 0;

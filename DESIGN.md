@@ -317,6 +317,19 @@ The atom of the entire app.
 - The control lives *inside* the card because it rewrites the two statlines directly
   beneath it; a detached control would read as page-level chrome.
 
+### 5.8c `.arsenal-cc` — arsenal table
+- Six-column CSS grid, `1fr auto auto auto auto auto`: Pitch · Use · Velo · Spin · V-Brk · H-Brk.
+  The name column takes the remaining width so every numeric column stays flush right.
+- Head row is `--fs-micro` 500 uppercase `--c-muted` over `1px solid var(--c-rule)`; body rows
+  are separated by `--c-rule-soft` with the last row's border removed.
+- Values are `--fs-data` 600 with `font-variant-numeric: tabular-nums` so digits never reflow
+  between polls. A velocity delta renders beneath its value at `--fs-micro`, 0.72 opacity.
+- Only velocity is toned: `.arsenal-cc__metric--positive` / `--negative` recolour the value with
+  `--c-positive` / `--c-negative`. Spin and break carry no baseline to compare against, so they
+  stay in plain ink rather than implying a verdict.
+- Season scope leaves Spin, V-Brk and H-Brk empty — the MLB arsenal endpoint publishes only
+  usage and average speed, and an absent metric renders as an em dash rather than a zero.
+
 ### 5.8 `TeamLogo`
 - `<img>` from `teamLogoUrl(teamId, variant)`. White-first ⇒ always the `-on-light` variants.
 - Sizes: `sm` 24px (dense rows) · `md` 32px · `lg` 44px (card headers).

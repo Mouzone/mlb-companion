@@ -17,6 +17,7 @@ export interface ColorCodedArsenalRow {
   readonly velo: ArsenalMetric
   readonly spin: ArsenalMetric
   readonly breakVertical: ArsenalMetric
+  readonly breakHorizontal: ArsenalMetric
 }
 
 const DEAD_BAND_VELO = 0.8
@@ -106,10 +107,14 @@ export function buildGameArsenalRows(
     const breaks = typePitches
       .map((p) => finite(p.breaks?.breakVertical))
       .filter((v): v is number => v !== null)
+    const horizontals = typePitches
+      .map((p) => finite(p.breaks?.breakHorizontal))
+      .filter((v): v is number => v !== null)
 
     const avgVelo = mean(velos)
     const avgSpin = mean(spins)
     const avgBreak = mean(breaks)
+    const avgHorizontal = mean(horizontals)
 
     const seasonVelo =
       parseNumber(
@@ -129,6 +134,7 @@ export function buildGameArsenalRows(
       velo: { value: avgVelo, tone: veloToneVal, delta: veloDeltaVal },
       spin: { value: avgSpin, tone: 'default', delta: null },
       breakVertical: { value: avgBreak, tone: 'default', delta: null },
+      breakHorizontal: { value: avgHorizontal, tone: 'default', delta: null },
     })
   }
 
@@ -149,5 +155,6 @@ export function buildSeasonArsenalRows(
       velo: { value: item.averageSpeed, tone: 'default' as StatTone, delta: null },
       spin: { value: null, tone: 'default' as StatTone, delta: null },
       breakVertical: { value: null, tone: 'default' as StatTone, delta: null },
+      breakHorizontal: { value: null, tone: 'default' as StatTone, delta: null },
     }))
 }
