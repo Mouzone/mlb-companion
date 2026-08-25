@@ -261,8 +261,11 @@ src/
                                            }): renders the 0-100 watchability score as an SVG ring with the
                                            numeral stacked on top, built entirely from <span> and <svg> — never
                                            <div> — because GameCard's root is a <button>, which only admits
-                                           phrasing content. `null`/non-finite scores render `—`. Imported by
-                                            GameCard.
+                                           phrasing content. `null`/non-finite scores render `0` with an empty
+                                           arc. The numeral counts up/down on score changes via
+                                           requestAnimationFrame (ease-out, ~600ms); on first render it snaps
+                                           to the target so cached scores appear instantly. Respects
+                                           prefers-reduced-motion. Imported by GameCard.
     StatsGuide/StatsGuide.tsx             Global searchable metric reference. Renders the fixed information
                                            trigger and accessible right-side dialog; owns search filtering,
                                            focus trapping/restoration, Escape and scrim dismissal, and body
@@ -629,11 +632,14 @@ interface GameState {
   recentFormGames: number
   gameFeedPitches: SavantGamePitch[]
   error: string | null
+  scoreCache: ReadonlyMap<number, number>
+  pitcherCache: ReadonlyMap<number, CurrentPitcher>
+  batterCache: ReadonlyMap<number, CurrentBatter>
   // actions listed below
 }
 ```
 
-Defaults: `scrollAnchor: 'ab'`, `globalScope: 'thisGame'`, `zonePerspective: 'pitcher'`, `recentFormGames: 7`, everything else `null`/`false`/`[]`.
+Defaults: `scrollAnchor: 'ab'`, `globalScope: 'thisGame'`, `zonePerspective: 'pitcher'`, `recentFormGames: 7`, `scoreCache`/`pitcherCache`/`batterCache` empty `Map`s, everything else `null`/`false`/`[]`.
 
 Actions and when each is dispatched:
 
@@ -648,9 +654,10 @@ Actions and when each is dispatched:
 - `setRecentFormGames(games)` — declared but currently unused; the Recent Form panel was removed from `PitchingSubTab` and `BattingSubTab` in the single-scroll redesign. Kept in the store for potential re-introduction.
 - `setGameFeedPitches(pitches)` — called by `App.tsx`'s Savant game-feed effect on every `gamePk` change (success sets the rows, failure sets `[]`).
 - `setError(err)` — called by `App.tsx`'s deep-link handler and by `useLiveFeed` on any fetch/poll failure.
-- `reset()` — called from `FloatingGamesButton` (fixed bottom-left, rendered by `App.tsx`). Clears `selectedGame`, `gamePk`, `liveFeed`, `currentPlay`, `lastTimecode`, `isPolling`, `gameFeedPitches`, `error`, and returns `scrollAnchor`, `globalScope` and `zonePerspective` to their defaults, returning the app to `GameSelect`.
+- `setLiveScoresCache(scores, pitchers, batters)` — called by `useLiveScores` after each successful Cloud Function poll. Persists the three `ReadonlyMap`s so that returning to `GameSelect` from a game detail screen shows cached scores instantly instead of dashes.
+- `reset()` — called from `FloatingGamesButton` (fixed bottom-left, rendered by `App.tsx`). Clears `selectedGame`, `gamePk`, `liveFeed`, `currentPlay`, `lastTimecode`, `isPolling`, `gameFeedPitches`, `error`, and returns `scrollAnchor`, `globalScope` and `zonePerspective` to their defaults, returning the app to `GameSelect`. Does **not** clear `scoreCache`/`pitcherCache`/`batterCache` so the slate repopulates instantly.
 
-Watchability scores deliberately do **not** live in `gameStore`. `useWatchability` owns its own `scores`/`loading`/`stale` state local to `GameSelect`, the same pattern `usePlayerStats` already uses for the Pitching and Batting sections — the store holds cross-screen selection state, not per-fetch caches. `useLiveSlate` similarly owns its own `games`/`loading`/`refresh` state local to `GameSelect`, independent of the store — the store holds `selectedGame` (a snapshot of one game), not the full slate array, so slate refreshes do not clobber the selected game.
+Watchability scores are cached in `gameStore` via `scoreCache`/`pitcherCache`/`batterCache`. `useLiveScores` initializes its local state from these maps on mount and writes back to the store after each successful poll, so navigating between `GameSelect` and a game detail screen preserves scores without a re-fetch dash. `useLiveSlate` similarly owns its own `games`/`loading`/`refresh` state local to `GameSelect`, independent of the store — the store holds `selectedGame` (a snapshot of one game), not the full slate array, so slate refreshes do not clobber the selected game.
 
 ## 7. Sabermetric Computations
 

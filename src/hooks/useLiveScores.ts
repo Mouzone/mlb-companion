@@ -13,6 +13,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { gameDateStr } from '../utils/gameDay'
+import { useGameStore } from '../store/gameStore'
 
 const ENDPOINT =
   'https://us-central1-mlb-companion-pwa.cloudfunctions.net/liveScores'
@@ -54,10 +55,15 @@ export interface LiveScoresState {
 }
 
 export function useLiveScores(date: string = gameDateStr()): LiveScoresState {
-  const [scores, setScores] = useState<ReadonlyMap<number, number>>(new Map())
-  const [pitchers, setPitchers] = useState<ReadonlyMap<number, CurrentPitcher>>(new Map())
-  const [batters, setBatters] = useState<ReadonlyMap<number, CurrentBatter>>(new Map())
-  const [loading, setLoading] = useState(true)
+  const scoreCache = useGameStore((s) => s.scoreCache)
+  const pitcherCache = useGameStore((s) => s.pitcherCache)
+  const batterCache = useGameStore((s) => s.batterCache)
+  const setLiveScoresCache = useGameStore((s) => s.setLiveScoresCache)
+
+  const [scores, setScores] = useState<ReadonlyMap<number, number>>(scoreCache)
+  const [pitchers, setPitchers] = useState<ReadonlyMap<number, CurrentPitcher>>(pitcherCache)
+  const [batters, setBatters] = useState<ReadonlyMap<number, CurrentBatter>>(batterCache)
+  const [loading, setLoading] = useState(scoreCache.size === 0)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const dateRef = useRef(date)
 
@@ -89,12 +95,13 @@ export function useLiveScores(date: string = gameDateStr()): LiveScoresState {
       setScores(scoreMap)
       setPitchers(pitcherMap)
       setBatters(batterMap)
+      setLiveScoresCache(scoreMap, pitcherMap, batterMap)
     } catch {
       // Network error or CF unreachable — keep prior scores, don't crash UI
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [setLiveScoresCache])
 
   useEffect(() => {
     void poll()

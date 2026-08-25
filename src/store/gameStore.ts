@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import type { LiveFeed, ScheduledGame, CurrentPlay, SavantGamePitch } from '../api/types'
+import type { CurrentPitcher, CurrentBatter } from '../hooks/useLiveScores'
 
 type ScrollAnchor = 'ab' | 'matchup' | 'game' | 'pitching' | 'batting'
 type GlobalScope = 'thisGame' | 'season' | 'career'
@@ -19,6 +20,10 @@ interface GameState {
   gameFeedPitches: SavantGamePitch[]
   error: string | null
 
+  scoreCache: ReadonlyMap<number, number>
+  pitcherCache: ReadonlyMap<number, CurrentPitcher>
+  batterCache: ReadonlyMap<number, CurrentBatter>
+
   selectGame: (game: ScheduledGame) => void
   setLiveFeed: (feed: LiveFeed) => void
   setCurrentPlay: (play: CurrentPlay | null) => void
@@ -30,6 +35,7 @@ interface GameState {
   setRecentFormGames: (games: number) => void
   setGameFeedPitches: (pitches: SavantGamePitch[]) => void
   setError: (err: string | null) => void
+  setLiveScoresCache: (scores: ReadonlyMap<number, number>, pitchers: ReadonlyMap<number, CurrentPitcher>, batters: ReadonlyMap<number, CurrentBatter>) => void
   reset: () => void
 }
 
@@ -47,6 +53,10 @@ export const useGameStore = create<GameState>((set) => ({
   gameFeedPitches: [],
   error: null,
 
+  scoreCache: new Map(),
+  pitcherCache: new Map(),
+  batterCache: new Map(),
+
   selectGame: (game) =>
     set({ selectedGame: game, gamePk: game.gamePk, liveFeed: null, currentPlay: null, lastTimecode: null, gameFeedPitches: [], error: null }),
   setLiveFeed: (feed) =>
@@ -60,5 +70,7 @@ export const useGameStore = create<GameState>((set) => ({
   setRecentFormGames: (games) => set({ recentFormGames: games }),
   setGameFeedPitches: (pitches) => set({ gameFeedPitches: pitches }),
   setError: (err) => set({ error: err }),
+  setLiveScoresCache: (scores, pitchers, batters) =>
+    set({ scoreCache: scores, pitcherCache: pitchers, batterCache: batters }),
   reset: () => set({ selectedGame: null, gamePk: null, liveFeed: null, currentPlay: null, lastTimecode: null, isPolling: false, scrollAnchor: 'ab', globalScope: 'thisGame', zonePerspective: 'pitcher', gameFeedPitches: [], error: null }),
 }))

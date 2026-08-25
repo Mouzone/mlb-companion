@@ -667,7 +667,8 @@
 
 .ui-ring__fill {
   stroke: currentcolor;
-  transition: stroke-dashoffset var(--dur-base) var(--ease-out);
+  transition: stroke-dashoffset var(--dur-base) var(--ease-out),
+    color var(--dur-base) var(--ease-out);
 }
 
 .ui-ring__value {
@@ -728,6 +729,10 @@
   }
 
   .ui-ring__fill {
+    transition: none;
+  }
+
+  .ui-ring__value {
     transition: none;
   }
 

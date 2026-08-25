@@ -350,7 +350,14 @@ Required set: `chevron-left`, `chevron-right`, `chevron-down`, `dot-live`, `diam
 - **Built from `<span>` and `<svg>` only, never `<div>`.** `GameCard`'s root is a `<button>`,
   which accepts only phrasing content — a block-level child would be invalid HTML.
 - Anatomy: an SVG ring (`strokeDasharray`/`strokeDashoffset` drawing the arc) with the numeral
-  grid-stacked on top as text. `null` or a non-finite score renders `—` instead of a ring.
+  grid-stacked on top as text. `null` or a non-finite score renders `0` with an empty arc instead
+  of a dash — the ring fills from 0 when the score arrives, making the loading state feel like
+  the ring is "filling up" rather than showing missing data.
+- Numeral animation: on first render the value snaps to the target (so cached scores appear
+  instantly when returning to the slate). On subsequent score changes the numeral counts up/down
+  via `requestAnimationFrame` with an ease-out cubic curve over ~600ms, in sync with the CSS
+  `stroke-dashoffset` and `color` transitions on the arc. `prefers-reduced-motion` snaps to the
+  final value with no animation.
 - `GEOMETRY` per size: `sm` 32px, radius 13, stroke 2.5 · `md` 40px, radius 17, stroke 3 ·
   `lg` 96px, radius 42, stroke 6. The `lg` size is not arbitrary — 96px is two 44px `TeamLogo lg`
   rows plus one `--sp-3` (8px) gap, so the ring matches the height of the card's two-team block
