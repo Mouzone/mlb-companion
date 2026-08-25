@@ -1672,6 +1672,11 @@ button:focus-visible,
   margin-top: var(--sp-1);
 }
 
+.matchup-head__stats .ui-stat {
+  padding: var(--sp-2);
+  border-radius: var(--radius-sm);
+}
+
 .matchup-head__line {
   min-width: 0;
   overflow: hidden;

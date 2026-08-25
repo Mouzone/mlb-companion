@@ -310,9 +310,12 @@ The atom of the entire app.
   middle stop is deliberately unlabelled because it is still in-game data; a second label
   would imply a different time span.
 - Each side of the card renders its stats as a `StatGrid` (`.matchup-head__stats`,
-  `minColumnWidth={56}`) so the 8/9/8 cells per scope wrap into an even block. The grid sits
-  `--sp-1` below the identity strap and replaces the single-line `.matchup-head__line`
-  summary, which remains as the fallback whenever the underlying data has not arrived.
+  `minColumnWidth={56}`) so the 8/8/8 cells per scope wrap into an even block. The grid sits
+  `--sp-1` below the identity strap. When the underlying data has not arrived (e.g. pre-game),
+  8 muted placeholder cells take the place of real cells so the card height stays constant
+  across all three scopes. All `.matchup-head__stats .ui-stat` cells carry uniform
+  `padding: var(--sp-2)` and `border-radius: var(--radius-sm)` so benchmark and non-benchmark
+  cells have the same height, eliminating layout shift when cycling scopes.
 - Season cells carry percentile badges from `Stat`'s `benchmark` prop; the game scopes do not,
   because a single game is too small a sample to rank.
 - Buttons are 32×32 (touch-safe), `--c-surface-sunken` on `1px solid var(--c-border)`,

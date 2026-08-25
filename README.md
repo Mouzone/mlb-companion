@@ -317,16 +317,18 @@ src/
                                            a StatGrid of cells: thisGame gives 8 counting cells per side
                                            (pitcher IP/P/BF/K/BB/H/HR/P-BF from derivePitcherGame, batter
                                            PA/AB/H/HR/RBI/BB/K/Pitches from buildGameLine + splitPitches),
-                                           inGame gives 9 rate cells per side (pitcher Command
-                                           Strike%/CSW%/Whiff%/1st-P Str/Zone%/Chase%/Called/SwStr/In Play,
+                                           inGame gives 8 rate cells per side (pitcher Command
+                                           Strike%/CSW%/Whiff%/1st-P Str/Zone%/Chase%/Called/SwStr,
                                            batter Plate Discipline
-                                           Swing%/Whiff%/Chase%/Zone%/Taken%/Called/SwStr/Foul/In Play), and
+                                           Swing%/Whiff%/Chase%/Zone%/Taken%/Called/SwStr/Foul), and
                                            season gives 8 benchmark-toned cells per side from
                                            pitcherSeasonCells/batterSeasonCells enriched by
                                            benchmarkPitcherCells/benchmarkBatterCells with cohorts from
                                            useStatBenchmarks('season'). When the underlying data is missing the
-                                           cell array is empty and Side falls back to the one-line summary from
-                                           derivePitcherLine/deriveBatterLine. isGameScope (thisGame or inGame)
+                                           cell array is empty and Side renders 8 muted placeholder cells so
+                                           the card height stays constant across scopes. All stat cells in the
+                                           matchup card carry uniform padding (var(--sp-2)) so benchmark and
+                                           non-benchmark cells have the same height. isGameScope (thisGame or inGame)
                                            drives H2H and arsenal, since both game scopes read live data.
                                            This-game H2H derived from liveFeed allPlays via
                                            deriveThisGameH2H; season via vsPlayer from

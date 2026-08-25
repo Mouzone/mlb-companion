@@ -99,7 +99,6 @@ function buildPitcherCommandCells(game: PitcherGame): Cell[] {
     { label: 'Chase%', value: percent(rateOf(split.chases, split.outOfZone)) },
     { label: 'Called', value: fixed(split.called, 0) },
     { label: 'SwStr', value: fixed(split.whiffs, 0) },
-    { label: 'In Play', value: fixed(split.inPlay, 0) },
   ]
 }
 
@@ -126,7 +125,6 @@ function buildBatterDisciplineCells(split: PitchSplit): Cell[] {
     { label: 'Called', value: fixed(split.called, 0) },
     { label: 'SwStr', value: fixed(split.whiffs, 0) },
     { label: 'Foul', value: fixed(split.fouls, 0) },
-    { label: 'In Play', value: fixed(split.inPlay, 0) },
   ]
 }
 

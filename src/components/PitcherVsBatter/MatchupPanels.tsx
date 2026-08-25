@@ -67,29 +67,29 @@ export interface MatchupSide {
   readonly cells?: ReadonlyArray<Cell>
 }
 
+const PLACEHOLDER_CELL: Cell = { label: '', value: '', tone: 'muted' }
+const PLACEHOLDER_CELLS: ReadonlyArray<Cell> = Array.from({ length: 8 }, () => PLACEHOLDER_CELL)
+
 function Side({ side }: { readonly side: MatchupSide }): ReactElement {
   const cells = side.cells ?? []
+  const display = cells.length > 0 ? cells : PLACEHOLDER_CELLS
   return (
     <div className="matchup-head__side">
       <PlayerAvatar personId={side.personId} name={side.name} size="lg" />
       <div className="matchup-head__ident">
         <span className="pvb-name">{side.name}</span>
         <span className="pvb-strap">{side.role}</span>
-        {cells.length > 0 ? (
-          <StatGrid className="matchup-head__stats" minColumnWidth={56}>
-            {cells.map((cell) => (
-              <Stat
-                key={cell.label}
-                label={cell.label}
-                value={cell.value}
-                tone={cell.tone}
-                benchmark={cell.benchmark}
-              />
-            ))}
-          </StatGrid>
-        ) : (
-          <span className="matchup-head__line">{side.line}</span>
-        )}
+        <StatGrid className="matchup-head__stats" minColumnWidth={56}>
+          {display.map((cell, i) => (
+            <Stat
+              key={cells.length > 0 ? cell.label : `ph-${i}`}
+              label={cell.label}
+              value={cell.value}
+              tone={cell.tone}
+              benchmark={cell.benchmark}
+            />
+          ))}
+        </StatGrid>
       </div>
     </div>
   )
