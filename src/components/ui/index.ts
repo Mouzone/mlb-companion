@@ -15,9 +15,6 @@ export type { MiniNavProps, MiniNavItem } from './MiniNav'
 
 export { FloatingGamesButton } from './FloatingGamesButton'
 
-export { SubTabNav } from './SubTabNav'
-export type { SubTabNavProps, SubTabDescriptor } from './SubTabNav'
-
 export { Segmented } from './Segmented'
 export type { SegmentedProps, SegmentedOption, SegmentedSize } from './Segmented'
 

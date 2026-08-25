@@ -134,11 +134,11 @@ src/
                                            the Cloud Function is unreachable. CurrentPitcher = { id, fullName,
                                            fieldingSide: 'away'|'home' }. CurrentBatter = { id, fullName,
                                            battingSide: 'away'|'home' }. Imported by GameSelect.
-    useStatBenchmarks.ts                  useStatBenchmarks(scope: BenchmarkScope) => { cohorts, loading }.
+     useStatBenchmarks.ts                  useStatBenchmarks(scope: BenchmarkScope) => { cohorts, loading }.
                                            Fetches ActiveBenchmarkCohorts for the current year on mount; the
-                                           cohort object is null until the first successful resolution. Used
-                                            by PitchingSubTab and BattingSubTab to pass season benchmark
-                                            data to the stat-card cells. Imported by PitchingSubTab, BattingSubTab.
+                                           cohort object is null until the first successful resolution. No longer
+                                           imported by any component after the stat-card removal; retained for
+                                           potential future use.
     useLiveSlate.ts                       useLiveSlate(date) => { games, loading, refresh }. Adaptive schedule
                                            polling hook that replaces the one-shot fetchSchedule pattern in
                                            GameSelect. Uses recursive setTimeout (not setInterval) so cadence
@@ -151,28 +151,27 @@ src/
   utils/
     pitchConstants.ts                     Exports PITCH_COLORS (Record<string,string>, keys FF SI FC SL ST CU KC
                                            CH FS KN FO SC EP) and getPitchColor(code): falls back to '#888888' for
-                                           unknown codes. Imported by ArsenalBars, ZonePlot, BatterGameSubTab,
+                                           unknown codes. Imported by ZonePlot, BatterGameSubTab,
                                            MatchupSubTab.
     leagueConstants.ts                    Thin re-export layer for constants in shared/scoring.mjs. Exports
                                            LEAGUE_ERA (4.20), LEAGUE_WOBA (0.310), WOBA_SCALE (1.24),
                                            LEAGUE_R_PER_PA (0.120), and PARK_FACTORS (Record<string, number>,
                                            30 team-abbreviation keys). Hardcoded in the shared module; must be
                                            updated annually before each season (see section 9). Imported by
-                                            PitchingSubTab and (for PARK_FACTORS only) useWatchability, which
-                                           reattaches park factor onto the watchability payload client-side.
+                                           useWatchability (for PARK_FACTORS only), which reattaches park
+                                           factor onto the watchability payload client-side.
     sabermetrics.ts                       Pure computation functions: computeFIP, computeERAplus, computeWRCplus,
                                            computeISO, computeKpct, computeBBpct, computeHR9, computeGBpct,
                                            parseStat, ipToDecimal. See section 7 for formulas. Imported by
-                                            MatchupSubTab (indirectly via ipToDecimal/parseStat),
-                                            PitchingSubTab, BattingSubTab.
+                                            MatchupSubTab (indirectly via ipToDecimal/parseStat).
     derivePitcher.ts                      Exports derivePitcher(currentPlay, liveFeed, selectedGame): resolves the
                                            current pitcher via a 4-step fallback chain — (1) currentPlay.matchup.pitcher
                                            (the pitcher in the current at-bat), (2) liveFeed.linescore.defense.pitcher
                                            (always populated once the feed loads, even between at-bats or in Preview
                                            state), (3) selectedGame home probable pitcher, (4) selectedGame away probable
                                            pitcher, (5) null. This replaces a copy-pasted 5-line fallback that was
-                                            duplicated in App.tsx, PitchingSubTab, MatchupSubTab, and
-                                           BattingSubTab. Imported by all five of those files.
+                                            duplicated in App.tsx, MatchupSubTab, and
+                                           LogsSubTab. Imported by all three of those files.
     watchability.ts                       Thin re-export layer for the shared scoring module. Runtime math
                                            and constants are imported from shared/scoring.mjs and re-exported
                                            with explicit type annotations from shared/scoring-types.ts. All
@@ -190,7 +189,7 @@ src/
                                            BASE_VALUE_COLORS, readableInkOn, and type PitchCode. Values
                                            mirror DESIGN.md §2 (Color). Enforced by scripts/design-checks.mjs:
                                            no raw hex literals may appear in Canvas/*.tsx or
-                                           pitchConstants.ts. Imported by ArsenalBars, HeatMap, SprayChart.
+                                           pitchConstants.ts.                                            Imported by HeatMap, SprayChart.
     gameDay.ts                            Exports gameDateStr(now = new Date()): returns a YYYY-MM-DD string
                                            anchored to a 6 AM local rollover (not midnight), so late West
                                            Coast games that finish after midnight are not dropped from the
@@ -207,7 +206,7 @@ src/
                                            cohort) => StatBenchmark | undefined. Computes the percentile
                                            rank of a value against a cohort array; returns undefined for
                                            null/non-finite values or empty cohorts. Imported by
-                                           PvbBenchmarks, PvbCards, Stat (UI).
+                                           PvbCards, Stat (UI).
 
   components/
     GameScreen.tsx                       Page-based game screen container. Renders MiniNav (sticky top) and
@@ -215,7 +214,7 @@ src/
                                            one <section> at a time for ab, matchup, game, or logs. Nav buttons
                                            call gameStore.setActiveTab; there is no scrolling between sections.
                                            Imports gameStore, MiniNav, LiveAtBat, MatchupSubTab,
-                                           PitcherGameSubTab, BatterGameSubTab, PitchingSubTab, BattingSubTab.
+                                           PitcherGameSubTab, BatterGameSubTab, LogsSubTab.
                                            Imported by App.tsx.
     ui/MiniNav.tsx                       Sticky 44px nav bar with [AB|Matchup|Game|Logs] buttons (role=tablist,
                                            equal-flex). Active state from gameStore.activeTab. Imported by
@@ -315,7 +314,6 @@ src/
                                            given a distinct shape as well as a hue, and CALL_TONE_LEGEND drives
                                             the labelled `.atbat__legend` key rendered on its own full-width row
                                             beneath the grid.
-     PitcherVsBatter/PvbCard.tsx            Exports PvbCard (a swipeable stat card). Renders a player identity
      PitcherVsBatter/MatchupSubTab.tsx     Scope driven by gameStore.globalScope ('thisGame' | 'season',
                                            default 'thisGame'), switched only by the MatchupHeader face-card
                                            arrows (SCOPE_CYCLE wraps at both ends); there is no standalone
@@ -355,21 +353,8 @@ src/
                                             builder leaves spin and both breaks null because the MLB arsenal
                                             endpoint publishes only usage and average speed. Export types:
                                             HandednessFilter, ArsenalMetric, ColorCodedArsenalRow. Imported by
-                                            MatchupSubTab and PitchingSubTab.
-     PitcherVsBatter/ColorCodedArsenal.tsx ColorCodedArsenal({ rows, loading, scopeLabel,
-                                           showHandednessToggle, handedness, onHandednessChange,
-                                           totalPitches }). Renders a CSS-grid arsenal table with colored
-                                           velo/spin/break values + delta labels. Optional Segmented for
-                                           All/RHB/LHB handedness filter (shown only for This Game scope).
-                                           Imported by PitchingSubTab.
-    Canvas/ArsenalBars.tsx                ArsenalBars({ arsenal: PitchArsenalItem[], width = 280 }). Draws a
-                                           horizontal bar per pitch type via 2D canvas, colored with
-                                           getPitchColor. Renders a bare <canvas> with NO className and NO CSS
-                                           height (only an inline width style) — see section 8 on why this
-                                            requires a descendant CSS clamp. No longer rendered by any
-                                           section after the single-scroll redesign; kept for potential
-                                           re-use.
-    Canvas/HeatMap.tsx                    HeatMap({ zones: HotColdZone[], size = 150 }). Draws a 3x3 hot/cold
+                                            MatchupSubTab.
+     Canvas/HeatMap.tsx                    HeatMap({ zones: HotColdZone[], size = 150 }). Draws a 3x3 hot/cold
                                            grid on canvas, colored via the local TEMP_COLORS map (hot/cold/warm/
                                             lukewarm). Imported by MatchupSubTab.
     Canvas/SprayChart.tsx                 SprayChart({ data: ReadonlyArray<SavantBattedBall>, width = 304, height = 274 }).
@@ -527,7 +512,7 @@ Baseball Savant (baseballsavant   ──┘                            │
 - `usePlayerStats` is called by `MatchupSubTab` with the same `(batterId, pitcherId)` pair. Module-level promise caches keyed per player mean only the first caller fetches; the rest await the same promise. `App` warms these caches (`preloadPlayerStats`, `fetchCachedGameLog`, `fetchActiveBenchmarkCohorts`) as soon as the live feed yields a matchup, so opening any section is generally instant.
 - **Pitcher selection** in the Pitcher vs Batter tab and the `App` preload uses a shared `derivePitcher(currentPlay, liveFeed, selectedGame)` helper (`src/utils/derivePitcher.ts`) with a 4-step fallback: (1) `currentPlay.matchup.pitcher` — the pitcher in the current at-bat, (2) `liveFeed.linescore.defense.pitcher` — the MLB API's linescore defense field, always populated once the feed loads (even in Preview state or between at-bats when `currentPlay` is transiently null), (3) home probable pitcher, (4) away probable pitcher, (5) null. This ensures the PVB tab shows the actual pitcher on the mound — including relievers after a pitching change — rather than defaulting to the scheduled starter. The Live Game tab (At Bat / Pitcher / Batter sub-tabs) already used `currentPlay.matchup.pitcher` directly with no fallback; only the PVB tab had the copy-pasted probable fallback.
 - Because the caches are keyed per player rather than per matchup, a pitching change refetches only the pitcher bundle and a new batter refetches only the batter bundle.
-- Sabermetric derivations (FIP, ERA+, wRC+, ISO, K%, BB%, HR/9, GB%) happen in the consuming components (via `PvbCards` cell builders), not inside the store or the fetchers — raw stat objects are stored/passed as-is and computed on render.
+- Sabermetric derivations (FIP, ERA+, wRC+, ISO, K%, BB%, HR/9, GB%) happen in the consuming components, not inside the store or the fetchers — raw stat objects are stored/passed as-is and computed on render.
 - No data ever flows backward from components into the API layer; all fetchers are one-directional reads.
 - **Watchability is a separate, parallel data flow that never touches gameStore.** `scripts/build-watchability.mjs`
   runs nightly (outside the app, via GitHub Actions), computes league baselines and per-game inputs, and writes
@@ -716,15 +701,15 @@ html, body, #root    height:100%, overflow:hidden                  index.css
 
 The panel's height is never computed. It claims the remainder with `flex: 1 1 auto; min-height: 0; overflow-y: auto`, so changing either bar height re-flows the layout with no arithmetic to re-derive. `min-height: 0` on every flex ancestor of a scroll owner is a hard requirement — without it the box refuses to shrink and clips instead of scrolling.
 
-**Exactly one vertical scroll owner per screen.** On the Live Game and Pitcher-vs-Batter tabs that is `.sub-tab-panel` / `.pvb-panel`; on the GameSelect screen — which has no sub-tab nav — it is `.game-select`. Everything above them is `overflow: hidden`. The only other scrollable box is `.pvb-cards`, which scrolls **horizontally** (`overflow-x: auto` with scroll-snap) below 1024px and becomes a static two-column grid above it. Every remaining `overflow: hidden` in the codebase is a text-truncation or clipping wrapper, not a layout container.
+**Exactly one vertical scroll owner per screen.** On the Live Game tabs that is `.game-page`; on the GameSelect screen — which has no sub-tab nav — it is `.game-select`. Everything above them is `overflow: hidden`. Every remaining `overflow: hidden` in the codebase is a text-truncation or clipping wrapper, not a layout container.
 
 Breakpoints are literal `min-width` px values — there is no `--bp-*` custom property, and no `max-width` query exists anywhere:
 
 | Breakpoint | What changes |
 |---|---|
 | `480px` | Stat grids go 3-up (`.stat-grid`, `.tendencies-grid`, `.season-lines`), `.stat-grid-3` goes 4-up; `.matchup__grid`/`.atbat__grid` gaps and linescore type scale up |
-| `768px` | Content capped at **720px** and centered via `padding-inline: max(var(--sp-4), calc((100% - 720px) / 2))` on `.sub-tab-panel`, `.pvb-panel`, and `.game-select`; canvas wrappers gain block padding |
-| `1024px` | Same mechanism capped at **960px**; `.pvb-cards` becomes a two-column grid with `overflow-x: visible` and scroll-snap disabled |
+| `768px` | Content capped at **720px** and centered via `padding-inline: max(var(--sp-4), calc((100% - 720px) / 2))` on `.game-page`, `.game-select`; canvas wrappers gain block padding |
+| `1024px` | Same mechanism capped at **960px** on `.game-page`, `.game-select` |
 
 Centering uses `padding-inline`, not `max-width`, so the scroll owner keeps its full-bleed scrollbar gutter while its content stays within the cap.
 
@@ -732,12 +717,11 @@ Centering uses `padding-inline`, not `max-width`, so the scroll owner keeps its 
 
 Surviving hardcoded heights. This is the complete list; additions need justification:
 
-- `--tab-bar-h: 48px` and `--sub-tab-h: 44px` (`src/index.css`), applied by `.ui-tab-bar` / `.ui-sub-tab-nav`. Fixed chrome is the only thing permitted to declare `height`, and it lives in `ui.css`.
-- `.arsenal-canvas > canvas { max-height: 186px }` — the canvas clamp described below.
+- `--tab-bar-h: 48px` (`src/index.css`), applied by `.ui-tab-bar`. Fixed chrome is the only thing permitted to declare `height`, and it lives in `ui.css`.
 - `.a11y-only { width: 1px; height: 1px }` and the 1px `.matchup-head__vs` hairline pseudo-elements.
-- `Skeleton height="44px" / "32px"` placeholders in `GameSelect.tsx`, and `SprayChart`'s `height = 274` default (`BattingPanels.tsx` passes no size, so the chart owns its own aspect).
+- `Skeleton height="44px" / "32px"` placeholders in `GameSelect.tsx`, and `SprayChart`'s `height = 274` default (no caller passes a size, so the chart owns its own aspect).
 
-Canvas sizing. All four canvases (`ArsenalBars`, `HeatMap`, `SprayChart`, `ZonePlot`) size their own backing store in JS from `window.devicePixelRatio` and set matching CSS pixel dimensions inline. There is no `ResizeObserver` in the codebase — a canvas keeps its intrinsic size inside a `width: 100%` centered slot rather than reacting to it. Call sites after the single-scroll redesign: `ZonePlot size={172}` in LiveAtBat (`LEGEND_MIN_SIZE = 172` gates whether the legend draws), `HeatMap size={150}` in `PvbPanels` (rendered by MatchupSubTab). `ArsenalBars` and `SprayChart` are no longer rendered by any section but remain in the codebase. `ArsenalBars` is the exception: it computes its height from the number of pitch types and returns `<canvas style={{ width }}>` with **no** CSS height, so a tall arsenal would render at its raw pixel height. `App.css` constrains it with the descendant selector `.arsenal-canvas > canvas { max-height: 186px }` — the wrapper's own `height`/`max-height` would only clip, not resize, the canvas.
+Canvas sizing. The three remaining canvases (`HeatMap`, `SprayChart`, `ZonePlot`) size their own backing store in JS from `window.devicePixelRatio` and set matching CSS pixel dimensions inline. There is no `ResizeObserver` in the codebase — a canvas keeps its intrinsic size inside a `width: 100%` centered slot rather than reacting to it. Call sites: `ZonePlot size={172}` in LiveAtBat (`LEGEND_MIN_SIZE = 172` gates whether the legend draws), `HeatMap size={150}` in `PvbPanels` (rendered by MatchupSubTab). `SprayChart` is no longer rendered by any section but remains in the codebase.
 
 Theme tokens. `src/index.css` declares a white-first system: `--c-bg`, `--c-surface-*`, `--c-border*`, `--c-ink*`, `--c-brand-*`, semantic `--c-live`/`--c-positive`/`--c-negative`/`--c-warn`/`--c-neutral-badge`, chart `--c-heat-*`/`--c-chart-*`, 14 `--c-pitch-*` identity colors and 4 `--c-call-*` markers, plus `--sp-1..8`, `--radius-sm|base|lg|pill`, and `--font-ui`/`--font-num`. Note the spacing scale is `--sp-*`, not `--space-*`. The old dark-green `--mlb-primary`/`--mlb-bg`/`--mlb-accent`/`--mlb-text`/`--mlb-muted` tokens no longer exist.
 
@@ -747,7 +731,7 @@ Design guard: `npm run check:design` (`scripts/design-checks.mjs`) runs four che
 
 | Check | What it actually enforces |
 |---|---|
-| `no-canvas-hex` | No hex literal may appear in the four `src/components/Canvas/*.tsx` files or `src/utils/pitchConstants.ts`. Canvas colors must be read from tokens. |
+| `no-canvas-hex` | No hex literal may appear in the three `src/components/Canvas/*.tsx` files or `src/utils/pitchConstants.ts`. Canvas colors must be read from tokens. |
 | `theme-lockstep` | The token ↔ `theme-color` ↔ manifest agreement above. Fails on a missing value as well as a mismatch. |
 | `no-fixed-budgets` | Scans every `.ts`/`.tsx`/`.css` under `src` for the deleted names `h-190 h-172 h-160 h-120 h-55 h-44 h-40 h-22 h-18` and `--pvb-content-h`. The pattern does **not** cover `h-186`, `h-150`, or `h-95`. |
 | `tabular-nums` | Asserts only that the literal string `tabular-nums` appears in `src/index.css`; it does not verify that every numeric readout uses it. |
@@ -812,14 +796,14 @@ Three further runtime rules exist, and rule order matters — Workbox takes the 
 13. **ERA+/wRC+ park factor uses the current game's home park** (`PARK_FACTORS[selectedGame.teams.home.team.abbreviation] ?? 1.00`) as an approximation of the player's own home park; it is not looked up per-player.
 14. **`env(safe-area-inset-*)` resolves to 0 in headless Chrome**, so QA there renders a marginally taller `.app` than a real iPhone does. Because the layout is flex-based with no fixed budgets (section 8), this only changes how much of the panel is visible before scrolling begins — it is a headless-browser artifact, not a layout violation.
 15. **Module-level promise caches have no TTL and are never cleared.** `usePlayerStats`, `playerStatsCache`, and `benchmarks` all dedupe via `Map`s that live for the lifetime of the page. This is what makes tab and sub-tab switching free, but it also means a starter's season line fetched at first pitch never updates for the rest of the broadcast, and nothing evicts entries on `reset()`. Failed/empty results *are* evicted so they can be retried; successful ones are frozen. `currentYear` is likewise computed once at module load, so an installed PWA left resident across a season boundary would query the wrong season.
-16. **The `recentFormGames` store field is vestigial.** The Recent Form panel was removed from `PitchingSubTab` and `BattingSubTab` in the single-scroll redesign. The field and `setRecentFormGames` action remain in the store but are not dispatched by any component.
+16. **The `recentFormGames` store field is vestigial.** The Recent Form panel was removed in the single-scroll redesign. The field and `setRecentFormGames` action remain in the store but are not dispatched by any component.
 17. **No test framework, no client-side router, and no backend exist in this project**, by design; do not introduce any of the three without updating this document and `vercel.json`'s SPA rewrite assumption.
 18. **Manifest `screenshots` are still missing.** The repo-root `memo-desktop.png` (1280x4044) and `memo-mobile.png` (397x5288) are full-page captures whose aspect ratios exceed Chrome's 2.3 limit for install-prompt screenshots; properly-sized viewport captures are still needed to unlock the rich install prompt.
 19. **`registerType: 'autoUpdate'` still reloads silently mid-session.** An update toast, so the user knows a reload just happened, would be an improvement.
 20. **FanGraphs cannot be used as a watchability data source.** Their terms prohibit scraping and automated export, so SIERA, official wRC+, and Depth Charts projections are unavailable to the pipeline; every watchability input is derived from the MLB Stats API or computed locally in `scripts/build-watchability.mjs`.
 21. **The watchability formula is calibrated by construction, not yet validated against realised outcomes.** Weights were chosen deliberately, not fit to data. Backtesting pregame scores against actual Excitement Index for completed games is the natural next step, and has not been done.
 22. **The Elo constants in `build-watchability.mjs` are not a reproduction of FiveThirtyEight's MLB Elo.** FiveThirtyEight's MLB Elo is archived and its methodology page now redirects away; the constants here are informed by their published CSV columns but are this project's own choices.
-23. **Pitcher selection previously defaulted to the scheduled probable starter.** Before the `derivePitcher` refactor, all PVB consumers (App, PitchingSubTab, MatchupSubTab, BattingSubTab) used the same copy-pasted fallback `currentPlay?.matchup.pitcher ?? selectedGame.teams.home.probablePitcher ?? selectedGame.teams.away.probablePitcher ?? null`. When `currentPlay` was null — in Preview state, briefly after `selectGame` cleared it before the feed resolved, or for Final games whose feed omitted `currentPlay` — the sections showed the probable starter instead of the actual pitcher. The `derivePitcher` helper now inserts `liveFeed.linescore.defense.pitcher` as a second-priority fallback (after `currentPlay.matchup.pitcher` but before probables), which is populated as soon as the feed loads regardless of game state. The home-first probable ordering (`home ?? away`) is retained because the home pitcher is on the mound first (top of the 1st).
+23. **Pitcher selection previously defaulted to the scheduled probable starter.** Before the `derivePitcher` refactor, all PVB consumers (App, MatchupSubTab, LogsSubTab) used the same copy-pasted fallback `currentPlay?.matchup.pitcher ?? selectedGame.teams.home.probablePitcher ?? selectedGame.teams.away.probablePitcher ?? null`. When `currentPlay` was null — in Preview state, briefly after `selectGame` cleared it before the feed resolved, or for Final games whose feed omitted `currentPlay` — the sections showed the probable starter instead of the actual pitcher. The `derivePitcher` helper now inserts `liveFeed.linescore.defense.pitcher` as a second-priority fallback (after `currentPlay.matchup.pitcher` but before probables), which is populated as soon as the feed loads regardless of game state. The home-first probable ordering (`home ?? away`) is retained because the home pitcher is on the mound first (top of the 1st).
 
 ## 12. Watchability Score
 

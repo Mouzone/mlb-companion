@@ -308,7 +308,7 @@ button:focus-visible,
    specificity are decided by source order, so a breakpoint can only override
    selectors declared ABOVE it. This block therefore carries ONLY §Shell
    selectors; each later section closes with its own breakpoint block. Adding
-   a `.game-card` or `.pvb-cards` override here would silently do nothing.
+   a `.game-card` override here would silently do nothing.
    ========================================================================== */
 
 @media (min-width: 480px) {
@@ -1236,7 +1236,7 @@ button:focus-visible,
 
 /* ===== §GameSubTabs ===== */
 /* Owner: todo 10 — rules shared by BatterGameSubTab + PitcherGameSubTab:
-   canvas-slot, canvas-caption, arsenal-canvas, heatmap-canvas, spray-canvas,
+   canvas-slot, canvas-caption, heatmap-canvas, spray-canvas,
    gamelog-*, game-identity-*, mix-*. The PvB chart sub-tabs consume the same
    slots, which is why they live here rather than under §PvB.
 
@@ -1244,16 +1244,6 @@ button:focus-visible,
    content-sized sections into `.sub-tab-panel`, which is the screen's only
    scroll owner (§Shell) — no rule below may introduce a second one. */
 
-/* ArsenalBars renders a bare <canvas> with NO className and NO CSS height, so
-   its intrinsic height attribute (up to 372px at 2x DPR) becomes its rendered
-   CSS height. A wrapper height would only CLIP it. The descendant clamp below
-   is the only way to actually resize it — LOAD-BEARING, do not remove. */
-.arsenal-canvas > canvas {
-  display: block;
-  max-height: 186px;
-}
-
-.arsenal-canvas,
 .heatmap-canvas,
 .spray-canvas,
 .canvas-slot {
@@ -1262,10 +1252,6 @@ button:focus-visible,
   justify-content: center;
   width: 100%;
   min-width: 0;
-}
-
-.arsenal-canvas {
-  align-items: flex-start;
 }
 
 /* --- Color-coded arsenal table --- */
@@ -1543,7 +1529,6 @@ button:focus-visible,
 }
 
 @media (min-width: 768px) {
-  .arsenal-canvas,
   .heatmap-canvas,
   .spray-canvas,
   .canvas-slot,
@@ -1553,90 +1538,9 @@ button:focus-visible,
 }
 
 /* ===== §PvB ===== */
-/* Owner: todo 11 — pvb-cards*, pvb-scope, pvb-card*, pvb-name, pvb-strap,
+/* Owner: todo 11 — pvb-name, pvb-strap,
    card-title, pvb-panel, matchup-*, sequence-pitch, seq-*, subsection.
    `.subsection` inherits the generic card in §Shell. */
-
-/* --- Stat card strip ---------------------------------------------------- */
-/* No height budget: the cards size to their stat grid and the strip sizes to
-   the cards. The strip holds exactly TWO structurally identical cards — the
-   pitcher and the batter for the selected scope — so `align-items: stretch`
-   (the flex default) makes them the same height with no interior void, and a
-   labelled scope switcher replaces the anonymous paging dots that used to
-   reserve a band of their own. */
-
-.pvb-cards-wrap {
-  display: flex;
-  flex: 0 0 auto;
-  flex-direction: column;
-  min-width: 0;
-}
-
-/* Row, so the inline-flex control keeps its intrinsic width instead of
-   stretching across the viewport the way it would in a column. */
-.pvb-scope {
-  display: flex;
-  padding: var(--sp-4) var(--sp-4) 0;
-}
-
-.pvb-cards {
-  display: flex;
-  gap: var(--sp-3);
-  min-width: 0;
-  padding: var(--sp-4);
-  overflow-x: auto;
-  overflow-y: hidden;
-  scroll-snap-type: x mandatory;
-  scrollbar-width: none;
-  -webkit-overflow-scrolling: touch;
-}
-
-.pvb-cards::-webkit-scrollbar {
-  display: none;
-}
-
-/* Layers the strip-only deltas onto the `.ui-card` primitive; equal
-   specificity, and App.css is cascaded after ui.css. */
-.pvb-card {
-  flex: 0 0 100%;
-  gap: var(--sp-4);
-  scroll-snap-align: center;
-  scroll-snap-stop: always;
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-xs);
-}
-
-/* Role is carried by an edge rule, not by a filled surface. */
-.pvb-card--pitcher {
-  border-left: var(--sp-1) solid var(--c-brand-600);
-}
-
-.pvb-card--batter {
-  border-left: var(--sp-1) solid var(--c-heat-4);
-}
-
-.pvb-card__id {
-  display: flex;
-  gap: var(--sp-3);
-  align-items: center;
-  min-width: 0;
-}
-
-.pvb-card__ident {
-  display: flex;
-  flex: 1 1 auto;
-  flex-direction: column;
-  gap: var(--sp-1);
-  min-width: 0;
-}
-
-.pvb-card__platoon {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-3);
-  padding-top: var(--sp-3);
-  border-top: 1px solid var(--c-border);
-}
 
 /* Player identity is a full step above a section title (DESIGN.md §3.3), so it
    can never be mistaken for a stat value at the same size. */
@@ -1892,34 +1796,6 @@ button:focus-visible,
   text-transform: uppercase;
 }
 
-/* --- §PvB breakpoints ---------------------------------------------------- */
-
-@media (min-width: 768px) {
-  .pvb-cards,
-  .pvb-scope {
-    padding-inline: max(var(--sp-4), calc((100% - 720px) / 2));
-  }
-}
-
-@media (min-width: 1024px) {
-  /* Wide enough to show the whole matchup at once, so the swipe carousel
-     becomes a static two-up grid and nothing has to be paged. */
-  .pvb-cards {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    overflow-x: visible;
-    scroll-snap-type: none;
-  }
-
-  .pvb-cards,
-  .pvb-scope {
-    padding-inline: max(var(--sp-4), calc((100% - 960px) / 2));
-  }
-
-  .pvb-card {
-    scroll-snap-align: none;
-  }
-}
 
 .stats-guide-trigger {
   position: fixed;

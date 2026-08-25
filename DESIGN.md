@@ -296,12 +296,7 @@ The atom of the entire app.
 - `position: fixed`, `z-index: 20`, 48px height, `--c-brand-900` background, uppercase label.
 - Balanced by `StatsGuide` FAB at bottom-right.
 
-### 5.7 `SubTabNav` — secondary navigation (legacy)
-- Same equal-fraction rule as `MiniNav`, `--mini-nav-h`, `--c-surface-sunken` background,
-  `1px solid var(--c-border)` bottom. No longer rendered by any section after the single-scroll
-  redesign; kept for potential re-use.
-
-### 5.8 `Segmented` — scope switcher (This Game/Season, All/RHB/LHB)
+### 5.7 `Segmented` — scope switcher (This Game/Season, All/RHB/LHB, Pitcher/Batter)
 - Track: `--c-surface-sunken`, `1px solid var(--c-border-strong)`, `--radius-pill`, height 32px
   (touch-safe; the old 22px was below target).
 - Thumb: `--c-bg`, `--shadow-xs`, `--radius-pill`.

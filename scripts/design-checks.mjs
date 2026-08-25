@@ -28,7 +28,6 @@ function walk(relativeDir, out = []) {
 const HEX = /#[0-9a-fA-F]{3,8}\b/g;
 const CANVAS_FILES = [
   'src/components/Canvas/ZonePlot.tsx',
-  'src/components/Canvas/ArsenalBars.tsx',
   'src/components/Canvas/HeatMap.tsx',
   'src/components/Canvas/SprayChart.tsx',
   'src/utils/pitchConstants.ts',

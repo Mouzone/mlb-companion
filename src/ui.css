@@ -245,9 +245,8 @@
 }
 
 /* ===== MiniNav ============================================================ */
-/* Sticky section navigation — replaces the old TabBar + SubTabNav two-tier
-   chrome with a single 44px bar. Same equal-fraction rule as SubTabNav so
-   every item gets an exact slice. Active item uses ink weight + brand rule. */
+/* Sticky tab navigation — a single 44px bar. Every item gets an exact
+   equal-fraction slice. Active item uses ink weight + brand rule. */
 
 .ui-mini-nav {
   display: flex;
@@ -296,63 +295,6 @@
 }
 
 .ui-mini-nav__item--active::after {
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  left: 0;
-  height: var(--sp-1);
-  content: "";
-  background: var(--c-brand-600);
-}
-
-/* ===== SubTabNav ========================================================= */
-/* DESIGN.md §5.6 — same equal-fraction rule, sunken chrome, 44px tall. */.ui-sub-tab-nav {
-  display: flex;
-  flex: 0 0 var(--mini-nav-h);
-  align-items: stretch;
-  width: 100%;
-  height: var(--mini-nav-h);
-  background: var(--c-surface-sunken);
-  border-bottom: 1px solid var(--c-border);
-}
-
-.ui-sub-tab {
-  position: relative;
-  flex: 1 1 0;
-  min-width: 0;
-  padding: 0 var(--sp-3);
-  overflow: hidden;
-  font-family: var(--font-ui);
-  font-size: var(--fs-body);
-  font-weight: var(--fw-medium);
-  color: var(--c-ink-muted);
-  text-align: center;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  cursor: pointer;
-  background: none;
-  border: 0;
-  transition: color var(--dur-fast) var(--ease-out);
-}
-
-.ui-sub-tab:hover {
-  color: var(--c-ink-secondary);
-}
-
-.ui-sub-tab:focus-visible {
-  z-index: 1;
-  border-radius: var(--radius-sm);
-  outline: none;
-  box-shadow: var(--shadow-focus);
-}
-
-.ui-sub-tab--active {
-  font-weight: var(--fw-semibold);
-  color: var(--c-ink);
-  background: var(--c-bg);
-}
-
-.ui-sub-tab--active::after {
   position: absolute;
   right: 0;
   bottom: 0;
@@ -722,7 +664,6 @@
 
 @media (prefers-reduced-motion: reduce) {
   .ui-tab,
-  .ui-sub-tab,
   .ui-segmented__option,
   .ui-tab-back {
     transition: none;
