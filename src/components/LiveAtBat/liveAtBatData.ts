@@ -338,35 +338,6 @@ export function derivePitchSequence(pitches: readonly PlayEvent[]): readonly Seq
 
 type Linescore = LiveFeed['liveData']['linescore']
 
-export interface InningColumn {
-  readonly number: number
-  readonly away: number | null
-  readonly home: number | null
-}
-
-function runsOf(side: unknown): number | null {
-  if (typeof side !== 'object' || side === null) return null
-  const { runs } = side as { runs?: unknown }
-  return typeof runs === 'number' ? runs : null
-}
-
-function inningNumberOf(inning: unknown, index: number): number {
-  if (typeof inning === 'object' && inning !== null) {
-    const { num } = inning as { num?: unknown }
-    if (typeof num === 'number') return num
-  }
-  return index + 1
-}
-
-/** A half-inning that has not been played yet carries NO `home` key at all. */
-export function deriveInningColumns(linescore: Linescore): readonly InningColumn[] {
-  return linescore.innings.map((inning, index) => ({
-    number: inningNumberOf(inning, index),
-    away: runsOf(inning.away),
-    home: runsOf(inning.home),
-  }))
-}
-
 export interface BaseState {
   readonly label: string
   readonly runner: string | null

@@ -701,7 +701,7 @@ button:focus-visible,
   min-width: 0;
 }
 
-/* Also the linescore team label on the Live tab. */
+/* Also the team label on the Live tab. */
 .team-name {
   min-width: 0;
   overflow: hidden;
@@ -743,8 +743,7 @@ button:focus-visible,
 }
 
 /* ===== §LiveAtBat ===== */
-/* Owner: todo 9 — a11y-only, scoreboard (game-header, bases, base, counter,
-   btn-back, linescore-*), matchup-*, atbat-*, zone-canvas, play-result, rbi. */
+/* Owner: todo 9 — a11y-only, status-strip (bases, base, counter), matchup-*, atbat-*, zone-canvas, play-result, rbi. */
 
 /* Canvas is not accessible (§7): every chart is preceded by a text summary
    that is removed from flow but left in the accessibility tree. 1px is the
@@ -758,106 +757,17 @@ button:focus-visible,
   clip-path: inset(50%);
 }
 
-/* --- Scoreboard --------------------------------------------------------- */
-.scoreboard {
+/* --- Status Strip -------------------------------------------------------- */
+.status-strip {
   display: flex;
-  flex-direction: column;
-  gap: var(--sp-3);
-  min-width: 0;
-  padding: var(--sp-4);
-  background: var(--c-bg);
-  border: 1px solid var(--c-border);
-  border-radius: var(--radius);
-}
-
-/* Back button, base diamond, status badge and inning pill share ONE centre
-   axis — a single flex row with `align-items: center` makes that structural
-   rather than a coincidence of four separately padded boxes. */
-.game-header {
-  display: flex;
-  flex-wrap: wrap;
   gap: var(--sp-3);
   align-items: center;
   justify-content: space-between;
   min-width: 0;
-}
-
-/* --- Line score --------------------------------------------------------- */
-/* `table-layout: fixed` is the whole point: it makes every column edge
-   structural instead of a by-product of glyph widths, which is what the old
-   two-row R/H/E flex pair could never do. Only the team column is sized; the
-   remaining tracks split what is left in equal fractions. */
-
-.linescore {
-  width: 100%;
-  border-collapse: collapse;
-  table-layout: fixed;
-}
-
-.linescore__team {
-  width: calc(var(--sp-8) * 2);
-  padding: var(--sp-2) var(--sp-2) var(--sp-2) 0;
-  text-align: left;
-}
-
-.linescore__team-inner {
-  display: flex;
-  gap: var(--sp-2);
-  align-items: center;
-  min-width: 0;
-}
-
-.linescore__abbr {
-  min-width: 0;
-  overflow: hidden;
-  font-size: var(--fs-label);
-  font-weight: var(--fw-semibold);
-  color: var(--c-ink);
-  letter-spacing: var(--tracking-caps);
-  white-space: nowrap;
-}
-
-.linescore__inning,
-.linescore__total {
-  padding: var(--sp-2) var(--sp-1);
-  font-family: var(--font-num);
-  font-size: var(--fs-body);
-  font-weight: var(--fw-medium);
-  line-height: var(--lh-snug);
-  color: var(--c-ink-secondary);
-  text-align: center;
-  font-variant-numeric: tabular-nums;
-}
-
-/* The R column carries the divider that turns "innings" and "totals" into two
-   readable groups instead of one ragged twelve-column run. */
-.linescore__total {
-  font-weight: var(--fw-semibold);
-  color: var(--c-ink);
-}
-
-.linescore__total--runs {
-  font-size: var(--fs-data);
-  font-weight: var(--fw-bold);
-  border-left: 1px solid var(--c-border);
-}
-
-.linescore__head {
-  font-size: var(--fs-label);
-  font-weight: var(--fw-semibold);
-  color: var(--c-ink-muted);
-  letter-spacing: var(--tracking-caps);
-  text-transform: uppercase;
-  border-bottom: 1px solid var(--c-border);
-}
-
-.linescore__row > * {
-  border-top: 1px solid var(--c-border);
-}
-
-.linescore__row--batting .linescore__abbr {
-  font-weight: var(--fw-bold);
-  color: var(--c-brand-700);
+  padding: var(--sp-2) var(--sp-4);
+  background: var(--c-bg);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius);
 }
 
 /* Count / inning pill: white on saturated brand, the one place a filled
@@ -1331,15 +1241,6 @@ button:focus-visible,
 
   .atbat__grid {
     gap: var(--sp-5);
-  }
-
-  .linescore__inning,
-  .linescore__total {
-    font-size: var(--fs-data);
-  }
-
-  .linescore__team {
-    width: calc(var(--sp-8) * 3);
   }
 }
 

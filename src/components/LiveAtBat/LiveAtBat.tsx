@@ -1,11 +1,12 @@
 import type { ReactElement } from 'react'
+import type { LiveFeed } from '../../api/types'
 import { useGameStore } from '../../store/gameStore'
-import { EmptyPanel, Skeleton } from '../ui'
+import { Badge, EmptyPanel, Skeleton } from '../ui'
+import type { BadgeTone } from '../ui'
 import { AtBatPanel } from './AtBatPanel'
 import { ContactStrip } from './ContactStrip'
 import { LastPitchStrip } from './LastPitchStrip'
 import { MatchupCard } from './MatchupCard'
-import { ScoreboardCard } from './ScoreboardCard'
 import {
   batterHasPlatoonEdge,
   deriveBases,
@@ -15,17 +16,56 @@ import {
   playIdOf,
   readOffenseExtras,
 } from './liveAtBatData'
+import type { BaseState } from './liveAtBatData'
 import { derivePitchBaselines } from './lastPitchBaseline'
 import { humanizeSplit } from './liveAtBatFormat'
+
+type GameStatus = LiveFeed['gameData']['status']['abstractGameState']
+
+const STATUS_TONE: Readonly<Record<GameStatus, BadgeTone>> = {
+  Preview: 'preview',
+  Live: 'live',
+  Final: 'final',
+}
+
+function StatusStrip({
+  feed,
+  isTopInning,
+  inningNumber,
+  bases,
+}: {
+  readonly feed: LiveFeed
+  readonly isTopInning: boolean
+  readonly inningNumber: number
+  readonly bases: readonly BaseState[]
+}): ReactElement {
+  const status = feed.gameData.status
+  const occupied = bases.filter((base) => base.runner !== null)
+  const basesLabel =
+    occupied.length === 0
+      ? 'Bases empty'
+      : `Runners on ${occupied.map((base) => base.label).join(', ')}`
+
+  return (
+    <section className="status-strip" aria-label="Game status">
+      <div className="bases" role="img" aria-label={basesLabel}>
+        {bases.map((base) => (
+          <span key={base.label} className={base.runner === null ? 'base' : 'base occupied'} />
+        ))}
+      </div>
+      <Badge tone={STATUS_TONE[status.abstractGameState]}>{status.detailedState}</Badge>
+      <span className="counter">
+        {isTopInning ? 'Top' : 'Bot'} {inningNumber}
+      </span>
+    </section>
+  )
+}
 
 /**
  * LiveAtBat — the top section of the game screen.
  *
- * Box score first, then who is facing whom, then the at-bat itself, then the
- * two live readings that change pitch to pitch. The pitcher's workload line and
- * the batter's game line used to live here; they now sit in the Game section
- * where the rest of the current-game numbers are, so this section stays short
- * enough to read without scrolling.
+ * A slim status strip, then who is facing whom, then the at-bat itself, then
+ * the two live readings that change pitch to pitch.
  */
 
 function LoadingState(): ReactElement {
@@ -109,7 +149,7 @@ export function LiveAtBat(): ReactElement {
 
   return (
     <>
-      <ScoreboardCard
+      <StatusStrip
         feed={liveFeed}
         isTopInning={isTopInning}
         inningNumber={inningNumber}
