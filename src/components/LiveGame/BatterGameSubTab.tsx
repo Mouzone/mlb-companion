@@ -46,8 +46,8 @@ const CONTACT_COLUMNS: readonly DataTableColumn[] = [
 ]
 
 /**
- * "Batter Game" sub-tab body. Renders as a fragment: LiveGameTab owns the
- * surrounding `.sub-tab-panel`, the screen's only scroll owner. Every value is
+ * "Batter Game" section body. Renders as a fragment: GameScreen owns the
+ * surrounding `.game-scroll`, the screen's only scroll owner. Every value is
  * derived from `liveFeed.liveData.plays.allPlays` plus the Savant rows already
  * in the store; this component issues no network requests.
  */

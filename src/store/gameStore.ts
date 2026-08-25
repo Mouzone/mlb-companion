@@ -1,9 +1,9 @@
 import { create } from 'zustand'
 import type { LiveFeed, ScheduledGame, CurrentPlay, SavantGamePitch } from '../api/types'
 
-type Tab = 'live' | 'pitcherVsBatter'
-type ActiveSubTab = 'matchup' | 'pitching' | 'batting'
-type LiveSubTab = 'atBat' | 'batterGame' | 'pitcherGame'
+type ScrollAnchor = 'ab' | 'matchup' | 'game' | 'pitching' | 'batting'
+type GlobalScope = 'thisGame' | 'season' | 'career'
+type ZonePerspective = 'pitcher' | 'batter'
 
 interface GameState {
   selectedGame: ScheduledGame | null
@@ -12,9 +12,9 @@ interface GameState {
   currentPlay: CurrentPlay | null
   lastTimecode: string | null
   isPolling: boolean
-  activeTab: Tab
-  activeSubTab: ActiveSubTab
-  liveSubTab: LiveSubTab
+  scrollAnchor: ScrollAnchor
+  globalScope: GlobalScope
+  zonePerspective: ZonePerspective
   recentFormGames: number
   gameFeedPitches: SavantGamePitch[]
   error: string | null
@@ -24,9 +24,9 @@ interface GameState {
   setCurrentPlay: (play: CurrentPlay | null) => void
   setTimecode: (tc: string) => void
   setPolling: (polling: boolean) => void
-  setActiveTab: (tab: Tab) => void
-  setActiveSubTab: (subTab: ActiveSubTab) => void
-  setLiveSubTab: (subTab: LiveSubTab) => void
+  setScrollAnchor: (anchor: ScrollAnchor) => void
+  setGlobalScope: (scope: GlobalScope) => void
+  setZonePerspective: (perspective: ZonePerspective) => void
   setRecentFormGames: (games: number) => void
   setGameFeedPitches: (pitches: SavantGamePitch[]) => void
   setError: (err: string | null) => void
@@ -40,9 +40,9 @@ export const useGameStore = create<GameState>((set) => ({
   currentPlay: null,
   lastTimecode: null,
   isPolling: false,
-  activeTab: 'live',
-  activeSubTab: 'pitching',
-  liveSubTab: 'atBat',
+  scrollAnchor: 'ab',
+  globalScope: 'thisGame',
+  zonePerspective: 'pitcher',
   recentFormGames: 7,
   gameFeedPitches: [],
   error: null,
@@ -54,11 +54,11 @@ export const useGameStore = create<GameState>((set) => ({
   setCurrentPlay: (play) => set({ currentPlay: play }),
   setTimecode: (tc) => set({ lastTimecode: tc }),
   setPolling: (polling) => set({ isPolling: polling }),
-  setActiveTab: (tab) => set({ activeTab: tab }),
-  setActiveSubTab: (subTab) => set({ activeSubTab: subTab }),
-  setLiveSubTab: (subTab) => set({ liveSubTab: subTab }),
+  setScrollAnchor: (anchor) => set({ scrollAnchor: anchor }),
+  setGlobalScope: (scope) => set({ globalScope: scope }),
+  setZonePerspective: (perspective) => set({ zonePerspective: perspective }),
   setRecentFormGames: (games) => set({ recentFormGames: games }),
   setGameFeedPitches: (pitches) => set({ gameFeedPitches: pitches }),
   setError: (err) => set({ error: err }),
-  reset: () => set({ selectedGame: null, gamePk: null, liveFeed: null, currentPlay: null, lastTimecode: null, isPolling: false, gameFeedPitches: [], error: null }),
+  reset: () => set({ selectedGame: null, gamePk: null, liveFeed: null, currentPlay: null, lastTimecode: null, isPolling: false, scrollAnchor: 'ab', globalScope: 'thisGame', zonePerspective: 'pitcher', gameFeedPitches: [], error: null }),
 }))

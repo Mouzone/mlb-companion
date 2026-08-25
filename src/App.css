@@ -6,20 +6,18 @@
    Every colour, size, space, radius, shadow and duration below resolves to a
    var(--token) declared in src/index.css and specified in DESIGN.md.
 
-   ── SHELL CONTRACT (DESIGN.md §6.1) ─────────────────────────────────────────
+    ── SHELL CONTRACT (DESIGN.md §6.1) ─────────────────────────────────────────
 
-     .app                 flex column; 100dvh; overflow:hidden; safe-area pad
-       .ui-tab-bar        flex:0 0 var(--tab-bar-h)          ← fixed chrome
-       .tab-content       flex:1 1 auto; min-height:0; overflow:hidden
-         .ui-sub-tab-nav  flex:0 0 var(--sub-tab-h)          ← fixed chrome
-         .sub-tab-panel   flex:1 1 auto; min-height:0; overflow-y:auto  ← SCROLL
-         (or .pvb-panel, identical contract)
+      .app                 flex column; 100dvh; overflow:hidden; safe-area pad
+        .game-screen       flex:1 1 auto; min-height:0; overflow:hidden
+          .ui-mini-nav     flex:0 0 var(--mini-nav-h)             ← fixed chrome
+          .game-scroll     flex:1 1 auto; min-height:0; overflow-y:auto  ← SCROLL
 
-   EXACTLY ONE vertical scroll owner per screen: the panel. On the GameSelect
-   screen — which has no sub-tab nav — the scroll owner is `.game-select`.
-   `min-height: 0` on every flex ancestor of a scroll owner is a hard
-   requirement; without it the box refuses to shrink and clips instead of
-   scrolls.
+    EXACTLY ONE vertical scroll owner per screen: .game-scroll. On the
+    GameSelect screen — which has no mini nav — the scroll owner is
+    `.game-select`. `min-height: 0` on every flex ancestor of a scroll owner
+    is a hard requirement; without it the box refuses to shrink and clips
+    instead of scrolls.
 
    ── THE DEAD-SPACE DOCTRINE (DESIGN.md §6.3) ────────────────────────────────
 
@@ -57,20 +55,14 @@
 }
 
 /* --- Fixed chrome ------------------------------------------------------- */
-/* The primary tab bar and the sub-tab nav are the TabBar / SubTabNav
-   primitives (ui.css, DESIGN.md §5.5-§5.6). Their chrome is NOT restated
-   here. The only addition is press feedback: ui.css defines hover, focus and
-   the active rule, but no `:active` fill, and touch needs an immediate
-   confirmation of the tap (§4.4). */
+/* The mini nav is the MiniNav primitive (ui.css). Press feedback for touch. */
 
-.ui-tab:active,
-.ui-sub-tab:active,
-.ui-tab-back:active {
+.ui-mini-nav__item:active {
   background: var(--c-surface-hover);
 }
 
-/* --- Tab content root --------------------------------------------------- */
-.tab-content {
+/* --- Game screen root --------------------------------------------------- */
+.game-screen {
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;
@@ -84,8 +76,7 @@
    introducing a second, horizontal scrollbar on the panel itself; strips that
    genuinely need to pan declare their own `overflow-x: auto`. */
 
-.sub-tab-panel,
-.pvb-panel {
+.game-scroll {
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;
@@ -98,11 +89,79 @@
   -webkit-overflow-scrolling: touch;
 }
 
-/* Panel children size to their content — nothing stretches to fill a budget
-   and nothing shrinks below its content into a clip. */
-.sub-tab-panel > *,
-.pvb-panel > * {
+.game-scroll > * {
   flex: 0 0 auto;
+}
+
+/* --- Sections ----------------------------------------------------------- */
+.game-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+
+.game-subsection {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+
+/* --- Pitching/Batting horizontal carousel -------------------------------- */
+.pb-carousel {
+  display: flex;
+  flex: 0 0 auto;
+  gap: var(--sp-3);
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.pb-carousel::-webkit-scrollbar {
+  display: none;
+}
+
+.pb-card {
+  flex: 0 0 100%;
+  min-width: 0;
+  scroll-snap-align: center;
+  scroll-snap-stop: always;
+}
+
+/* --- Floating Games button ----------------------------------------------- */
+.floating-games-btn {
+  position: fixed;
+  left: max(var(--sp-5), env(safe-area-inset-left));
+  bottom: max(var(--sp-5), env(safe-area-inset-bottom));
+  z-index: 20;
+  display: inline-flex;
+  gap: var(--sp-1);
+  align-items: center;
+  justify-content: center;
+  height: 48px;
+  padding: 0 var(--sp-4);
+  font-family: var(--font-ui);
+  font-size: var(--fs-label);
+  font-weight: var(--fw-semibold);
+  color: var(--c-bg);
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  white-space: nowrap;
+  cursor: pointer;
+  background: var(--c-brand-900);
+  border: 1px solid var(--c-brand-900);
+  border-radius: var(--radius-pill);
+  box-shadow: var(--shadow-md);
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+
+.floating-games-btn:hover {
+  background: var(--c-brand-700);
+}
+
+.floating-games-btn:active {
+  transform: scale(0.96);
 }
 
 /* Some sub-tab bodies render a bare pass-through <div> rather than a fragment;
@@ -288,15 +347,13 @@ button:focus-visible,
 }
 
 @media (min-width: 768px) {
-  .sub-tab-panel,
-  .pvb-panel {
+  .game-scroll {
     padding-inline: max(var(--sp-4), calc((100% - 720px) / 2));
   }
 }
 
 @media (min-width: 1024px) {
-  .sub-tab-panel,
-  .pvb-panel {
+  .game-scroll {
     padding-inline: max(var(--sp-4), calc((100% - 960px) / 2));
   }
 }

@@ -3,10 +3,8 @@ import type { ReactElement } from 'react'
 /**
  * SubTabNav — secondary navigation (DESIGN.md §5.6).
  *
- * Identical semantics and equal-fraction sizing to TabBar, differing only in
- * chrome: --sub-tab-h tall, --c-surface-sunken ground, --c-border bottom rule.
- * Kept as its own component rather than a TabBar variant so the two bars can
- * diverge (icons, counts) without one leaking into the other.
+ * Identical semantics and equal-fraction sizing to MiniNav, differing only in
+ * chrome: --c-surface-sunken ground, --c-border bottom rule.
  */
 
 export interface SubTabDescriptor {

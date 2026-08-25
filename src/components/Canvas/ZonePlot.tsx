@@ -14,6 +14,7 @@ interface ZonePlotProps {
   pitchType?: string
   callCode?: string
   pitches?: PlayEvent[]
+  perspective?: 'pitcher' | 'catcher'
 }
 
 /** Gameday call codes mapped onto the four semantic call slots. */
@@ -78,9 +79,12 @@ function clamp(value: number, min: number, max: number): number {
 }
 
 /** Gameday zone 1-9 is the 3x3 grid (catcher's view); 11-14 are the outer quadrants. */
-function zoneToCell(zone: number): Cell | null {
+function zoneToCell(zone: number, perspective: 'pitcher' | 'catcher' = 'catcher'): Cell | null {
   if (zone >= 1 && zone <= 9) {
-    return { col: (zone - 1) % 3, row: Math.floor((zone - 1) / 3) }
+    let col = (zone - 1) % 3
+    const row = Math.floor((zone - 1) / 3)
+    if (perspective === 'pitcher') col = 2 - col
+    return { col, row }
   }
   const outer: Record<number, Cell> = {
     10: { col: -0.5, row: -0.5 },
@@ -88,6 +92,13 @@ function zoneToCell(zone: number): Cell | null {
     12: { col: 2.5, row: -0.5 },
     13: { col: -0.5, row: 1 },
     14: { col: 2.5, row: 1 },
+  }
+  if (perspective === 'pitcher') {
+    const flipped: Record<number, Cell> = {}
+    for (const [k, v] of Object.entries(outer)) {
+      flipped[Number(k)] = { col: -v.col + 2, row: v.row }
+    }
+    return flipped[zone] ?? null
   }
   return outer[zone] ?? null
 }
@@ -103,7 +114,7 @@ function cellToPoint(cell: Cell, grid: GridBox): Point {
  * Prefers plate-crossing coordinates (pX/pZ, in feet) for precise placement and falls back to the
  * Gameday zone cell centre. pX grows to the catcher's right, matching the zone-cell column order.
  */
-function pitchToPoint(pitch: PlayEvent, grid: GridBox): Point | null {
+function pitchToPoint(pitch: PlayEvent, grid: GridBox, perspective: 'pitcher' | 'catcher' = 'catcher'): Point | null {
   const data = pitch.pitchData
   if (!data) return null
 
@@ -113,13 +124,14 @@ function pitchToPoint(pitch: PlayEvent, grid: GridBox): Point | null {
   const span = top - bottom
 
   if (coords && Number.isFinite(coords.pX) && Number.isFinite(coords.pZ) && span > 0) {
+    const pX = perspective === 'pitcher' ? -coords.pX : coords.pX
     return {
-      x: grid.left + ((coords.pX + ZONE_HALF_WIDTH_FT) / (ZONE_HALF_WIDTH_FT * 2)) * grid.width,
+      x: grid.left + ((pX + ZONE_HALF_WIDTH_FT) / (ZONE_HALF_WIDTH_FT * 2)) * grid.width,
       y: grid.top + ((top - coords.pZ) / span) * grid.height,
     }
   }
 
-  const cell = zoneToCell(data.zone)
+  const cell = zoneToCell(data.zone, perspective)
   return cell ? cellToPoint(cell, grid) : null
 }
 
@@ -226,7 +238,7 @@ function drawSinglePitch(ctx: CanvasRenderingContext2D, cell: Cell, grid: GridBo
   ctx.stroke()
 }
 
-export function ZonePlot({ zone, size = 150, pitchType, callCode, pitches }: ZonePlotProps) {
+export function ZonePlot({ zone, size = 150, pitchType, callCode, pitches, perspective = 'pitcher' }: ZonePlotProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
   useEffect(() => {
@@ -264,7 +276,7 @@ export function ZonePlot({ zone, size = 150, pitchType, callCode, pitches }: Zon
 
     if (sequence.length > 0) {
       sequence.forEach((pitch, index) => {
-        const point = pitchToPoint(pitch, grid)
+        const point = pitchToPoint(pitch, grid, perspective)
         if (!point) return
         const code = pitch.details?.type?.code
         drawNumberedDot(ctx, {
@@ -275,7 +287,7 @@ export function ZonePlot({ zone, size = 150, pitchType, callCode, pitches }: Zon
         })
       })
     } else if (zone !== null && zone !== undefined) {
-      const cell = zoneToCell(zone)
+      const cell = zoneToCell(zone, perspective)
       if (cell) {
         ctx.fillStyle = callCode ? CALL_COLORS[callCode] ?? UNKNOWN_SERIES_COLOR : UNKNOWN_SERIES_COLOR
         ctx.strokeStyle = getPitchColor(pitchType)
@@ -287,7 +299,7 @@ export function ZonePlot({ zone, size = 150, pitchType, callCode, pitches }: Zon
     if (legend.rows.length > 0) {
       drawLegend(ctx, legend, { x: PADDING, y: grid.top + grid.height })
     }
-  }, [zone, size, pitchType, callCode, pitches])
+  }, [zone, size, pitchType, callCode, pitches, perspective])
 
   return <canvas ref={canvasRef} style={{ width: size, height: size }} />
 }

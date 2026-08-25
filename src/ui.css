@@ -244,24 +244,22 @@
   }
 }
 
-/* ===== TabBar ============================================================ */
-/* DESIGN.md §5.5 — `flex: 1 1 0` (NOT `flex: 1`) is what makes every tab an
-   exact fraction of the bar; content-derived basis is the off-centre defect.
-   Deliberate deviation from §5.5: the active LABEL is --c-ink rather than
-   --c-brand-700. On a white canvas the brand rule alone already marks
-   selection, and ink-vs-muted is the stronger of the two contrast steps. */
+/* ===== MiniNav ============================================================ */
+/* Sticky section navigation — replaces the old TabBar + SubTabNav two-tier
+   chrome with a single 44px bar. Same equal-fraction rule as SubTabNav so
+   every item gets an exact slice. Active item uses ink weight + brand rule. */
 
-.ui-tab-bar {
+.ui-mini-nav {
   display: flex;
-  flex: 0 0 var(--tab-bar-h);
+  flex: 0 0 var(--mini-nav-h);
   align-items: stretch;
   width: 100%;
-  height: var(--tab-bar-h);
-  background: var(--c-bg);
+  height: var(--mini-nav-h);
+  background: var(--c-surface-sunken);
   border-bottom: 1px solid var(--c-border);
 }
 
-.ui-tab {
+.ui-mini-nav__item {
   position: relative;
   flex: 1 1 0;
   min-width: 0;
@@ -280,24 +278,24 @@
   transition: color var(--dur-fast) var(--ease-out);
 }
 
-.ui-tab:hover {
+.ui-mini-nav__item:hover {
   color: var(--c-ink-secondary);
 }
 
-.ui-tab:focus-visible {
+.ui-mini-nav__item:focus-visible {
   z-index: 1;
   border-radius: var(--radius-sm);
   outline: none;
   box-shadow: var(--shadow-focus);
 }
 
-.ui-tab--active {
+.ui-mini-nav__item--active {
   font-weight: var(--fw-semibold);
   color: var(--c-ink);
+  background: var(--c-bg);
 }
 
-/* Full-width rule — no asymmetric inset. */
-.ui-tab--active::after {
+.ui-mini-nav__item--active::after {
   position: absolute;
   right: 0;
   bottom: 0;
@@ -307,47 +305,13 @@
   background: var(--c-brand-600);
 }
 
-/* --- Leading back button in the tab bar ---------------------------------- */
-/* Fixed chrome (§6.1): always visible regardless of active tab/sub-tab, so
-   the user can return to GameSelect from any game screen. Non-growing flex
-   item so the tabs keep their equal fractions. */
-.ui-tab-back {
-  display: inline-flex;
-  flex: 0 0 auto;
-  gap: var(--sp-1);
-  align-items: center;
-  justify-content: center;
-  min-height: var(--tab-bar-h);
-  padding: 0 var(--sp-4);
-  font-family: var(--font-ui);
-  font-size: var(--fs-label);
-  font-weight: var(--fw-semibold);
-  color: var(--c-ink-secondary);
-  letter-spacing: var(--tracking-caps);
-  text-transform: uppercase;
-  white-space: nowrap;
-  cursor: pointer;
-  background: none;
-  border: 0;
-  border-right: 1px solid var(--c-border);
-  transition: color var(--dur-fast) var(--ease-out);
-}
-
-.ui-tab-back:hover {
-  color: var(--c-ink);
-}
-
-.ui-tab-back:active {
-  color: var(--c-brand-700);
-}
-
 /* ===== SubTabNav ========================================================= */
 /* DESIGN.md §5.6 — same equal-fraction rule, sunken chrome, 44px tall. */.ui-sub-tab-nav {
   display: flex;
-  flex: 0 0 var(--sub-tab-h);
+  flex: 0 0 var(--mini-nav-h);
   align-items: stretch;
   width: 100%;
-  height: var(--sub-tab-h);
+  height: var(--mini-nav-h);
   background: var(--c-surface-sunken);
   border-bottom: 1px solid var(--c-border);
 }

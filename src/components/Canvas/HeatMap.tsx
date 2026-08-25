@@ -5,11 +5,12 @@ import type { HotColdZone } from '../../api/types'
 interface HeatMapProps {
   zones: HotColdZone[]
   size?: number
+  perspective?: 'pitcher' | 'catcher'
 }
 
 const TEMP_FILLS: Readonly<Record<string, string>> = TEMP_COLORS
 
-export function HeatMap({ zones, size = 150 }: HeatMapProps) {
+export function HeatMap({ zones, size = 150, perspective = 'pitcher' }: HeatMapProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
   useEffect(() => {
@@ -39,7 +40,8 @@ export function HeatMap({ zones, size = 150 }: HeatMapProps) {
 
     for (let row = 0; row < 3; row++) {
       for (let col = 0; col < 3; col++) {
-        const zoneNum = row * 3 + col + 1
+        const displayCol = perspective === 'pitcher' ? 2 - col : col
+        const zoneNum = row * 3 + displayCol + 1
         const z = zoneMap.get(zoneNum)
         const x = padding + col * cellW
         const y = padding + row * cellH
@@ -77,7 +79,7 @@ export function HeatMap({ zones, size = 150 }: HeatMapProps) {
     ctx.font = '9px system-ui, sans-serif'
     ctx.textAlign = 'left'
     ctx.fillText('K', 2, padding - 2)
-  }, [zones, size])
+  }, [zones, size, perspective])
 
   return <canvas ref={canvasRef} style={{ width: size, height: size }} />
 }

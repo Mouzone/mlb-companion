@@ -1,8 +1,8 @@
 import { useEffect } from 'react'
 import { useGameStore } from './store/gameStore'
 import { GameSelect } from './components/GameSelect/GameSelect'
-import { LiveGameTab } from './components/LiveGame/LiveGameTab'
-import { PitcherVsBatter } from './components/PitcherVsBatter/PitcherVsBatter'
+import { GameScreen } from './components/GameScreen'
+import { FloatingGamesButton } from './components/ui'
 import { fetchLiveFeed } from './api/mlb'
 import { fetchSavantGameFeed } from './api/savant'
 import { fetchActiveBenchmarkCohorts } from './api/benchmarks'
@@ -12,24 +12,10 @@ import { preloadPlayerStats } from './hooks/usePlayerStats'
 import { preloadCareerMatchupStats } from './hooks/useCareerMatchupStats'
 import { derivePitcher } from './utils/derivePitcher'
 import type { LiveFeed, ScheduledGame } from './api/types'
-import { Icon, TabBar } from './components/ui'
 import { StatsGuide } from './components/StatsGuide/StatsGuide'
 import './App.css'
 
 const CURRENT_YEAR = new Date().getFullYear().toString()
-
-/** `as const` keeps the literal ids, so `isTabId` can narrow TabBar's `string`
- *  back to the store's Tab union without a type assertion. */
-const TABS = [
-  { id: 'live', label: 'Live Game' },
-  { id: 'pitcherVsBatter', label: 'Pitcher vs Batter' },
-] as const
-
-type TabId = (typeof TABS)[number]['id']
-
-function isTabId(value: string): value is TabId {
-  return TABS.some((tab) => tab.id === value)
-}
 
 function scheduledGameFromLiveFeed(gamePk: number, feed: LiveFeed): ScheduledGame {
   const away = feed.gameData.teams.away
@@ -52,8 +38,6 @@ function scheduledGameFromLiveFeed(gamePk: number, feed: LiveFeed): ScheduledGam
 function App() {
   const selectedGame = useGameStore((s) => s.selectedGame)
   const gamePk = useGameStore((s) => s.gamePk)
-  const activeTab = useGameStore((s) => s.activeTab)
-  const setActiveTab = useGameStore((s) => s.setActiveTab)
   const selectGame = useGameStore((s) => s.selectGame)
   const setLiveFeed = useGameStore((s) => s.setLiveFeed)
   const setGameFeedPitches = useGameStore((s) => s.setGameFeedPitches)
@@ -62,11 +46,8 @@ function App() {
   const currentPlay = useGameStore((s) => s.currentPlay)
   const liveFeed = useGameStore((s) => s.liveFeed)
 
-  // Live feed fetches here (not in LiveGameTab) so it survives tab switches
-  // and starts the moment a game is selected.
   useLiveFeed()
 
-  // Deterministic QA/deep-link entry point: ?gamePk=<id> bypasses GameSelect.
   useEffect(() => {
     const urlGamePk = new URLSearchParams(location.search).get('gamePk')
     if (!urlGamePk) return
@@ -89,9 +70,6 @@ function App() {
     }
   }, [selectGame, setLiveFeed, setError])
 
-  // Runs for both the GameSelect path and the ?gamePk= path, since both funnel
-  // through selectGame -> gamePk. The statcast_search CSV lags a day and must
-  // never feed this tab; only the same-day Savant game feed does.
   useEffect(() => {
     if (gamePk == null) return
     let cancelled = false
@@ -108,17 +86,11 @@ function App() {
     }
   }, [gamePk, setGameFeedPitches])
 
-  // Preload league-wide benchmark cohorts the moment a game is selected.
   useEffect(() => {
     if (gamePk == null) return
-    // Preload only; useStatBenchmarks reports the real failure when the tab opens.
     fetchActiveBenchmarkCohorts('season', CURRENT_YEAR).catch(() => {})
   }, [gamePk])
 
-  // Derive batter/pitcher IDs the same way PitcherVsBatter does, so we can
-  // preload all PVB data the moment the live feed populates — not when the
-  // user eventually switches to the PVB tab. Each preload fn is idempotent
-  // (module-cache guarded), so repeated calls are no-ops.
   const pvbMatchup = currentPlay?.matchup ?? null
   const pvbBatterId = pvbMatchup?.batter.id ?? null
   const pvbPitcher = derivePitcher(currentPlay, liveFeed, selectedGame)
@@ -146,20 +118,8 @@ function App() {
 
   return (
     <div className="app">
-      <TabBar
-        tabs={TABS}
-        activeId={activeTab}
-        onSelect={(id) => {
-          if (isTabId(id)) setActiveTab(id)
-        }}
-        leading={
-          <button type="button" className="ui-tab-back" onClick={reset}>
-            <Icon name="chevron-left" size={16} />
-            Games
-          </button>
-        }
-      />
-      {activeTab === 'live' ? <LiveGameTab /> : <PitcherVsBatter />}
+      <GameScreen />
+      <FloatingGamesButton onClick={reset} />
       <StatsGuide />
     </div>
   )

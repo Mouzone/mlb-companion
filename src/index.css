@@ -12,11 +12,10 @@
      index.html      <meta name="theme-color">
      vite.config.ts  PWA manifest theme_color / background_color
 
-   SHELL ARITHMETIC (DESIGN.md §6.2):
-     .app is 100dvh minus the safe-area insets, divided by flexbox:
-       var(--tab-bar-h)   48px   .tab-bar        ← fixed chrome
-       var(--sub-tab-h)   44px   .sub-tab-nav    ← fixed chrome
-       the remainder             .panel          ← THE scroll owner
+    SHELL ARITHMETIC (DESIGN.md §6.2):
+      .app is 100dvh minus the safe-area insets, divided by flexbox:
+        var(--mini-nav-h)  44px   .ui-mini-nav    ← fixed chrome
+        the remainder             .game-scroll    ← THE scroll owner
 
    The remainder is deliberately NOT a token. The panel claims it with
    `flex: 1 1 auto; min-height: 0; overflow-y: auto`, so changing either bar
@@ -195,8 +194,7 @@ table {
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
 
   /* Shell heights — fixed chrome only (§6.2) */
-  --tab-bar-h: 48px;
-  --sub-tab-h: 44px;
+  --mini-nav-h: 44px;
 
   color-scheme: light;
   font-family: var(--font-ui);

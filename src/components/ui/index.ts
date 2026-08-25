@@ -10,8 +10,10 @@ export type { CardProps, CardTone, CardElement } from './Card'
 export { Badge } from './Badge'
 export type { BadgeProps, BadgeTone } from './Badge'
 
-export { TabBar } from './TabBar'
-export type { TabBarProps, TabDescriptor } from './TabBar'
+export { MiniNav } from './MiniNav'
+export type { MiniNavProps, MiniNavItem } from './MiniNav'
+
+export { FloatingGamesButton } from './FloatingGamesButton'
 
 export { SubTabNav } from './SubTabNav'
 export type { SubTabNavProps, SubTabDescriptor } from './SubTabNav'

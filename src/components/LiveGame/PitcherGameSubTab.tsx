@@ -41,8 +41,8 @@ const INNING_COLUMNS: readonly DataTableColumn[] = [
 ]
 
 /**
- * "Pitcher Game" sub-tab body. Renders as a fragment: LiveGameTab owns the
- * surrounding `.sub-tab-panel`, which is the screen's only scroll owner. Every
+ * "Pitcher Game" section body. Renders as a fragment: GameScreen owns the
+ * surrounding `.game-scroll`, the screen's only scroll owner. Every
  * section sizes to its content — there is no vertical budget (DESIGN.md §6.3).
  */
 export function PitcherGameSubTab(): ReactElement {
