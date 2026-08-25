@@ -80,6 +80,7 @@ export interface ZonePanelProps {
   readonly zones: ReadonlyArray<HotColdZone>
   readonly loading: boolean
   readonly emptyMessage: string
+  readonly perspective?: 'pitcher' | 'catcher'
 }
 
 /**
@@ -93,6 +94,7 @@ export function ZonePanel({
   zones,
   loading,
   emptyMessage,
+  perspective = 'pitcher',
 }: ZonePanelProps): ReactElement {
   if (zones.length === 0) {
     return (
@@ -110,7 +112,7 @@ export function ZonePanel({
     <Panel title={title} meta={`${String(zones.length)} zones`}>
       <div className="panel-split">
         <div className="heatmap-canvas">
-          <HeatMap zones={[...zones]} size={150} />
+          <HeatMap zones={[...zones]} size={150} perspective={perspective} />
         </div>
         <StatGrid>
           <Stat label="Hot" value={String(hot)} />

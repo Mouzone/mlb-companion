@@ -329,12 +329,13 @@ src/
                                            §2.3 + §5). Dispatches to
                                            MatchupSubTab, PitchingSubTab, or BattingSubTab based on
                                            gameStore.activeSubTab. Imported by App.tsx.
-    PitcherVsBatter/MatchupSubTab.tsx     H2H career/series toggle (gameStore-independent local `scope` state:
-                                           'career' | 'series'). Career mode calls fetchCareerVsPlayer once per
-                                           batter/pitcher pair. Series mode calls fetchSeriesSchedule +
-                                           fetchPlayByPlayBatch to find the current consecutive-games series and
-                                            lists every shared at-bat with a joined pitch-sequence strip (no row
-                                            cap -- the panel scrolls). Imported by PitcherVsBatter.
+     PitcherVsBatter/MatchupSubTab.tsx     H2H scope toggle driven by gameStore.globalScope ('thisGame' |
+                                           'season' | 'career', default 'thisGame'). This-game H2H derived from
+                                           liveFeed allPlays via deriveThisGameH2H; season via vsPlayer from
+                                           usePlayerStats; career via fetchCachedCareerVsPlayer. Zone toggle
+                                           (gameStore.zonePerspective 'pitcher'|'batter') swaps which HotCold
+                                           array feeds ZonePanel/HeatMap (always pitcher-perspective orientation).
+                                           Platoon matchup table, arsenal faced. Imported by GameScreen.
     PitcherVsBatter/PitchingSubTab.tsx    Pitcher arsenal + hot/cold heatmap + situational splits (vs L / vs R /
                                            RISP) + recent-form aggregation (7/15/30-game spans from one cached
                                            season game log, so switching spans never refetches). Renders
@@ -584,7 +585,9 @@ main.tsx
           section#ab       -> LiveAtBat -> ScoreboardCard, MatchupCard,
                                            AtBatPanel -> ZonePlot (pitcher view),
                                            LastPitchStrip, ContactStrip
-          section#matchup  -> MatchupSubTab -> HeatMap
+          section#matchup  -> MatchupSubTab -> MatchupHeader, H2HPanel,
+                                           Segmented (scope + zone toggle),
+                                           ZonePanel -> HeatMap (pitcher view)
           section#game     -> PitcherGameSubTab -> ZonePlot
                               BatterGameSubTab  -> ZonePlot
           .pb-carousel (horizontal scroll-snap, one card per viewport)

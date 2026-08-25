@@ -5,41 +5,39 @@ import { usePlayerStats } from '../../hooks/usePlayerStats'
 import { useGameStore } from '../../store/gameStore'
 import { derivePitcher } from '../../utils/derivePitcher'
 import { parseStat } from '../../utils/sabermetrics'
-import type { DataTableRow } from '../ui'
+import type { DataTableRow, SegmentedOption } from '../ui'
 import { Segmented } from '../ui'
+import { deriveThisGameH2H } from '../LiveAtBat/liveAtBatData'
 import type { MatchupSide } from './MatchupPanels'
 import {
   ArsenalFacedPanel,
   H2HPanel,
   MatchupHeader,
   SPLIT_COLUMNS,
-  ZoneEdgePanel,
   splitRow,
 } from './MatchupPanels'
-import type { SeriesResult } from './MatchupSeries'
-import { NO_SERIES, SeriesPanels, aggregateSeries, loadSeries } from './MatchupSeries'
-import { TablePanel } from './PvbPanels'
+import { TablePanel, ZonePanel } from './PvbPanels'
 import { rateText, splitCode } from './PvbShared'
 
-type Scope = 'career' | 'series'
 type Status = 'idle' | 'loading' | 'ready' | 'error'
 
-const SCOPES = [
+const SCOPES: ReadonlyArray<SegmentedOption> = [
+  { id: 'thisGame', label: 'This Game' },
+  { id: 'season', label: 'Season' },
   { id: 'career', label: 'Career' },
-  { id: 'series', label: 'Series' },
+]
+
+const ZONE_OPTIONS: ReadonlyArray<SegmentedOption> = [
+  { id: 'pitcher', label: 'Pitcher' },
+  { id: 'batter', label: 'Batter' },
 ]
 
 const SEASON = new Date().getFullYear().toString()
-
-function isScope(value: string): value is Scope {
-  return value === 'career' || value === 'series'
-}
 
 function findSplit(splits: readonly StatSplit[], code: string): StatSplit | null {
   return splits.find((split) => splitCode(split) === code) ?? null
 }
 
-/** A switch-hitter takes the side opposite the arm he is facing. */
 function effectiveSide(batSide: 'L' | 'R' | 'S', pitchHand: 'L' | 'R'): 'L' | 'R' {
   if (batSide === 'S') return pitchHand === 'L' ? 'R' : 'L'
   return batSide
@@ -49,21 +47,19 @@ export function MatchupSubTab(): ReactElement {
   const selectedGame = useGameStore((s) => s.selectedGame)
   const currentPlay = useGameStore((s) => s.currentPlay)
   const liveFeed = useGameStore((s) => s.liveFeed)
+  const globalScope = useGameStore((s) => s.globalScope)
+  const setGlobalScope = useGameStore((s) => s.setGlobalScope)
+  const zonePerspective = useGameStore((s) => s.zonePerspective)
+  const setZonePerspective = useGameStore((s) => s.setZonePerspective)
 
-  const [scope, setScope] = useState<Scope>('career')
   const [career, setCareer] = useState<VsPlayerStat | null>(null)
   const [careerStatus, setCareerStatus] = useState<Status>('idle')
-  const [series, setSeries] = useState<SeriesResult>(NO_SERIES)
-  const [seriesStatus, setSeriesStatus] = useState<Status>('idle')
 
   const matchup = currentPlay?.matchup ?? null
   const pitcher = derivePitcher(currentPlay, liveFeed, selectedGame)
   const batter = matchup?.batter ?? null
   const batterId = batter?.id ?? null
   const pitcherId = pitcher?.id ?? null
-  const gameDate = selectedGame?.gameDate ?? null
-  const teamId = selectedGame?.teams.home.team.id ?? null
-  const opponentId = selectedGame?.teams.away.team.id ?? null
 
   const {
     batterSeason,
@@ -101,36 +97,6 @@ export function MatchupSubTab(): ReactElement {
     }
   }, [batterId, pitcherId])
 
-  useEffect(() => {
-    if (scope !== 'series') return
-    if (
-      batterId === null ||
-      pitcherId === null ||
-      gameDate === null ||
-      teamId === null ||
-      opponentId === null
-    ) {
-      setSeriesStatus('idle')
-      return
-    }
-    let cancelled = false
-    setSeriesStatus('loading')
-    loadSeries({ gameDate, teamId, opponentId, batterId, pitcherId })
-      .then((result) => {
-        if (cancelled) return
-        setSeries(result)
-        setSeriesStatus('ready')
-      })
-      .catch(() => {
-        if (cancelled) return
-        setSeries(NO_SERIES)
-        setSeriesStatus('error')
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [scope, batterId, pitcherId, gameDate, teamId, opponentId])
-
   const hand = matchup?.pitchHand.code ?? 'R'
   const side = effectiveSide(matchup?.batSide.code ?? 'R', hand)
 
@@ -149,11 +115,6 @@ export function MatchupSubTab(): ReactElement {
     if (batterRisp) rows.push(splitRow('Batter RISP', batterRisp.stat))
     return rows
   }, [batterSplits, pitcherSplits, batterSeason, pitcherSeason, hand, side])
-
-  const seriesLine = useMemo(
-    () => aggregateSeries(series.games, series.atBats),
-    [series.games, series.atBats],
-  )
 
   const pitcherSide: MatchupSide = {
     personId: pitcherId ?? 0,
@@ -177,50 +138,60 @@ export function MatchupSubTab(): ReactElement {
 
   const benchmarkAvg = parseStat(batterSeason?.avg ?? '')
 
+  const thisGameH2H = useMemo<VsPlayerStat | null>(() => {
+    if (liveFeed === null || batterId === null || pitcherId === null) return null
+    return deriveThisGameH2H(liveFeed.liveData.plays.allPlays, batterId, pitcherId)
+  }, [liveFeed, batterId, pitcherId])
+
+  const h2hStat =
+    globalScope === 'thisGame' ? thisGameH2H : globalScope === 'season' ? vsPlayer : career
+  const h2hLoading = globalScope === 'career' ? careerStatus === 'loading' : loading
+  const h2hTitle =
+    globalScope === 'thisGame'
+      ? 'This Game H2H'
+      : globalScope === 'season'
+        ? 'Season H2H'
+        : 'Career H2H'
+  const h2hEmpty =
+    globalScope === 'thisGame'
+      ? 'No meetings in this game yet'
+      : globalScope === 'season'
+        ? 'No meetings this season'
+        : careerStatus === 'error'
+          ? 'Head-to-head data unavailable'
+          : 'No matchup history'
+  const h2hHint =
+    globalScope === 'thisGame'
+      ? 'H2H updates as the batter faces this pitcher.'
+      : globalScope === 'season'
+        ? 'Career totals still cover every prior meeting.'
+        : 'These two have not shared a completed plate appearance.'
+
+  const activeZones = zonePerspective === 'pitcher' ? pitcherHotCold : batterHotCold
+  const zoneTitle = zonePerspective === 'pitcher' ? 'Pitcher Zones' : 'Batter Zones'
+  const zoneCaption =
+    zonePerspective === 'pitcher'
+      ? 'Average allowed by zone \u00b7 pitcher perspective'
+      : 'Batting average by zone \u00b7 pitcher perspective'
+
   return (
     <div>
       <MatchupHeader pitcher={pitcherSide} batter={batterSide} />
 
       <Segmented
         options={SCOPES}
-        activeId={scope}
-        onSelect={(id) => {
-          if (isScope(id)) setScope(id)
-        }}
+        activeId={globalScope}
+        onSelect={(id) => setGlobalScope(id as typeof globalScope)}
       />
 
-      {scope === 'career' ? (
-        <>
-          <H2HPanel
-            title="Career Head-to-Head"
-            stat={career}
-            benchmarkAvg={benchmarkAvg}
-            loading={careerStatus === 'loading'}
-            emptyMessage={
-              careerStatus === 'error' ? 'Head-to-head data unavailable' : 'No matchup history'
-            }
-            emptyHint="These two have not shared a completed plate appearance."
-          />
-          <H2HPanel
-            title="Season Head-to-Head"
-            meta={SEASON}
-            stat={vsPlayer}
-            benchmarkAvg={benchmarkAvg}
-            loading={loading}
-            emptyMessage="No meetings this season"
-            emptyHint="Career totals above still cover every prior meeting."
-          />
-        </>
-      ) : (
-        <SeriesPanels
-          line={seriesLine}
-          atBats={series.atBats}
-          loading={seriesStatus === 'loading'}
-          emptyMessage={
-            seriesStatus === 'error' ? 'Series data unavailable' : 'No meetings in this series'
-          }
-        />
-      )}
+      <H2HPanel
+        title={h2hTitle}
+        stat={h2hStat}
+        benchmarkAvg={benchmarkAvg}
+        loading={h2hLoading}
+        emptyMessage={h2hEmpty}
+        emptyHint={h2hHint}
+      />
 
       <TablePanel
         title="Platoon Matchup"
@@ -235,7 +206,19 @@ export function MatchupSubTab(): ReactElement {
 
       <ArsenalFacedPanel arsenal={pitchArsenal} loading={loading} />
 
-      <ZoneEdgePanel batterZones={batterHotCold} pitcherZones={pitcherHotCold} loading={loading} />
+      <Segmented
+        options={ZONE_OPTIONS}
+        activeId={zonePerspective}
+        onSelect={(id) => setZonePerspective(id as typeof zonePerspective)}
+      />
+      <ZonePanel
+        title={zoneTitle}
+        caption={zoneCaption}
+        zones={activeZones}
+        loading={loading}
+        emptyMessage="No zone data for this season"
+        perspective="pitcher"
+      />
     </div>
   )
 }

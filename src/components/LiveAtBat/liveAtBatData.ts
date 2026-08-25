@@ -1,4 +1,4 @@
-import type { CurrentPlay, LiveFeed, PlayEvent, SavantGamePitch } from '../../api/types'
+import type { CurrentPlay, LiveFeed, PlayEvent, SavantGamePitch, VsPlayerStat } from '../../api/types'
 import { NO_VALUE, callName, callTone } from './liveAtBatFormat'
 import type { CallTone } from './liveAtBatFormat'
 
@@ -179,6 +179,61 @@ export function deriveBatterLine(
     walks,
     strikeouts,
     summary: atBats + walks + strikeouts === 0 ? '' : parts.join(', '),
+  }
+}
+
+const TOTAL_BASES: ReadonlyMap<string, number> = new Map([
+  ['single', 1],
+  ['double', 2],
+  ['triple', 3],
+  ['home_run', 4],
+])
+
+export function deriveThisGameH2H(
+  allPlays: readonly CurrentPlay[],
+  batterId: number,
+  pitcherId: number,
+): VsPlayerStat {
+  let plateAppearances = 0
+  let hits = 0
+  let homeRuns = 0
+  let strikeOuts = 0
+  let baseOnBalls = 0
+  let atBats = 0
+  let totalBases = 0
+
+  for (const play of allPlays) {
+    if (play.matchup.batter.id !== batterId) continue
+    if (play.matchup.pitcher.id !== pitcherId) continue
+    if (!isPlateAppearance(play)) continue
+
+    plateAppearances += 1
+    const event = play.result.eventType
+    if (!NON_AT_BAT_EVENTS.has(event)) atBats += 1
+    if (HIT_EVENTS.has(event)) hits += 1
+    if (event === 'home_run') homeRuns += 1
+    if (STRIKEOUT_EVENTS.has(event)) strikeOuts += 1
+    if (WALK_EVENTS.has(event)) baseOnBalls += 1
+    const tb = TOTAL_BASES.get(event)
+    if (tb !== undefined) totalBases += tb
+  }
+
+  const avg = atBats > 0 ? (hits / atBats).toFixed(3) : '.000'
+  const obp = plateAppearances > 0 ? ((hits + baseOnBalls) / plateAppearances).toFixed(3) : '.000'
+  const slg = atBats > 0 ? (totalBases / atBats).toFixed(3) : '.000'
+  const ops = (Number(obp) + Number(slg)).toFixed(3)
+
+  return {
+    gamesPlayed: plateAppearances > 0 ? 1 : 0,
+    plateAppearances,
+    hits,
+    homeRuns,
+    avg,
+    obp,
+    slg,
+    ops,
+    strikeOuts,
+    baseOnBalls,
   }
 }
 
