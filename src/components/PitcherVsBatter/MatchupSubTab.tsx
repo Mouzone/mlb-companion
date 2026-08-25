@@ -36,6 +36,7 @@ import {
   H2HPanel,
   MatchupHeader,
   SPLIT_COLUMNS,
+  emptySplitRow,
   splitRow,
 } from './MatchupPanels'
 import { TablePanel, ZonePanel } from './PvbPanels'
@@ -255,22 +256,23 @@ export function MatchupSubTab(): ReactElement {
     const log = isPitcherView ? pitcherLog : batterLog
     const vsLabel = isPitcherView ? 'HB' : 'HP'
 
-    const rows: DataTableRow[] = []
-    if (season !== null) rows.push(splitRow('Season', season))
-
     const vsLeft = findSplit(splits, 'vl')
     const vsRight = findSplit(splits, 'vr')
-    if (vsLeft) rows.push(splitRow(`vs L${vsLabel}`, vsLeft.stat))
-    if (vsRight) rows.push(splitRow(`vs R${vsLabel}`, vsRight.stat))
-
     const risp = findSplit(splits, 'risp')
-    if (risp) rows.push(splitRow('RISP', risp.stat))
-
     const home = log.filter((entry) => entry.isHome)
     const away = log.filter((entry) => !entry.isHome)
-    if (home.length > 0) rows.push(splitRow('Home', aggregateLog(home)))
-    if (away.length > 0) rows.push(splitRow('Away', aggregateLog(away)))
-    return rows
+
+    // Fixed six rows in a fixed order. A split the side does not publish still
+    // occupies its row as em dashes, so flipping perspective never changes the
+    // table's height.
+    return [
+      season === null ? emptySplitRow('Season') : splitRow('Season', season),
+      vsLeft ? splitRow(`vs L${vsLabel}`, vsLeft.stat) : emptySplitRow(`vs L${vsLabel}`),
+      vsRight ? splitRow(`vs R${vsLabel}`, vsRight.stat) : emptySplitRow(`vs R${vsLabel}`),
+      risp ? splitRow('RISP', risp.stat) : emptySplitRow('RISP'),
+      home.length > 0 ? splitRow('Home', aggregateLog(home)) : emptySplitRow('Home'),
+      away.length > 0 ? splitRow('Away', aggregateLog(away)) : emptySplitRow('Away'),
+    ]
   }, [
     matchupPerspective,
     pitcherSeason,

@@ -54,6 +54,22 @@ export function splitRow(label: string, stat: SplitLike): DataTableRow {
   }
 }
 
+/**
+ * A split the active side does not publish. Emitted rather than skipped so the
+ * table keeps the same six rows in both perspectives and toggling the side
+ * never resizes the card.
+ */
+export function emptySplitRow(label: string): DataTableRow {
+  return {
+    split: label,
+    faced: whole(null),
+    avg: rateText(undefined),
+    ops: rateText(undefined),
+    hr: whole(null),
+    k: whole(null),
+  }
+}
+
 export interface MatchupSide {
   readonly personId: number
   readonly name: string
