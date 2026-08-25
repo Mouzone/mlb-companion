@@ -325,8 +325,16 @@ The atom of the entire app.
   beneath it; a detached control would read as page-level chrome.
 
 ### 5.8c `.arsenal-cc` — arsenal table
-- Six-column CSS grid, `1fr auto auto auto auto auto`: Pitch · Use · Velo · Spin · V-Brk · H-Brk.
-  The name column takes the remaining width so every numeric column stays flush right.
+- Six-column CSS grid, `minmax(0, 1.4fr) repeat(5, minmax(52px, 0.8fr))`: Pitch · Use · Velo ·
+  Spin · V-Brk · H-Brk, with a `--sp-3` column gap. Each numeric column claims a real 52px
+  minimum and the five share the slack equally; the earlier `auto` tracks collapsed to content
+  width, piled up against the right edge and pushed H-Brk off screen while the name column took
+  every spare pixel.
+- `.arsenal-cc__name` wraps (`overflow-wrap: anywhere`, `--lh-snug`) instead of being clipped to
+  one ellipsised line, so a long pitch name yields height rather than horizontal space.
+- The table is wrapped in `.arsenal-cc-scroll` (`overflow-x: auto`, `overscroll-behavior-x:
+  contain`) and holds `min-width: 380px`. Six columns of numbers do not fit a phone, so a narrow
+  viewport swipes the table sideways rather than clipping the trailing break columns.
 - Head row is `--fs-micro` 500 uppercase `--c-muted` over `1px solid var(--c-rule)`; body rows
   are separated by `--c-rule-soft` with the last row's border removed.
 - Values are `--fs-data` 600 with `font-variant-numeric: tabular-nums` so digits never reflow

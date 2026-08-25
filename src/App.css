@@ -1249,18 +1249,37 @@ button:focus-visible,
 }
 
 /* --- Color-coded arsenal table --- */
+
+/*
+ * Six columns of numbers do not fit a phone. The table keeps its full width and
+ * the wrapper scrolls, so a narrow viewport swipes sideways instead of clipping
+ * the trailing break columns off the edge.
+ */
+.arsenal-cc-scroll {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+}
+
 .arsenal-cc {
   display: flex;
   flex-direction: column;
   gap: 0;
   width: 100%;
+  min-width: 380px;
 }
 
+/*
+ * The numeric columns each claim a real minimum and share the slack equally;
+ * `auto` let them collapse to content width and pile up against the right edge
+ * while the name column took every spare pixel.
+ */
 .arsenal-cc__head,
 .arsenal-cc__row {
   display: grid;
-  grid-template-columns: 1fr auto auto auto auto auto;
-  gap: var(--sp-2);
+  grid-template-columns: minmax(0, 1.4fr) repeat(5, minmax(52px, 0.8fr));
+  gap: var(--sp-3);
   align-items: center;
   padding: var(--sp-2) 0;
 }
@@ -1293,9 +1312,8 @@ button:focus-visible,
 .arsenal-cc__name {
   font-weight: var(--fw-medium);
   font-size: var(--fs-data);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: var(--lh-snug);
+  overflow-wrap: anywhere;
 }
 
 .arsenal-cc__usage {

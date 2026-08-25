@@ -257,49 +257,51 @@ export function ArsenalFacedPanel({
         />
       ) : null}
       {rows.length > 0 ? (
-        <div className="arsenal-cc" role="table" aria-label="Arsenal">
-          <div className="arsenal-cc__head" role="row">
-            <span role="columnheader">Pitch</span>
-            <span role="columnheader">Use</span>
-            <span role="columnheader">Velo</span>
-            <span role="columnheader">Spin</span>
-            <span role="columnheader">V-Brk</span>
-            <span role="columnheader">H-Brk</span>
-          </div>
-          {rows.map((row) => (
-            <div key={row.pitchType} className="arsenal-cc__row" role="row">
-              <span className="arsenal-cc__name" role="rowheader">
-                {row.pitchDescription}
-              </span>
-              <span className="arsenal-cc__usage" role="cell">
-                {percent(row.usage, 0)}
-              </span>
-              <div className={`arsenal-cc__metric ${metricToneClass(row.velo.tone)}`} role="cell">
-                <span className="arsenal-cc__value">{fixed(row.velo.value, 1)}</span>
-                {row.velo.delta === null ? null : (
-                  <span className="arsenal-cc__delta">{row.velo.delta}</span>
-                )}
-              </div>
-              <div className={`arsenal-cc__metric ${metricToneClass(row.spin.tone)}`} role="cell">
-                <span className="arsenal-cc__value">{fixed(row.spin.value, 0)}</span>
-                {row.spin.delta === null ? null : (
-                  <span className="arsenal-cc__delta">{row.spin.delta}</span>
-                )}
-              </div>
-              <div className={`arsenal-cc__metric ${metricToneClass(row.breakVertical.tone)}`} role="cell">
-                <span className="arsenal-cc__value">{fixed(row.breakVertical.value, 1)}</span>
-                {row.breakVertical.delta === null ? null : (
-                  <span className="arsenal-cc__delta">{row.breakVertical.delta}</span>
-                )}
-              </div>
-              <div className={`arsenal-cc__metric ${metricToneClass(row.breakHorizontal.tone)}`} role="cell">
-                <span className="arsenal-cc__value">{fixed(row.breakHorizontal.value, 1)}</span>
-                {row.breakHorizontal.delta === null ? null : (
-                  <span className="arsenal-cc__delta">{row.breakHorizontal.delta}</span>
-                )}
-              </div>
+        <div className="arsenal-cc-scroll">
+          <div className="arsenal-cc" role="table" aria-label="Arsenal">
+            <div className="arsenal-cc__head" role="row">
+              <span role="columnheader">Pitch</span>
+              <span role="columnheader">Use</span>
+              <span role="columnheader">Velo</span>
+              <span role="columnheader">Spin</span>
+              <span role="columnheader">V-Brk</span>
+              <span role="columnheader">H-Brk</span>
             </div>
-          ))}
+            {rows.map((row) => (
+              <div key={row.pitchType} className="arsenal-cc__row" role="row">
+                <span className="arsenal-cc__name" role="rowheader">
+                  {row.pitchDescription}
+                </span>
+                <span className="arsenal-cc__usage" role="cell">
+                  {percent(row.usage, 0)}
+                </span>
+                <div className={`arsenal-cc__metric ${metricToneClass(row.velo.tone)}`} role="cell">
+                  <span className="arsenal-cc__value">{fixed(row.velo.value, 1)}</span>
+                  {row.velo.delta === null ? null : (
+                    <span className="arsenal-cc__delta">{row.velo.delta}</span>
+                  )}
+                </div>
+                <div className={`arsenal-cc__metric ${metricToneClass(row.spin.tone)}`} role="cell">
+                  <span className="arsenal-cc__value">{fixed(row.spin.value, 0)}</span>
+                  {row.spin.delta === null ? null : (
+                    <span className="arsenal-cc__delta">{row.spin.delta}</span>
+                  )}
+                </div>
+                <div className={`arsenal-cc__metric ${metricToneClass(row.breakVertical.tone)}`} role="cell">
+                  <span className="arsenal-cc__value">{fixed(row.breakVertical.value, 1)}</span>
+                  {row.breakVertical.delta === null ? null : (
+                    <span className="arsenal-cc__delta">{row.breakVertical.delta}</span>
+                  )}
+                </div>
+                <div className={`arsenal-cc__metric ${metricToneClass(row.breakHorizontal.tone)}`} role="cell">
+                  <span className="arsenal-cc__value">{fixed(row.breakHorizontal.value, 1)}</span>
+                  {row.breakHorizontal.delta === null ? null : (
+                    <span className="arsenal-cc__delta">{row.breakHorizontal.delta}</span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       ) : loading ? (
         <SkeletonRows rows={4} />
