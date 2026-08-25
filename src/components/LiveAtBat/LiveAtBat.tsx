@@ -1,8 +1,11 @@
 import type { ReactElement } from 'react'
-import type { LiveFeed } from '../../api/types'
+import type { CurrentPlay, LiveFeed } from '../../api/types'
 import { useGameStore } from '../../store/gameStore'
-import { Badge, EmptyPanel, Skeleton } from '../ui'
-import type { BadgeTone } from '../ui'
+import { Badge, EmptyPanel, Segmented, Skeleton, Stat, StatGrid } from '../ui'
+import type { BadgeTone, DataTableColumn, DataTableRow, SegmentedOption } from '../ui'
+import { ordinal, percent, pitchesOf, rateOf, splitPitches } from '../LiveGame/GameSubTabShared'
+import { GamePanel, GameTablePanel } from '../LiveGame/GameSubTabPanels'
+import { buildGameLine } from '../LiveGame/BatterGameModel'
 import { AtBatPanel } from './AtBatPanel'
 import { ContactStrip } from './ContactStrip'
 import { LastPitchStrip } from './LastPitchStrip'
@@ -22,6 +25,79 @@ import { derivePitchBaselines } from './lastPitchBaseline'
 import { humanizeSplit } from './liveAtBatFormat'
 
 type GameStatus = LiveFeed['gameData']['status']['abstractGameState']
+
+const PERSPECTIVE_OPTIONS: ReadonlyArray<SegmentedOption> = [
+  { id: 'pitcher', label: 'Pitcher' },
+  { id: 'batter', label: 'Batter' },
+]
+
+const AT_BAT_COLUMNS: readonly DataTableColumn[] = [
+  { key: 'inning', label: 'Inn' },
+  { key: 'result', label: 'Result' },
+  { key: 'pitches', label: 'P', align: 'right' },
+  { key: 'count', label: 'Count', align: 'right' },
+]
+
+/**
+ * Batter-side detail that used to live in the Game tab: plate discipline over
+ * every pitch this batter has seen today, plus his completed at-bats.
+ */
+function BatterDetail({
+  allPlays,
+  batterId,
+}: {
+  readonly allPlays: readonly CurrentPlay[]
+  readonly batterId: number
+}): ReactElement {
+  const batterPlays = allPlays.filter((play) => play.matchup.batter.id === batterId)
+  const split = splitPitches(pitchesOf(batterPlays))
+  const completedPlays = batterPlays.filter((play) => play.result.event !== '')
+  const line = buildGameLine(completedPlays)
+
+  const rows: ReadonlyArray<DataTableRow> = completedPlays.map((play) => ({
+    inning: ordinal(play.about.inning),
+    result: play.result.event,
+    pitches: String(play.playEvents.filter((event) => event.isPitch).length),
+    count: `${String(play.count.balls)}-${String(play.count.strikes)}`,
+  }))
+
+  return (
+    <>
+      <GamePanel
+        title="Plate Discipline"
+        meta={split.total === 0 ? undefined : `${String(split.swings)} swings`}
+      >
+        {split.total === 0 ? (
+          <EmptyPanel
+            message="No pitches seen yet"
+            hint="Discipline rates appear from the first pitch of the at-bat."
+          />
+        ) : (
+          <StatGrid minColumnWidth={64}>
+            <Stat label="Swing %" value={percent(rateOf(split.swings, split.total))} />
+            <Stat label="Whiff %" value={percent(rateOf(split.whiffs, split.swings))} />
+            <Stat label="Chase %" value={percent(rateOf(split.chases, split.outOfZone))} />
+            <Stat label="Zone %" value={percent(rateOf(split.inZone, split.zoned))} />
+            <Stat label="Taken %" value={percent(rateOf(split.called, split.total - split.swings))} />
+            <Stat label="Called" value={String(split.called)} />
+            <Stat label="SwStr" value={String(split.whiffs)} />
+            <Stat label="Foul" value={String(split.fouls)} />
+            <Stat label="In Play" value={String(split.inPlay)} />
+          </StatGrid>
+        )}
+      </GamePanel>
+
+      <GameTablePanel
+        title="At Bats"
+        meta={`${String(line.hits)}-${String(line.atBats)}`}
+        columns={AT_BAT_COLUMNS}
+        rows={rows}
+        emptyMessage="First plate appearance in progress"
+        emptyHint="Completed at-bats are listed here as the game unfolds."
+      />
+    </>
+  )
+}
 
 const STATUS_TONE: Readonly<Record<GameStatus, BadgeTone>> = {
   Preview: 'preview',
@@ -102,6 +178,8 @@ export function LiveAtBat(): ReactElement {
   const currentPlay = useGameStore((s) => s.currentPlay)
   const liveFeed = useGameStore((s) => s.liveFeed)
   const gameFeedPitches = useGameStore((s) => s.gameFeedPitches)
+  const matchupPerspective = useGameStore((s) => s.matchupPerspective)
+  const setMatchupPerspective = useGameStore((s) => s.setMatchupPerspective)
   const error = useGameStore((s) => s.error)
 
   // Without this the skeleton renders forever on a failed feed, which is
@@ -179,6 +257,12 @@ export function LiveAtBat(): ReactElement {
         }}
       />
 
+      <Segmented
+        options={PERSPECTIVE_OPTIONS}
+        activeId={matchupPerspective}
+        onSelect={(id) => { setMatchupPerspective(id as 'pitcher' | 'batter') }}
+      />
+
       <AtBatPanel
         pitches={pitches}
         sequence={sequence}
@@ -195,6 +279,10 @@ export function LiveAtBat(): ReactElement {
       <LastPitchStrip lastPitch={lastPitch} baselines={baselines} />
 
       <ContactStrip hitData={hitData} />
+
+      {matchupPerspective === 'batter' ? (
+        <BatterDetail allPlays={plays.allPlays} batterId={matchup.batter.id} />
+      ) : null}
 
       <div className="play-result">
         <strong className="play-result__event">{eventLabel}</strong>

@@ -437,7 +437,6 @@ cards free of repeated help icons while making every displayed abbreviation disc
     .ui-mini-nav  flex:0 0 var(--mini-nav-h)                    ← fixed chrome (sticky nav)
     .game-page    flex:1 1 auto; min-height:0; overflow-y:auto  ← THE scroll owner
       .game-section    flex:0 0 auto; scroll-margin-top: var(--mini-nav-h)
-        .game-subsection flex:0 0 auto
 ```
 
 **Exactly one scroll owner per screen: `.game-page`.** `min-height: 0` on every flex ancestor of a

@@ -4,14 +4,11 @@ import { useGameStore } from '../store/gameStore'
 import { MiniNav, type MiniNavItem } from './ui'
 import { LiveAtBat } from './LiveAtBat/LiveAtBat'
 import { MatchupSubTab } from './PitcherVsBatter/MatchupSubTab'
-import { PitcherGameSubTab } from './LiveGame/PitcherGameSubTab'
-import { BatterGameSubTab } from './LiveGame/BatterGameSubTab'
 import { LogsSubTab } from './PitcherVsBatter/LogsSubTab'
 
 const NAV_ITEMS: ReadonlyArray<MiniNavItem> = [
   { id: 'ab', label: 'AB' },
   { id: 'matchup', label: 'Matchup' },
-  { id: 'game', label: 'Game' },
   { id: 'logs', label: 'Logs' },
 ]
 
@@ -35,16 +32,6 @@ export function GameScreen(): ReactElement {
         {activeTab === 'matchup' ? (
           <section id="matchup" className="game-section">
             <MatchupSubTab />
-          </section>
-        ) : null}
-        {activeTab === 'game' ? (
-          <section id="game" className="game-section">
-            <div className="game-subsection">
-              <PitcherGameSubTab />
-            </div>
-            <div className="game-subsection">
-              <BatterGameSubTab />
-            </div>
           </section>
         ) : null}
         {activeTab === 'logs' ? (

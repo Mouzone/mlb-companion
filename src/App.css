@@ -100,12 +100,6 @@
   gap: var(--sp-4);
 }
 
-.game-subsection {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-4);
-}
-
 /* --- Floating Games button ----------------------------------------------- */
 .floating-games-btn {
   position: fixed;
@@ -1235,7 +1229,7 @@ button:focus-visible,
 }
 
 /* ===== §GameSubTabs ===== */
-/* Owner: todo 10 — rules shared by BatterGameSubTab + PitcherGameSubTab:
+/* Owner: todo 10 — rules shared by LiveAtBat + MatchupSubTab:
    canvas-slot, canvas-caption, heatmap-canvas, spray-canvas,
    gamelog-*, game-identity-*, mix-*. The PvB chart sub-tabs consume the same
    slots, which is why they live here rather than under §PvB.

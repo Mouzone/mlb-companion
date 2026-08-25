@@ -151,7 +151,7 @@ src/
   utils/
     pitchConstants.ts                     Exports PITCH_COLORS (Record<string,string>, keys FF SI FC SL ST CU KC
                                            CH FS KN FO SC EP) and getPitchColor(code): falls back to '#888888' for
-                                           unknown codes. Imported by ZonePlot, BatterGameSubTab,
+                                           unknown codes. Imported by ZonePlot, LiveAtBat,
                                            MatchupSubTab.
     leagueConstants.ts                    Thin re-export layer for constants in shared/scoring.mjs. Exports
                                            LEAGUE_ERA (4.20), LEAGUE_WOBA (0.310), WOBA_SCALE (1.24),
@@ -211,12 +211,11 @@ src/
   components/
     GameScreen.tsx                       Page-based game screen container. Renders MiniNav (sticky top) and
                                            .game-page (the scroll owner) which conditionally mounts exactly
-                                           one <section> at a time for ab, matchup, game, or logs. Nav buttons
+                                           one <section> at a time for ab, matchup, or logs. Nav buttons
                                            call gameStore.setActiveTab; there is no scrolling between sections.
-                                           Imports gameStore, MiniNav, LiveAtBat, MatchupSubTab,
-                                           PitcherGameSubTab, BatterGameSubTab, LogsSubTab.
+                                           Imports gameStore, MiniNav, LiveAtBat, MatchupSubTab, LogsSubTab.
                                            Imported by App.tsx.
-    ui/MiniNav.tsx                       Sticky 44px nav bar with [AB|Matchup|Game|Logs] buttons (role=tablist,
+    ui/MiniNav.tsx                       Sticky 44px nav bar with [AB|Matchup|Logs] buttons (role=tablist,
                                            equal-flex). Active state from gameStore.activeTab. Imported by
                                            GameScreen.
     ui/FloatingGamesButton.tsx           Fixed bottom-left pill button (chevron-left + "Games"), calls
@@ -266,14 +265,6 @@ src/
     StatsGuide/statGlossary.ts            Typed, alphabetically sorted glossary data for standard, advanced,
                                            live, pitch-tracking, batted-ball, linescore, and Watchability metrics.
                                            Includes formulas where a displayed statistic is calculated.
-     LiveGame/BatterGameSubTab.tsx         "Batter" subsection of the `game` section in GameScreen.
-                                           Derives a plate-discipline summary and per-PA at-bat log purely
-                                           from liveFeed.liveData.plays.allPlays; issues no network requests.
-                                           Renders GameIdentity (PA/AB/H/HR/RBI/BB/K/Pitches), a Plate
-                                           Discipline StatGrid (Swing%/Whiff%/Chase%/Zone%/Taken%/Called/
-                                           SwStr/Foul/In Play), and an At Bats DataTable. Declares no
-                                           heights. Imported by GameScreen.
-     LiveGame/PitcherGameSubTab.tsx        "Pitcher" subsection of the `game` section in GameScreen.
                                            Derives an in-game PitcherGame summary (pitches, strikes/balls,
                                            battersFaced, outs, first-pitch-strike rate) purely from
                                            allPlays, bounded to plays at or before the current at-bat
@@ -281,13 +272,16 @@ src/
                                            Command StatGrid (Strike%/CSW%/Whiff%/1st-P Str/Zone%/Chase%/
                                            Called/SwStr/In Play). Declares no heights. Imported by
                                            GameScreen.
-    LiveAtBat/LiveAtBat.tsx               The `ab` section of GameScreen (the top of the single-scroll game
-                                           screen). Renders score + baserunner diamond + inning indicator,
-                                           per-team linescore rows, batter-vs-pitcher matchup header, the
-                                           three-column AtBatPanel, LastPitchStrip, ContactStrip, and the play
-                                           result banner. The pitcher workload and batter game-line grids that
-                                           used to sit here now live in the `game` section. Imported by
-                                           GameScreen.
+    LiveAtBat/LiveAtBat.tsx               The `ab` section of GameScreen. Renders StatusStrip (bases + status
+                                           badge + inning counter), MatchupCard, a Pitcher|Batter Segmented
+                                           bound to gameStore.matchupPerspective, the three-column AtBatPanel,
+                                           LastPitchStrip, ContactStrip, and the play result banner. In batter
+                                           perspective it additionally renders the local BatterDetail block —
+                                           a Plate Discipline StatGrid (Swing%/Whiff%/Chase%/Zone%/Taken%/
+                                           Called/SwStr/Foul/In Play) plus an At Bats DataTable — derived
+                                           purely from liveFeed.liveData.plays.allPlays via splitPitches and
+                                           buildGameLine; it issues no network requests. This absorbed the
+                                           former `game` section. Imported by GameScreen.
     LiveAtBat/LastPitchStrip.tsx          Four readings (Velo, Spin, Brk Vert, Extension) toned against the
                                            pitcher's baseline for that pitch type, with a signed `+1.4 vs szn`
                                            delta under each value. Replaces the old ten-cell telemetry dump.
@@ -511,8 +505,7 @@ Baseball Savant (baseballsavant   ──┘                            │
                                                                   │              (fires 10 parallel fetches per
                                                                   │               batter/pitcher pair)
                                                                   │
-                                                                    └─► components (LiveAtBat, BatterGameSubTab,
-                                                                         PitcherGameSubTab, MatchupSubTab,
+                                                                    └─► components (LiveAtBat, MatchupSubTab,
                                                                          LogsSubTab, GameSelect)
                                                                              │
                                                                              └─► Canvas renderers (HeatMap,
@@ -594,11 +587,15 @@ main.tsx
     (no selectedGame) GameSelect (useLiveSlate → useLiveScores) -> GameCard (currentPitcher, currentBatter) -> ScoreRing
     (selectedGame set)
       GameScreen
-        MiniNav (AB | Matchup | Game | Logs -- real tabs, one section mounted at a time)
+        MiniNav (AB | Matchup | Logs -- real tabs, one section mounted at a time)
         .game-page  <- THE scroll owner
           section#ab       -> LiveAtBat -> StatusStrip, MatchupCard,
+                                           Segmented (Pitcher|Batter),
                                            AtBatPanel -> ZonePlot (pitcher view),
-                                           LastPitchStrip, ContactStrip
+                                           LastPitchStrip, ContactStrip,
+                                           BatterDetail (batter view only) ->
+                                             Plate Discipline StatGrid,
+                                             At Bats DataTable
            section#matchup  -> MatchupSubTab -> MatchupHeader (scope arrows;
                                              each Side renders a StatGrid of
                                              8/9/8 cells per scope),
@@ -609,9 +606,6 @@ main.tsx
                                              RISP/Home/Away for one side),
                                            ArsenalFacedPanel (Segmented All/RHB/LHB
                                              in game scope)
-          section#game     -> PitcherGameSubTab -> GameIdentity, Command panel
-                              BatterGameSubTab  -> GameIdentity, Plate Discipline,
-                                                  At Bats DataTable
           section#logs     -> LogsSubTab -> Segmented (Pitcher|Batter),
                                             TablePanel (game log, 7 rows by default),
                                             .log-more toggle (Show all N / Show less)
@@ -624,7 +618,7 @@ main.tsx
 `src/store/gameStore.ts` exports a single zustand store, `useGameStore`, typed as `GameState`:
 
 ```ts
-type ActiveTab = 'ab' | 'matchup' | 'game' | 'logs'
+type ActiveTab = 'ab' | 'matchup' | 'logs'
 type GlobalScope = 'thisGame' | 'inGame' | 'season'
 type MatchupPerspective = 'pitcher' | 'batter'
 
@@ -657,9 +651,9 @@ Actions and when each is dispatched:
 - `setCurrentPlay(play)` — declared for direct overrides; not currently dispatched outside `setLiveFeed`'s derivation.
 - `setTimecode(tc)` — called by `useLiveFeed`'s poll loop with the `metaData.timeStamp` of the folded diffPatch result.
 - `setPolling(polling)` — called by `useLiveFeed` around its live-feed initialization (`true` at start, `false` in the `finally` block).
-- `setActiveTab(tab)` — called by the `MiniNav` buttons in `GameScreen`. This is a mount switch: exactly one section (`ab`, `matchup`, `game`, or `logs`) is rendered at a time; the others are unmounted.
+- `setActiveTab(tab)` — called by the `MiniNav` buttons in `GameScreen`. This is a mount switch: exactly one section (`ab`, `matchup`, or `logs`) is rendered at a time; the others are unmounted.
 - `setGlobalScope(scope)` — the single scope switch that drives the scoped sections. In `MatchupSubTab` it is written only by the `MatchupHeader` face-card arrows, which step through `SCOPE_CYCLE` (`['thisGame', 'inGame', 'season']`) and wrap at both ends. The scope rewrites both face-card cell grids (8 counting cells, 9 in-game rate cells, 8 benchmark-toned season cells) as well as the H2H panel and the arsenal. `SCOPE_LABELS` deliberately leaves `inGame` unlabelled, since it is still in-game data like `thisGame`.
-- `setMatchupPerspective(perspective)` — shared by the Matchup tab (zone grid + splits table) and the Logs tab: it swaps whether all three show the pitcher's or the batter's data. In Matchup it controls which HotCold array feeds ZonePanel/HeatMap and which side's rows appear in the Splits table (Season / vs L / vs R / RISP / Home / Away). In Logs it controls which side's season game log renders.
+- `setMatchupPerspective(perspective)` — shared by the AB tab, the Matchup tab (zone grid + splits table) and the Logs tab: it swaps whether all three show the pitcher's or the batter's data. In Matchup it controls which HotCold array feeds ZonePanel/HeatMap and which side's rows appear in the Splits table (Season / vs L / vs R / RISP / Home / Away). In Logs it controls which side's season game log renders.
 - `setRecentFormGames(games)` — declared but currently unused; the Recent Form panel was removed in the single-scroll redesign. Kept in the store for potential re-introduction.
 - `setGameFeedPitches(pitches)` — called by `App.tsx`'s Savant game-feed effect on every `gamePk` change (success sets the rows, failure sets `[]`).
 - `setError(err)` — called by `App.tsx`'s deep-link handler and by `useLiveFeed` on any fetch/poll failure.
@@ -753,7 +747,7 @@ The guard is deliberately **not** wired into `npm run build`: Vercel runs `tsc -
 
 **Updating league constants annually.** Edit `src/utils/leagueConstants.ts` before each new season: `LEAGUE_ERA`, `LEAGUE_WOBA`, `WOBA_SCALE`, `LEAGUE_R_PER_PA` (sourced from FanGraphs league stats) and the 30 `PARK_FACTORS` entries (sourced from ESPN park factors, full-season values — the sabermetrics functions halve them internally, do not pre-halve them here).
 
-**Adding a new stat.** 1) Add the field to the relevant interface in `src/api/types.ts` if the API response includes it but the type doesn't yet declare it. 2) If it needs a fetcher, add it to `src/api/mlb.ts` or `src/api/savant.ts` following the existing `fetch...` pattern (throw on `!res.ok`, return the parsed/narrowed shape). 3) If it needs computation, add a pure function to `src/utils/sabermetrics.ts` following the `isValidStat`/`roundStat` null-safety pattern used by the existing `compute*` functions. 4) Wire it into the consuming component's stat-cell array (e.g. the `StatGrid` in `PitcherGameSubTab.tsx`, or the `Stat` cells in `LiveAtBat.tsx`).
+**Adding a new stat.** 1) Add the field to the relevant interface in `src/api/types.ts` if the API response includes it but the type doesn't yet declare it. 2) If it needs a fetcher, add it to `src/api/mlb.ts` or `src/api/savant.ts` following the existing `fetch...` pattern (throw on `!res.ok`, return the parsed/narrowed shape). 3) If it needs computation, add a pure function to `src/utils/sabermetrics.ts` following the `isValidStat`/`roundStat` null-safety pattern used by the existing `compute*` functions. 4) Wire it into the consuming component's stat-cell array (e.g. the `StatGrid` cells in `LiveAtBat.tsx` or `MatchupSubTab.tsx`).
 
 **Adding a new canvas component.** Follow the pattern in `src/components/Canvas/*.tsx`: a `useRef<HTMLCanvasElement>` plus a `useEffect` that gets the 2D context, scales for `window.devicePixelRatio`, and draws. Accept a `size`/`width`/`height` prop with a default. If the component does not set an explicit CSS height on its `<canvas>` (as `ArsenalBars` does not), add a descendant clamp in `App.css` following the `.arsenal-canvas > canvas { max-height: 186px }` pattern, or the canvas will render at its raw pixel height. Read colors from the chart theme, never as hex literals — the `no-canvas-hex` guard scans `src/components/Canvas/*.tsx`.
 
@@ -797,7 +791,7 @@ Three further runtime rules exist, and rule order matters — Workbox takes the 
 3. **The `statcast_search` CSV lags roughly a day** and returns zero rows for today's game. In-game bat speed therefore comes from the Savant **game feed** (`GET /gf?game_pk=N`, camelCase `batSpeed`), stored in `gameStore.gameFeedPitches`, never from the CSV endpoint.
 4. **Savant-to-live-feed join key is `play_id` alone** (`savantRow.play_id === playEvent.playId`, read defensively via `playIdOf` since `PlayEvent` doesn't declare `playId`). Joining on `at_bat_number` additionally would mismatch every row by one at-bat, because the live feed's `about.atBatIndex` is 0-based while Savant's `ab_number` is 1-based.
 5. **`swing_path_tilt` is absent from the game feed** (it's CSV-only and day-lagged), so the Live tab renders `—` for it by design — not a bug.
-6. **Balls in play are neither `isStrike` nor `isBall`.** Pitch classification lives in `GameSubTabShared.outcomeOf`, shared by both live sub-tabs: it tests `details.isInPlay` **first** and returns `'inplay'` before any ball/strike check, and `splitPitches` then counts every non-`ball` outcome as a strike, balls in play included. Omitting the in-play case undercounts strike rate substantially (measured at ~46% vs. a true ~63% on gamePk 746352 before this was centralized). Two related deliberate choices in the same module: fouls are classified **by elimination** — anything that is not in play, a ball, a called strike, or a member of the `MISS_CALLS` set — so no Gameday call code has to be guessed; and `inStrikeZone` returns `null` when `pitchData.zone` is absent, so those pitches are excluded from the zone/chase denominators entirely rather than counted as out-of-zone.
+6. **Balls in play are neither `isStrike` nor `isBall`.** Pitch classification lives in `GameSubTabShared.outcomeOf`, shared by LiveAtBat and MatchupSubTab: it tests `details.isInPlay` **first** and returns `'inplay'` before any ball/strike check, and `splitPitches` then counts every non-`ball` outcome as a strike, balls in play included. Omitting the in-play case undercounts strike rate substantially (measured at ~46% vs. a true ~63% on gamePk 746352 before this was centralized). Two related deliberate choices in the same module: fouls are classified **by elimination** — anything that is not in play, a ball, a called strike, or a member of the `MISS_CALLS` set — so no Gameday call code has to be guessed; and `inStrikeZone` returns `null` when `pitchData.zone` is absent, so those pitches are excluded from the zone/chase denominators entirely rather than counted as out-of-zone.
 7. **`fetchHotColdZones` splits arrive in a fixed but undocumented order, and `value` is a string.** The fetcher selects by `stat?.name === 'battingAverage'` (falling back to `splits[0]`), never by index.
 8. **`fetchPitchArsenal` percentages are multiplied by 100** inside the fetcher (raw API values are fractional), so `ArsenalBars` consumes a 0-100 scale. Do not confuse this with `PitcherGameModel.buildArsenal`, which is unrelated: it derives an *in-game* pitch mix from live `PlayEvent`s grouped by `details.type.code` and emits its own `share` rate.
 9. **MLB API field casing is inconsistent.** Pitchers return `strikeOuts` (capital O) and `avg` (which for pitchers is opponent batting average) — there is no `strikeouts` or `oppAvg` field.
