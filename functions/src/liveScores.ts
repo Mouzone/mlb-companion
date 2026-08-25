@@ -89,7 +89,7 @@ async function fetchWinProbability(gamePk: number): Promise<WinProbabilityPlay[]
 }
 
 async function fetchCurrentPlayers(gamePk: number): Promise<{ pitcher: CurrentPitcher | null; batter: CurrentBatter | null }> {
-  const res = await fetch(`${MLB_API}/v1.1/game/${gamePk}/feed/live`)
+  const res = await fetch(`https://statsapi.mlb.com/api/v1.1/game/${gamePk}/feed/live`)
   if (!res.ok) return { pitcher: null, batter: null }
   const data = await res.json() as any
   const linescore = data?.liveData?.linescore
