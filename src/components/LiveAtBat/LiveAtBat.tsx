@@ -1,7 +1,9 @@
 import type { ReactElement } from 'react'
 import { useGameStore } from '../../store/gameStore'
-import { EmptyPanel, SectionTitle, Skeleton, Stat, StatGrid } from '../ui'
+import { EmptyPanel, Skeleton } from '../ui'
 import { AtBatPanel } from './AtBatPanel'
+import { ContactStrip } from './ContactStrip'
+import { LastPitchStrip } from './LastPitchStrip'
 import { MatchupCard } from './MatchupCard'
 import { ScoreboardCard } from './ScoreboardCard'
 import {
@@ -10,31 +12,21 @@ import {
   deriveBatterLine,
   derivePitchSequence,
   derivePitcherLine,
-  readBatSpeed,
+  playIdOf,
   readOffenseExtras,
-  strikePercent,
 } from './liveAtBatData'
-import {
-  NO_VALUE,
-  PITCH_TYPE_NAMES,
-  callName,
-  fixed,
-  humanizeEnum,
-  humanizeSplit,
-  ordinal,
-} from './liveAtBatFormat'
+import { derivePitchBaselines } from './lastPitchBaseline'
+import { humanizeSplit } from './liveAtBatFormat'
 
-interface Cell {
-  readonly label: string
-  readonly value: string
-}
-
-/** Stat renders `—` in --c-ink-subtle for an empty value, so absence stays quiet. */
-function statCells(cells: readonly Cell[]): readonly ReactElement[] {
-  return cells.map((cell) => (
-    <Stat key={cell.label} label={cell.label} value={cell.value === NO_VALUE ? '' : cell.value} />
-  ))
-}
+/**
+ * LiveAtBat — the top section of the game screen.
+ *
+ * Box score first, then who is facing whom, then the at-bat itself, then the
+ * two live readings that change pitch to pitch. The pitcher's workload line and
+ * the batter's game line used to live here; they now sit in the Game section
+ * where the rest of the current-game numbers are, so this section stays short
+ * enough to read without scrolling.
+ */
 
 function LoadingState(): ReactElement {
   return (
@@ -92,7 +84,6 @@ export function LiveAtBat(): ReactElement {
 
   const pitches = playEvents.filter((event) => event.isPitch)
   const lastPitch = pitches[pitches.length - 1]
-  const pitchData = lastPitch?.pitchData
   const hitData = lastPitch?.hitData
   const sequence = derivePitchSequence(pitches)
 
@@ -105,61 +96,13 @@ export function LiveAtBat(): ReactElement {
   const deck = readOffenseExtras(linescore)
   const pitcherLine = derivePitcherLine(plays.allPlays, currentPlay)
   const batterLine = deriveBatterLine(plays.allPlays, matchup.batter.id, about.atBatIndex)
-  const batSpeed = readBatSpeed(lastPitch, gameFeedPitches)
   const batterEdge = batterHasPlatoonEdge(matchup.batSide.code, matchup.pitchHand.code)
 
-  const typeCode = lastPitch?.details.type?.code
-  const callCode = lastPitch?.details.call?.code
-
-  const pitchCells: readonly Cell[] = [
-    {
-      label: 'Type',
-      value: typeCode === undefined ? NO_VALUE : PITCH_TYPE_NAMES[typeCode] ?? typeCode,
-    },
-    { label: 'Velo', value: fixed(pitchData?.startSpeed, 1, ' mph') },
-    // The feed declares pitchData.spinRate but only ever populates breaks.spinRate.
-    { label: 'Spin', value: fixed(pitchData?.spinRate ?? pitchData?.breaks.spinRate, 0, ' rpm') },
-    { label: 'End Velo', value: fixed(pitchData?.endSpeed, 1, ' mph') },
-    { label: 'Brk Ang', value: fixed(pitchData?.breaks.breakAngle, 1, '°') },
-    { label: 'Brk Len', value: fixed(pitchData?.breaks.breakLength, 1, ' in') },
-    { label: 'Brk Vert', value: fixed(pitchData?.breaks.breakVertical, 1, '') },
-    { label: 'Brk Horz', value: fixed(pitchData?.breaks.breakHorizontal, 1, '') },
-    { label: 'Extension', value: fixed(pitchData?.extension, 1, ' ft') },
-    { label: 'Plate Time', value: fixed(pitchData?.plateTime, 3, ' s') },
-  ]
-
-  const contactCells: readonly Cell[] = [
-    { label: 'Exit Velo', value: fixed(hitData?.launchSpeed, 1, ' mph') },
-    { label: 'Launch °', value: fixed(hitData?.launchAngle, 0, '°') },
-    { label: 'Distance', value: fixed(hitData?.totalDistance, 0, ' ft') },
-    { label: 'Hardness', value: humanizeEnum(hitData?.hardness) },
-    {
-      label: batSpeed.isGameAverage ? 'Bat Spd Avg' : 'Bat Speed',
-      value: fixed(batSpeed.mph, 1, ' mph'),
-    },
-    // Swing-path tilt is CSV-only on Savant and lags a day; the gf feed omits it.
-    { label: 'Swing Tilt', value: NO_VALUE },
-  ]
-
-  const batterCells: readonly Cell[] = [
-    { label: 'AB', value: String(batterLine.atBats) },
-    { label: 'Hits', value: String(batterLine.hits) },
-    { label: 'HR', value: String(batterLine.homeRuns) },
-    { label: 'RBI', value: String(batterLine.rbi) },
-    { label: 'BB', value: String(batterLine.walks) },
-    { label: 'SO', value: String(batterLine.strikeouts) },
-  ]
-
-  const pitcherCells: readonly Cell[] = [
-    { label: 'Pitches', value: String(pitcherLine.pitchCount) },
-    { label: 'Strikes', value: String(pitcherLine.strikes) },
-    { label: 'Strike %', value: strikePercent(pitcherLine) },
-    { label: 'Batters', value: String(pitcherLine.battersFaced) },
-    { label: 'SO', value: String(pitcherLine.strikeouts) },
-    { label: 'BB', value: String(pitcherLine.walks) },
-    { label: 'Hits', value: String(pitcherLine.hits) },
-    { label: 'Thru Ord', value: ordinal(pitcherLine.timeThroughOrder) },
-  ]
+  const baselines = derivePitchBaselines(
+    gameFeedPitches,
+    lastPitch?.details.type?.code,
+    lastPitch === undefined ? null : playIdOf(lastPitch),
+  )
 
   const eventLabel = result.event === '' ? 'At bat in progress' : result.event
   const hasDescription = result.description !== ''
@@ -208,39 +151,9 @@ export function LiveAtBat(): ReactElement {
         inHole={deck.inHole}
       />
 
-      <section className="panel-row" aria-label="Last pitch">
-        <SectionTitle meta={callName(callCode)}>Last Pitch</SectionTitle>
-        {lastPitch === undefined ? (
-          <EmptyPanel
-            message="No pitch thrown yet"
-            hint="Velocity, spin and break appear the moment the pitcher delivers."
-          />
-        ) : (
-          <StatGrid>{statCells(pitchCells)}</StatGrid>
-        )}
-      </section>
+      <LastPitchStrip lastPitch={lastPitch} baselines={baselines} />
 
-      <section className="panel-row" aria-label="Contact">
-        <SectionTitle meta={humanizeEnum(hitData?.trajectory)}>Contact</SectionTitle>
-        {hitData === undefined ? (
-          <EmptyPanel
-            message="No ball in play"
-            hint="Exit velocity, launch angle and distance appear on contact."
-          />
-        ) : (
-          <StatGrid>{statCells(contactCells)}</StatGrid>
-        )}
-      </section>
-
-      <section className="panel-row" aria-label="Pitcher workload">
-        <SectionTitle meta={matchup.pitcher.fullName}>Pitcher · Workload</SectionTitle>
-        <StatGrid>{statCells(pitcherCells)}</StatGrid>
-      </section>
-
-      <section className="panel-row" aria-label="Batter game line">
-        <SectionTitle meta={matchup.batter.fullName}>Batter · This Game</SectionTitle>
-        <StatGrid>{statCells(batterCells)}</StatGrid>
-      </section>
+      <ContactStrip hitData={hitData} />
 
       <div className="play-result">
         <strong className="play-result__event">{eventLabel}</strong>

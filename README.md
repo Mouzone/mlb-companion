@@ -278,14 +278,30 @@ src/
                                            plays at or before the current at-bat index. Renders ArsenalBars +
                                             ZonePlot, a workload stat grid + by-inning strip, and an efficiency
                                             stat grid. Declares no heights. Imported by LiveGameTab.
-    LiveAtBat/LiveAtBat.tsx               The "At Bat" sub-tab (the default liveSubTab). Renders the full live
-                                           at-bat view: score + baserunner diamond + inning
-                                           indicator, per-team linescore rows, batter-vs-pitcher matchup header,
-                                           pace stats (count, pitch count, times through the order), a ZonePlot
-                                           of the at-bat's pitches, last-pitch detail (velo, spin, break,
-                                           extension, plate time), contact detail (exit velo, launch angle,
-                                           distance, hardness, joined bat speed), and the play result banner.
-                                           Imported by LiveGameTab.
+    LiveAtBat/LiveAtBat.tsx               The `ab` section of GameScreen (the top of the single-scroll game
+                                           screen). Renders score + baserunner diamond + inning indicator,
+                                           per-team linescore rows, batter-vs-pitcher matchup header, the
+                                           three-column AtBatPanel, LastPitchStrip, ContactStrip, and the play
+                                           result banner. The pitcher workload and batter game-line grids that
+                                           used to sit here now live in the `game` section. Imported by
+                                           GameScreen.
+    LiveAtBat/LastPitchStrip.tsx          Four readings (Velo, Spin, Brk Vert, Extension) toned against the
+                                           pitcher's baseline for that pitch type, with a signed `+1.4 vs szn`
+                                           delta under each value. Replaces the old ten-cell telemetry dump.
+                                           Imported by LiveAtBat.
+    LiveAtBat/ContactStrip.tsx            Four batted-ball readings (Exit Velo, Launch °, Distance, Hardness)
+                                           toned from the batter's point of view against league contact
+                                           reference points. Launch angle is toned on a band (8°-32°), not a
+                                           slope. Imported by LiveAtBat.
+    LiveAtBat/lastPitchBaseline.ts        Pure baselines for LastPitchStrip. `derivePitchBaselines(rows, type,
+                                           excludePlayId)` returns per-metric `{baseline, isSeason}`: velo from
+                                           Savant `avg_pitch_speed` (season) with a same-game fallback, and
+                                           spin / vertical break / extension from the pitcher's same-type
+                                           pitches in this game. Excludes the pitch being judged so it cannot
+                                           inflate its own baseline. `toneFor()` applies a per-metric dead band
+                                           (velo 0.8 mph, spin 75 rpm, break 1.5, extension 0.15 ft) and
+                                           compares vertical break on magnitude, since the feed signs it by
+                                           pitch family. `deltaLabel()` formats the signed caption.
                                            AtBatPanel.tsx renders the three-column At Bat grid (situation /
                                            ZonePlot / Sequence). The Sequence dots are colored by CALL, not by
                                            pitch type -- the FF/KC code beside each dot already carries type,
@@ -562,20 +578,20 @@ main.tsx
     App.tsx
     (no selectedGame) GameSelect (useLiveSlate → useLiveScores) -> GameCard (currentPitcher, currentBatter) -> ScoreRing
     (selectedGame set)
-      tab-bar (Live Game | Pitcher vs Batter buttons, with leading "← Games" back button)
-      activeTab === 'live'
-        LiveGameTab
-          sub-tab-nav (At Bat | Pitcher | Batter)
-          liveSubTab === 'atBat'       -> LiveAtBat         -> ZonePlot
-          liveSubTab === 'pitcherGame' -> PitcherGameSubTab -> ArsenalBars, ZonePlot
-          liveSubTab === 'batterGame'  -> BatterGameSubTab  -> ZonePlot
-      activeTab === 'pitcherVsBatter'
-        PitcherVsBatter
-          pvb-cards-wrap (pitcher season / pitcher career / batter season / batter career swipe cards)
-          sub-tab-nav (Pitching | Batting | Matchup)
-          activeSubTab === 'pitching' -> PitchingSubTab -> ArsenalBars, HeatMap
-          activeSubTab === 'batting'  -> BattingSubTab  -> HeatMap, SprayChart
-          activeSubTab === 'matchup'  -> MatchupSubTab
+      GameScreen
+        MiniNav (AB | Matchup | Game | Pit | Bat -- scroll anchors, not tabs)
+        .game-scroll  <- THE scroll owner
+          section#ab       -> LiveAtBat -> ScoreboardCard, MatchupCard,
+                                           AtBatPanel -> ZonePlot (pitcher view),
+                                           LastPitchStrip, ContactStrip
+          section#matchup  -> MatchupSubTab -> HeatMap
+          section#game     -> PitcherGameSubTab -> ZonePlot
+                              BatterGameSubTab  -> ZonePlot
+          .pb-carousel (horizontal scroll-snap, one card per viewport)
+            section#pitching -> PitchingSubTab -> ArsenalBars, HeatMap
+            section#batting  -> BattingSubTab  -> HeatMap, SprayChart
+      FloatingGamesButton (fixed bottom-left, calls store.reset())
+      StatsGuide          (fixed bottom-right FAB)
 ```
 
 ## 6. State Management
@@ -583,9 +599,9 @@ main.tsx
 `src/store/gameStore.ts` exports a single zustand store, `useGameStore`, typed as `GameState`:
 
 ```ts
-type Tab = 'live' | 'pitcherVsBatter'
-type ActiveSubTab = 'matchup' | 'pitching' | 'batting'
-type LiveSubTab = 'atBat' | 'batterGame' | 'pitcherGame'
+type ScrollAnchor = 'ab' | 'matchup' | 'game' | 'pitching' | 'batting'
+type GlobalScope = 'thisGame' | 'season' | 'career'
+type ZonePerspective = 'pitcher' | 'batter'
 
 interface GameState {
   selectedGame: ScheduledGame | null
@@ -594,9 +610,9 @@ interface GameState {
   currentPlay: CurrentPlay | null
   lastTimecode: string | null
   isPolling: boolean
-  activeTab: Tab
-  activeSubTab: ActiveSubTab
-  liveSubTab: LiveSubTab
+  scrollAnchor: ScrollAnchor
+  globalScope: GlobalScope
+  zonePerspective: ZonePerspective
   recentFormGames: number
   gameFeedPitches: SavantGamePitch[]
   error: string | null
@@ -604,7 +620,7 @@ interface GameState {
 }
 ```
 
-Defaults: `activeTab: 'live'`, `activeSubTab: 'pitching'`, `liveSubTab: 'atBat'`, `recentFormGames: 7`, everything else `null`/`false`/`[]`.
+Defaults: `scrollAnchor: 'ab'`, `globalScope: 'thisGame'`, `zonePerspective: 'pitcher'`, `recentFormGames: 7`, everything else `null`/`false`/`[]`.
 
 Actions and when each is dispatched:
 
@@ -613,15 +629,15 @@ Actions and when each is dispatched:
 - `setCurrentPlay(play)` — declared for direct overrides; not currently dispatched outside `setLiveFeed`'s derivation.
 - `setTimecode(tc)` — called by `useLiveFeed`'s poll loop with the `metaData.timeStamp` of the folded diffPatch result.
 - `setPolling(polling)` — called by `useLiveFeed` around its live-feed initialization (`true` at start, `false` in the `finally` block).
-- `setActiveTab(tab)` — called by the tab-bar buttons in `App.tsx`.
-- `setActiveSubTab(subTab)` — called by the sub-tab-nav buttons in `PitcherVsBatter`.
-- `setLiveSubTab(subTab)` — called by the sub-tab-nav buttons in `LiveGameTab`.
+- `setScrollAnchor(anchor)` — called by the `MiniNav` buttons in `GameScreen`, which then `scrollIntoView` the matching section. The anchor is display state for the nav's active mark, not a mount switch: every section stays mounted.
+- `setGlobalScope(scope)` — the single This Game / Season / Career switch that drives the scoped sections.
+- `setZonePerspective(perspective)` — swaps whether the Matchup zone shows the pitcher's or the batter's hot/cold grid.
 - `setRecentFormGames(games)` — declared for the recent-form span toggle; `PitchingSubTab`/`BattingSubTab` currently keep their own local span state rather than dispatching this action (see section 11).
 - `setGameFeedPitches(pitches)` — called by `App.tsx`'s Savant game-feed effect on every `gamePk` change (success sets the rows, failure sets `[]`).
 - `setError(err)` — called by `App.tsx`'s deep-link handler and by `useLiveFeed` on any fetch/poll failure.
-- `reset()` — called from the "← Games" back button in the tab bar (rendered by `App.tsx` as `leading` on `TabBar`). Clears `selectedGame`, `gamePk`, `liveFeed`, `currentPlay`, `lastTimecode`, `isPolling`, `gameFeedPitches`, `error`, returning the app to `GameSelect`.
+- `reset()` — called from `FloatingGamesButton` (fixed bottom-left, rendered by `App.tsx`). Clears `selectedGame`, `gamePk`, `liveFeed`, `currentPlay`, `lastTimecode`, `isPolling`, `gameFeedPitches`, `error`, and returns `scrollAnchor`, `globalScope` and `zonePerspective` to their defaults, returning the app to `GameSelect`.
 
-Watchability scores deliberately do **not** live in `gameStore`. `useWatchability` owns its own `scores`/`loading`/`stale` state local to `GameSelect`, the same pattern `usePlayerStats` already uses for `PitcherVsBatter` — the store holds cross-screen selection state, not per-fetch caches. `useLiveSlate` similarly owns its own `games`/`loading`/`refresh` state local to `GameSelect`, independent of the store — the store holds `selectedGame` (a snapshot of one game), not the full slate array, so slate refreshes do not clobber the selected game.
+Watchability scores deliberately do **not** live in `gameStore`. `useWatchability` owns its own `scores`/`loading`/`stale` state local to `GameSelect`, the same pattern `usePlayerStats` already uses for the Pitching and Batting sections — the store holds cross-screen selection state, not per-fetch caches. `useLiveSlate` similarly owns its own `games`/`loading`/`refresh` state local to `GameSelect`, independent of the store — the store holds `selectedGame` (a snapshot of one game), not the full slate array, so slate refreshes do not clobber the selected game.
 
 ## 7. Sabermetric Computations
 

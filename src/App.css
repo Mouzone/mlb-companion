@@ -1256,6 +1256,20 @@ button:focus-visible,
   min-width: 0;
 }
 
+/* --- Last pitch strip --------------------------------------------------- */
+/* The delta rides UNDER the reading on its own line rather than beside it:
+   inline it doubled the widest cell and forced the four-up strip to two-up on
+   a phone, which is the one thing this strip exists to avoid. It inherits the
+   value's tone colour so the sign and the hue say the same thing. */
+.last-pitch__delta {
+  display: block;
+  margin-top: calc(var(--sp-1) / 2);
+  font-size: var(--fs-micro);
+  font-weight: var(--fw-medium);
+  letter-spacing: 0.02em;
+  opacity: 0.72;
+}
+
 /* --- Play result -------------------------------------------------------- */
 /* Deliberately NOT wrapped: the event, the separator and the description are
    one sentence, so the description has to wrap inside its own track rather
