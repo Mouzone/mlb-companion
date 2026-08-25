@@ -1,4 +1,4 @@
-import type { SavantGamePitch, PitchArsenalItem, CurrentPlay, LiveFeed } from '../../api/types'
+import type { SavantGamePitch, PitchArsenalItem, CurrentPlay, LiveFeed, SavantBattedBall } from '../../api/types'
 import type { StatTone } from '../ui'
 
 export type HandednessFilter = 'all' | 'RHB' | 'LHB'
@@ -20,7 +20,16 @@ export interface ColorCodedArsenalRow {
   readonly breakHorizontal: ArsenalMetric
 }
 
+export interface SeasonBaseline {
+  readonly velo: number | null
+  readonly spin: number | null
+  readonly vBrk: number | null
+  readonly hBrk: number | null
+}
+
 const DEAD_BAND_VELO = 0.8
+const DEAD_BAND_SPIN = 50
+const DEAD_BAND_BREAK = 1.0
 
 function finite(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null
@@ -39,16 +48,16 @@ function parseNumber(raw: string | undefined): number | null {
   return Number.isFinite(parsed) ? parsed : null
 }
 
-function veloTone(actual: number, baseline: number): StatTone {
+function metricTone(actual: number, baseline: number, deadBand: number): StatTone {
   const delta = actual - baseline
-  if (Math.abs(delta) < DEAD_BAND_VELO) return 'default'
+  if (Math.abs(delta) < deadBand) return 'default'
   return delta > 0 ? 'positive' : 'negative'
 }
 
-function veloDelta(actual: number, baseline: number): string {
+function metricDelta(actual: number, baseline: number, label: string): string {
   const delta = actual - baseline
   const sign = delta >= 0 ? '+' : '\u2212'
-  return `${sign}${Math.abs(delta).toFixed(1)} vs szn`
+  return `${sign}${Math.abs(delta).toFixed(1)} ${label}`
 }
 
 function pitcherAbNumbers(allPlays: readonly CurrentPlay[], pitcherId: number): Set<number> {
@@ -66,12 +75,44 @@ function batterHand(liveFeed: LiveFeed, batterId: number): 'L' | 'R' | 'S' | nul
   return player?.batSide.code ?? null
 }
 
+export function buildSeasonBaselines(
+  savantPitches: readonly SavantBattedBall[],
+): Map<string, SeasonBaseline> {
+  const byType = new Map<string, { velos: number[]; spins: number[]; vBrks: number[]; hBrks: number[] }>()
+
+  for (const p of savantPitches) {
+    const type = p.pitch_type ?? 'UN'
+    const bucket = byType.get(type) ?? { velos: [], spins: [], vBrks: [], hBrks: [] }
+    const velo = parseNumber(p.release_speed)
+    const spin = parseNumber(p.release_spin_rate)
+    const vBrk = parseNumber(p.pfx_z)
+    const hBrk = parseNumber(p.pfx_x)
+    if (velo !== null) bucket.velos.push(velo)
+    if (spin !== null) bucket.spins.push(spin)
+    if (vBrk !== null) bucket.vBrks.push(vBrk)
+    if (hBrk !== null) bucket.hBrks.push(hBrk)
+    byType.set(type, bucket)
+  }
+
+  const result = new Map<string, SeasonBaseline>()
+  for (const [type, bucket] of byType) {
+    result.set(type, {
+      velo: mean(bucket.velos),
+      spin: mean(bucket.spins),
+      vBrk: mean(bucket.vBrks),
+      hBrk: mean(bucket.hBrks),
+    })
+  }
+  return result
+}
+
 export function buildGameArsenalRows(
   pitches: readonly SavantGamePitch[],
   allPlays: readonly CurrentPlay[],
   liveFeed: LiveFeed,
   pitcherId: number,
   handedness: HandednessFilter,
+  seasonBaselines?: Map<string, SeasonBaseline>,
 ): ColorCodedArsenalRow[] {
   const abSet = pitcherAbNumbers(allPlays, pitcherId)
 
@@ -121,10 +162,30 @@ export function buildGameArsenalRows(
         typePitches[0]?.avg_pitch_speed?.find((item) => item.pitch_type === type)?.avg_pitch_speed,
       ) ?? null
 
+    const bl = seasonBaselines?.get(type)
+    const seasonSpin = bl?.spin ?? null
+    const seasonVBrk = bl?.vBrk ?? null
+    const seasonHBrk = bl?.hBrk ?? null
+
     const veloToneVal =
-      avgVelo !== null && seasonVelo !== null ? veloTone(avgVelo, seasonVelo) : 'default'
+      avgVelo !== null && seasonVelo !== null ? metricTone(avgVelo, seasonVelo, DEAD_BAND_VELO) : 'default'
     const veloDeltaVal =
-      avgVelo !== null && seasonVelo !== null ? veloDelta(avgVelo, seasonVelo) : null
+      avgVelo !== null && seasonVelo !== null ? metricDelta(avgVelo, seasonVelo, 'vs szn') : null
+
+    const spinToneVal =
+      avgSpin !== null && seasonSpin !== null ? metricTone(avgSpin, seasonSpin, DEAD_BAND_SPIN) : 'default'
+    const spinDeltaVal =
+      avgSpin !== null && seasonSpin !== null ? metricDelta(avgSpin, seasonSpin, 'vs L60') : null
+
+    const vBrkToneVal =
+      avgBreak !== null && seasonVBrk !== null ? metricTone(avgBreak, seasonVBrk, DEAD_BAND_BREAK) : 'default'
+    const vBrkDeltaVal =
+      avgBreak !== null && seasonVBrk !== null ? metricDelta(avgBreak, seasonVBrk, 'vs L60') : null
+
+    const hBrkToneVal =
+      avgHorizontal !== null && seasonHBrk !== null ? metricTone(avgHorizontal, seasonHBrk, DEAD_BAND_BREAK) : 'default'
+    const hBrkDeltaVal =
+      avgHorizontal !== null && seasonHBrk !== null ? metricDelta(avgHorizontal, seasonHBrk, 'vs L60') : null
 
     rows.push({
       pitchType: type,
@@ -132,9 +193,9 @@ export function buildGameArsenalRows(
       usage,
       count,
       velo: { value: avgVelo, tone: veloToneVal, delta: veloDeltaVal },
-      spin: { value: avgSpin, tone: 'default', delta: null },
-      breakVertical: { value: avgBreak, tone: 'default', delta: null },
-      breakHorizontal: { value: avgHorizontal, tone: 'default', delta: null },
+      spin: { value: avgSpin, tone: spinToneVal, delta: spinDeltaVal },
+      breakVertical: { value: avgBreak, tone: vBrkToneVal, delta: vBrkDeltaVal },
+      breakHorizontal: { value: avgHorizontal, tone: hBrkToneVal, delta: hBrkDeltaVal },
     })
   }
 
@@ -144,17 +205,23 @@ export function buildGameArsenalRows(
 
 export function buildSeasonArsenalRows(
   arsenal: readonly PitchArsenalItem[],
+  savantPitches: readonly SavantBattedBall[] = [],
 ): ColorCodedArsenalRow[] {
+  const baselines = buildSeasonBaselines(savantPitches)
+
   return [...arsenal]
     .sort((a, b) => b.percentage - a.percentage)
-    .map((item) => ({
-      pitchType: item.type.code,
-      pitchDescription: item.type.description,
-      usage: item.percentage,
-      count: item.count,
-      velo: { value: item.averageSpeed, tone: 'default' as StatTone, delta: null },
-      spin: { value: null, tone: 'default' as StatTone, delta: null },
-      breakVertical: { value: null, tone: 'default' as StatTone, delta: null },
-      breakHorizontal: { value: null, tone: 'default' as StatTone, delta: null },
-    }))
+    .map((item) => {
+      const bl = baselines.get(item.type.code)
+      return {
+        pitchType: item.type.code,
+        pitchDescription: item.type.description,
+        usage: item.percentage,
+        count: item.count,
+        velo: { value: item.averageSpeed, tone: 'default' as StatTone, delta: null },
+        spin: { value: bl?.spin ?? null, tone: 'default' as StatTone, delta: null },
+        breakVertical: { value: bl?.vBrk ?? null, tone: 'default' as StatTone, delta: null },
+        breakHorizontal: { value: bl?.hBrk ?? null, tone: 'default' as StatTone, delta: null },
+      }
+    })
 }

@@ -357,6 +357,8 @@ export interface SavantBattedBall {
   iso_value?: string
   delta_run_exp?: string
   bat_speed?: string
+  pfx_x?: string
+  pfx_z?: string
 }
 
 export interface SavantGamePitch {

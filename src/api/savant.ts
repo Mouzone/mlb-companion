@@ -105,6 +105,8 @@ function parseSavantCSV(csv: string): SavantBattedBall[] {
       delta_run_exp: row.delta_run_exp ?? '',
       swing_path_tilt: row.swing_path_tilt ?? '',
       bat_speed: row.bat_speed ?? '',
+      pfx_x: row.pfx_x ?? '',
+      pfx_z: row.pfx_z ?? '',
     })
   }
 

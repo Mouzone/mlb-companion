@@ -30,6 +30,7 @@ interface PlayerStatsData {
   gameLog: GameLogEntry[]
   vsPlayer: VsPlayerStat | null
   savantData: SavantBattedBall[]
+  pitcherSavantPitches: SavantBattedBall[]
   loading: boolean
   pitcherLoading: boolean
   batterLoading: boolean
@@ -48,6 +49,7 @@ const EMPTY_PLAYER_STATS: PlayerStatsData = {
   gameLog: [],
   vsPlayer: null,
   savantData: [],
+  pitcherSavantPitches: [],
   loading: false,
   pitcherLoading: false,
   batterLoading: false,
@@ -58,6 +60,7 @@ interface PitcherBundle {
   pitchArsenal: PitchArsenalItem[]
   pitcherHotCold: HotColdZone[]
   pitcherSplits: StatSplit[]
+  pitcherSavantPitches: SavantBattedBall[]
 }
 
 interface BatterBundle {
@@ -82,11 +85,13 @@ function fetchPitcherBundle(pitcherId: number): Promise<PitcherBundle> {
     fetchPitchArsenal(pitcherId, currentYear).catch(() => []),
     fetchHotColdZones(pitcherId, 'pitching', currentYear).catch(() => []),
     fetchStatSplits(pitcherId, 'pitching', currentYear).catch(() => []),
-  ]).then(([pitcherSeason, pitchArsenal, pitcherHotCold, pitcherSplits]): PitcherBundle => ({
+    fetchSavantBattedBalls(pitcherId, currentYear, 'pitcher').catch(() => []),
+  ]).then(([pitcherSeason, pitchArsenal, pitcherHotCold, pitcherSplits, pitcherSavantPitches]): PitcherBundle => ({
     pitcherSeason: pitcherSeason as PitcherSeasonStat | null,
     pitchArsenal,
     pitcherHotCold,
     pitcherSplits,
+    pitcherSavantPitches,
   }))
 
   pitcherBundleRequests.set(cacheKey, request)

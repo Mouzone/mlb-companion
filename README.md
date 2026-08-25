@@ -101,7 +101,8 @@ src/
                                            Fires the same 10 endpoints, but split across THREE independently
                                            cached bundles so a mid-inning player swap only refetches the half
                                            that changed: a pitcher bundle (fetchSeasonStats, fetchPitchArsenal,
-                                           fetchHotColdZones, fetchStatSplits) keyed `${year}:${pitcherId}`, a
+                                           fetchHotColdZones, fetchStatSplits, fetchSavantBattedBalls with
+                                           playerType='pitcher') keyed `${year}:${pitcherId}`, a
                                            batter bundle (fetchSeasonStats, fetchHotColdZones, fetchStatSplits,
                                            fetchGameLog, fetchSavantBattedBalls) keyed `${year}:${batterId}`, and
                                            fetchVsPlayer keyed on both. Each constituent fetch is independently
@@ -111,7 +112,8 @@ src/
                                            offline is not cached as empty for the session. Returns batterSeason,
                                            pitcherSeason, pitchArsenal, batterHotCold, pitcherHotCold,
                                            batterSplits, pitcherSplits, gameLog (full season; consumers
-                                           slice locally),
+                                           slice locally), pitcherSavantPitches (pitcher's recent Statcast
+                                           pitches for season arsenal baselines),
                                            vsPlayer, savantData (filtered to rows with both hc_x and hc_y
                                            present), loading, plus pitcherLoading and batterLoading so each PVB
                                            card resolves on its own. Also exports preloadPlayerStats(batterId,
@@ -337,7 +339,10 @@ src/
                                             with rows Season / vs L / vs R / RISP / Home / Away; Home and Away
                                             are aggregated locally from fetchCachedGameLog entries grouped by
                                             isHome, since neither is a published split. Arsenal follows
-                                            globalScope via buildGameArsenalRows / buildSeasonArsenalRows.
+                                             globalScope via buildGameArsenalRows / buildSeasonArsenalRows.
+                                             Game-scope arsenal rows carry tone+delta on all four metrics
+                                             (velo vs szn from avg_pitch_speed; spin/V-Brk/H-Brk vs L60
+                                             from pitcherSavantPitches via buildSeasonBaselines).
                                             Imported by GameScreen.
     PitcherVsBatter/LogsSubTab.tsx        The Logs tab. Segmented (Pitcher|Batter) bound to
                                             gameStore.matchupPerspective picks which side's season game log
@@ -352,14 +357,19 @@ src/
                                            Imported by GameScreen.
      PitcherVsBatter/ArsenalColorCoding.ts Pure functions: buildGameArsenalRows (filters SavantGamePitch
                                            by current pitcher via allPlays matchup cross-ref, groups by
-                                           pitch_type, color-codes velo vs avg_pitch_speed season baseline)
-                                           and buildSeasonArsenalRows (maps PitchArsenalItem[] to
-                                            ColorCodedArsenalRow[]). Each row carries velo, spin, breakVertical
-                                            and breakHorizontal as ArsenalMetric {value, tone, delta}; the season
-                                            builder leaves spin and both breaks null because the MLB arsenal
-                                            endpoint publishes only usage and average speed. Export types:
-                                            HandednessFilter, ArsenalMetric, ColorCodedArsenalRow. Imported by
-                                            MatchupSubTab.
+                                           pitch_type, color-codes all four metrics — velo vs avg_pitch_speed
+                                           season baseline, spin/V-Brk/H-Brk vs seasonBaselines from
+                                           pitcherSavantPitches), buildSeasonArsenalRows (maps
+                                           PitchArsenalItem[] + optional SavantBattedBall[] to
+                                           ColorCodedArsenalRow[]; Savant data fills spin/breaks that the
+                                           MLB arsenal endpoint omits), and buildSeasonBaselines (groups
+                                           SavantBattedBall[] by pitch_type into mean velo/spin/pfx_z/pfx_x).
+                                           Each row carries velo, spin, breakVertical and breakHorizontal
+                                           as ArsenalMetric {value, tone, delta}. Dead bands: velo 0.8 mph,
+                                           spin 50 rpm, break 1.0 in. Delta labels: velo "vs szn",
+                                           spin/breaks "vs L60" (Savant CSV is rolling 60-day window).
+                                           Export types: HandednessFilter, ArsenalMetric,
+                                           ColorCodedArsenalRow, SeasonBaseline. Imported by MatchupSubTab.
      Canvas/HeatMap.tsx                    HeatMap({ zones: HotColdZone[], size = 150 }). Draws a 3x3 hot/cold
                                            grid on canvas, colored via the local TEMP_COLORS map (hot/cold/warm/
                                             lukewarm). Imported by MatchupSubTab.

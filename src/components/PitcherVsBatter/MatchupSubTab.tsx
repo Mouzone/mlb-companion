@@ -24,6 +24,7 @@ import { derivePitcherGame } from '../LiveGame/PitcherGameModel'
 import {
   buildGameArsenalRows,
   buildSeasonArsenalRows,
+  buildSeasonBaselines,
   type HandednessFilter,
 } from './ArsenalColorCoding'
 import { benchmarkBatterCells, benchmarkPitcherCells } from './PvbBenchmarks'
@@ -195,6 +196,7 @@ export function MatchupSubTab(): ReactElement {
     batterHotCold,
     pitcherHotCold,
     pitchArsenal,
+    pitcherSavantPitches,
     vsPlayer,
     loading,
   } = usePlayerStats(batterId, pitcherId)
@@ -327,6 +329,11 @@ export function MatchupSubTab(): ReactElement {
     return buildBatterDisciplineCells(split)
   }, [globalScope, batterSeason, cohorts, liveFeed, currentPlay, batterId])
 
+  const seasonBaselines = useMemo(
+    () => buildSeasonBaselines(pitcherSavantPitches),
+    [pitcherSavantPitches],
+  )
+
   const arsenalRows = useMemo(() => {
     if (isGameScope) {
       if (liveFeed === null || pitcherId === null) {
@@ -338,10 +345,11 @@ export function MatchupSubTab(): ReactElement {
         liveFeed,
         pitcherId,
         handedness,
+        seasonBaselines,
       )
     }
-    return buildSeasonArsenalRows(pitchArsenal)
-  }, [isGameScope, gameFeedPitches, liveFeed, pitcherId, handedness, pitchArsenal])
+    return buildSeasonArsenalRows(pitchArsenal, pitcherSavantPitches)
+  }, [isGameScope, gameFeedPitches, liveFeed, pitcherId, handedness, pitchArsenal, pitcherSavantPitches, seasonBaselines])
 
   const arsenalTotalPitches = useMemo(() => {
     if (isGameScope) return arsenalRows.reduce((sum, row) => sum + row.count, 0)

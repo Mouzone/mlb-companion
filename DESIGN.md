@@ -327,12 +327,15 @@ The atom of the entire app.
 - Head row is `--fs-micro` 500 uppercase `--c-muted` over `1px solid var(--c-rule)`; body rows
   are separated by `--c-rule-soft` with the last row's border removed.
 - Values are `--fs-data` 600 with `font-variant-numeric: tabular-nums` so digits never reflow
-  between polls. A velocity delta renders beneath its value at `--fs-micro`, 0.72 opacity.
-- Only velocity is toned: `.arsenal-cc__metric--positive` / `--negative` recolour the value with
-  `--c-positive` / `--c-negative`. Spin and break carry no baseline to compare against, so they
-  stay in plain ink rather than implying a verdict.
-- Season scope leaves Spin, V-Brk and H-Brk empty — the MLB arsenal endpoint publishes only
-  usage and average speed, and an absent metric renders as an em dash rather than a zero.
+  between polls. A metric delta renders beneath its value at `--fs-micro`, 0.72 opacity.
+- All four metrics are toned in game scope: `.arsenal-cc__metric--positive` / `--negative`
+  recolour the value with `--c-positive` / `--c-negative`. Velo delta reads "vs szn" (true
+  season baseline from `avg_pitch_speed` in the game feed); spin, V-Brk and H-Brk deltas read
+  "vs L60" because the Savant CSV search is capped to a rolling 60-day window in-season
+  (`RECENT_WINDOW_DAYS = 60`). Dead bands: velo 0.8 mph, spin 50 rpm, break 1.0 in.
+- Season scope fills Spin, V-Brk and H-Brk from the pitcher's Savant CSV data (grouped by
+  `pitch_type` via `buildSeasonBaselines`); usage and velo still come from the MLB arsenal
+  endpoint. No deltas in season scope.
 
 ### 5.8d `.log-more` — game-log expander
 - Full-width button beneath the Logs tab table, 44px minimum height so it clears §7's

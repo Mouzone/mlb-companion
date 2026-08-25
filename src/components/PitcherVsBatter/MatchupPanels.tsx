@@ -232,7 +232,7 @@ export function ArsenalFacedPanel({
     totalPitches > 0 ? `${scopeLabel} \u00b7 ${String(totalPitches)} pitches` : scopeLabel
 
   return (
-    <Panel title="Arsenal Faced" meta={meta}>
+    <Panel title="Arsenal" meta={meta}>
       {showHandednessToggle ? (
         <Segmented
           options={HANDEDNESS_OPTIONS}
@@ -241,7 +241,7 @@ export function ArsenalFacedPanel({
         />
       ) : null}
       {rows.length > 0 ? (
-        <div className="arsenal-cc" role="table" aria-label="Arsenal faced">
+        <div className="arsenal-cc" role="table" aria-label="Arsenal">
           <div className="arsenal-cc__head" role="row">
             <span role="columnheader">Pitch</span>
             <span role="columnheader">Use</span>
@@ -264,14 +264,23 @@ export function ArsenalFacedPanel({
                   <span className="arsenal-cc__delta">{row.velo.delta}</span>
                 )}
               </div>
-              <div className="arsenal-cc__metric" role="cell">
+              <div className={`arsenal-cc__metric ${metricToneClass(row.spin.tone)}`} role="cell">
                 <span className="arsenal-cc__value">{fixed(row.spin.value, 0)}</span>
+                {row.spin.delta === null ? null : (
+                  <span className="arsenal-cc__delta">{row.spin.delta}</span>
+                )}
               </div>
-              <div className="arsenal-cc__metric" role="cell">
+              <div className={`arsenal-cc__metric ${metricToneClass(row.breakVertical.tone)}`} role="cell">
                 <span className="arsenal-cc__value">{fixed(row.breakVertical.value, 1)}</span>
+                {row.breakVertical.delta === null ? null : (
+                  <span className="arsenal-cc__delta">{row.breakVertical.delta}</span>
+                )}
               </div>
-              <div className="arsenal-cc__metric" role="cell">
+              <div className={`arsenal-cc__metric ${metricToneClass(row.breakHorizontal.tone)}`} role="cell">
                 <span className="arsenal-cc__value">{fixed(row.breakHorizontal.value, 1)}</span>
+                {row.breakHorizontal.delta === null ? null : (
+                  <span className="arsenal-cc__delta">{row.breakHorizontal.delta}</span>
+                )}
               </div>
             </div>
           ))}
