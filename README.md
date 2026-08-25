@@ -136,9 +136,9 @@ src/
                                            battingSide: 'away'|'home' }. Imported by GameSelect.
      useStatBenchmarks.ts                  useStatBenchmarks(scope: BenchmarkScope) => { cohorts, loading }.
                                            Fetches ActiveBenchmarkCohorts for the current year on mount; the
-                                           cohort object is null until the first successful resolution. No longer
-                                           imported by any component after the stat-card removal; retained for
-                                           potential future use.
+                                           cohort object is null until the first successful resolution.
+                                           Imported by MatchupSubTab, which feeds the cohorts into
+                                           PvbBenchmarks to tone the season face-card cells.
     useLiveSlate.ts                       useLiveSlate(date) => { games, loading, refresh }. Adaptive schedule
                                            polling hook that replaces the one-shot fetchSchedule pattern in
                                            GameSelect. Uses recursive setTimeout (not setInterval) so cadence
@@ -206,7 +206,7 @@ src/
                                            cohort) => StatBenchmark | undefined. Computes the percentile
                                            rank of a value against a cohort array; returns undefined for
                                            null/non-finite values or empty cohorts. Imported by
-                                           PvbCards, Stat (UI).
+                                           PvbBenchmarks, Stat (UI).
 
   components/
     GameScreen.tsx                       Page-based game screen container. Renders MiniNav (sticky top) and
@@ -314,12 +314,24 @@ src/
                                            given a distinct shape as well as a hue, and CALL_TONE_LEGEND drives
                                             the labelled `.atbat__legend` key rendered on its own full-width row
                                             beneath the grid.
-     PitcherVsBatter/MatchupSubTab.tsx     Scope driven by gameStore.globalScope ('thisGame' | 'season',
-                                           default 'thisGame'), switched only by the MatchupHeader face-card
-                                           arrows (SCOPE_CYCLE wraps at both ends); there is no standalone
-                                           scope Segmented. Scope rewrites both face-card statlines -- game
-                                           scope uses derivePitcherLine/deriveBatterLine summaries from
-                                           liveFeed allPlays, season scope uses pitcherSeason/batterSeason.
+     PitcherVsBatter/MatchupSubTab.tsx     Scope driven by gameStore.globalScope ('thisGame' | 'inGame' |
+                                           'season', default 'thisGame'), switched only by the MatchupHeader
+                                           face-card arrows (SCOPE_CYCLE wraps at both ends); there is no
+                                           standalone scope Segmented. Scope rewrites both face-card sides as
+                                           a StatGrid of cells: thisGame gives 8 counting cells per side
+                                           (pitcher IP/P/BF/K/BB/H/HR/P-BF from derivePitcherGame, batter
+                                           PA/AB/H/HR/RBI/BB/K/Pitches from buildGameLine + splitPitches),
+                                           inGame gives 9 rate cells per side (pitcher Command
+                                           Strike%/CSW%/Whiff%/1st-P Str/Zone%/Chase%/Called/SwStr/In Play,
+                                           batter Plate Discipline
+                                           Swing%/Whiff%/Chase%/Zone%/Taken%/Called/SwStr/Foul/In Play), and
+                                           season gives 8 benchmark-toned cells per side from
+                                           pitcherSeasonCells/batterSeasonCells enriched by
+                                           benchmarkPitcherCells/benchmarkBatterCells with cohorts from
+                                           useStatBenchmarks('season'). When the underlying data is missing the
+                                           cell array is empty and Side falls back to the one-line summary from
+                                           derivePitcherLine/deriveBatterLine. isGameScope (thisGame or inGame)
+                                           drives H2H and arsenal, since both game scopes read live data.
                                            This-game H2H derived from liveFeed allPlays via
                                            deriveThisGameH2H; season via vsPlayer from
                                             usePlayerStats. Unified perspective toggle
@@ -587,7 +599,9 @@ main.tsx
           section#ab       -> LiveAtBat -> StatusStrip, MatchupCard,
                                            AtBatPanel -> ZonePlot (pitcher view),
                                            LastPitchStrip, ContactStrip
-           section#matchup  -> MatchupSubTab -> MatchupHeader (scope arrows),
+           section#matchup  -> MatchupSubTab -> MatchupHeader (scope arrows;
+                                             each Side renders a StatGrid of
+                                             8/9/8 cells per scope),
                                            H2HPanel,
                                            Segmented (unified Pitcher|Batter),
                                            ZonePanel -> HeatMap,
@@ -611,7 +625,7 @@ main.tsx
 
 ```ts
 type ActiveTab = 'ab' | 'matchup' | 'game' | 'logs'
-type GlobalScope = 'thisGame' | 'season'
+type GlobalScope = 'thisGame' | 'inGame' | 'season'
 type MatchupPerspective = 'pitcher' | 'batter'
 
 interface GameState {
@@ -644,7 +658,7 @@ Actions and when each is dispatched:
 - `setTimecode(tc)` — called by `useLiveFeed`'s poll loop with the `metaData.timeStamp` of the folded diffPatch result.
 - `setPolling(polling)` — called by `useLiveFeed` around its live-feed initialization (`true` at start, `false` in the `finally` block).
 - `setActiveTab(tab)` — called by the `MiniNav` buttons in `GameScreen`. This is a mount switch: exactly one section (`ab`, `matchup`, `game`, or `logs`) is rendered at a time; the others are unmounted.
-- `setGlobalScope(scope)` — the single This Game / Season switch that drives the scoped sections. In `MatchupSubTab` it is written only by the `MatchupHeader` face-card arrows, which step through `SCOPE_CYCLE` (`['thisGame', 'season']`) and wrap at both ends; the scope rewrites both face-card statlines as well as the H2H panel.
+- `setGlobalScope(scope)` — the single scope switch that drives the scoped sections. In `MatchupSubTab` it is written only by the `MatchupHeader` face-card arrows, which step through `SCOPE_CYCLE` (`['thisGame', 'inGame', 'season']`) and wrap at both ends. The scope rewrites both face-card cell grids (8 counting cells, 9 in-game rate cells, 8 benchmark-toned season cells) as well as the H2H panel and the arsenal. `SCOPE_LABELS` deliberately leaves `inGame` unlabelled, since it is still in-game data like `thisGame`.
 - `setMatchupPerspective(perspective)` — shared by the Matchup tab (zone grid + splits table) and the Logs tab: it swaps whether all three show the pitcher's or the batter's data. In Matchup it controls which HotCold array feeds ZonePanel/HeatMap and which side's rows appear in the Splits table (Season / vs L / vs R / RISP / Home / Away). In Logs it controls which side's season game log renders.
 - `setRecentFormGames(games)` — declared but currently unused; the Recent Form panel was removed in the single-scroll redesign. Kept in the store for potential re-introduction.
 - `setGameFeedPitches(pitches)` — called by `App.tsx`'s Savant game-feed effect on every `gamePk` change (success sets the rows, failure sets `[]`).

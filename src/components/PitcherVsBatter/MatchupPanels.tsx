@@ -4,6 +4,7 @@ import { parseStat } from '../../utils/sabermetrics'
 import type { DataTableColumn, DataTableRow, SegmentedOption, StatTone } from '../ui'
 import { EmptyPanel, PlayerAvatar, Segmented, Stat, StatGrid } from '../ui'
 import type { ColorCodedArsenalRow, HandednessFilter } from './ArsenalColorCoding'
+import type { Cell } from './PvbCards'
 import { extraStat, extraText } from './PvbCards'
 import { Panel, SkeletonRows } from './PvbPanels'
 import { compareTo, fixed, percent, rate3, rateText, whole } from './PvbShared'
@@ -58,16 +59,37 @@ export interface MatchupSide {
   readonly name: string
   readonly role: string
   readonly line: string
+  /**
+   * The scope's stat grid. When present it replaces the one-line summary, so a
+   * scope that has numbers to show states them rather than compressing them
+   * into a sentence.
+   */
+  readonly cells?: ReadonlyArray<Cell>
 }
 
 function Side({ side }: { readonly side: MatchupSide }): ReactElement {
+  const cells = side.cells ?? []
   return (
     <div className="matchup-head__side">
       <PlayerAvatar personId={side.personId} name={side.name} size="lg" />
       <div className="matchup-head__ident">
         <span className="pvb-name">{side.name}</span>
         <span className="pvb-strap">{side.role}</span>
-        <span className="matchup-head__line">{side.line}</span>
+        {cells.length > 0 ? (
+          <StatGrid className="matchup-head__stats" minColumnWidth={56}>
+            {cells.map((cell) => (
+              <Stat
+                key={cell.label}
+                label={cell.label}
+                value={cell.value}
+                tone={cell.tone}
+                benchmark={cell.benchmark}
+              />
+            ))}
+          </StatGrid>
+        ) : (
+          <span className="matchup-head__line">{side.line}</span>
+        )}
       </div>
     </div>
   )

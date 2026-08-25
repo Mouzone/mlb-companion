@@ -303,9 +303,18 @@ The atom of the entire app.
 - Label `--fs-label` 600; selected `--c-ink`, unselected `--c-ink-muted`.
 
 ### 5.8b Matchup face-card scope arrows
-- The Matchup tab does **not** use `Segmented` for This Game / Season. The face card
+- The Matchup tab does **not** use `Segmented` for its scope cycle. The face card
   (`.matchup-head`) carries its own scope row (`.matchup-head__scope`): a `‹` button, the
   current scope label, and a `›` button, spread with `justify-content: space-between`.
+- The cycle has three stops — This Game, an unlabelled in-game rate view, and Season. The
+  middle stop is deliberately unlabelled because it is still in-game data; a second label
+  would imply a different time span.
+- Each side of the card renders its stats as a `StatGrid` (`.matchup-head__stats`,
+  `minColumnWidth={56}`) so the 8/9/8 cells per scope wrap into an even block. The grid sits
+  `--sp-1` below the identity strap and replaces the single-line `.matchup-head__line`
+  summary, which remains as the fallback whenever the underlying data has not arrived.
+- Season cells carry percentile badges from `Stat`'s `benchmark` prop; the game scopes do not,
+  because a single game is too small a sample to rank.
 - Buttons are 32×32 (touch-safe), `--c-surface-sunken` on `1px solid var(--c-border)`,
   `--radius-sm`; hover swaps to `--c-surface-hover` and `--c-ink`.
 - Label is `--fs-label` 600, `--c-ink-secondary`, uppercase with `--tracking-caps`.

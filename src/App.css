@@ -1674,6 +1674,10 @@ button:focus-visible,
   min-width: 0;
 }
 
+.matchup-head__stats {
+  margin-top: var(--sp-1);
+}
+
 .matchup-head__line {
   min-width: 0;
   overflow: hidden;

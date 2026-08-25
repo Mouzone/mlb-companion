@@ -1,22 +1,34 @@
 import { useEffect, useMemo, useState, type ReactElement } from 'react'
+import type { PitcherRole } from '../../api/benchmarks'
 import { fetchCachedGameLog } from '../../api/playerStatsCache'
-import type { GameLogEntry, StatSplit, VsPlayerStat } from '../../api/types'
+import type { GameLogEntry, PitcherSeasonStat, StatSplit, VsPlayerStat } from '../../api/types'
 import { usePlayerStats } from '../../hooks/usePlayerStats'
+import { useStatBenchmarks } from '../../hooks/useStatBenchmarks'
 import { useGameStore } from '../../store/gameStore'
+import { PARK_FACTORS } from '../../utils/leagueConstants'
 import { derivePitcher } from '../../utils/derivePitcher'
 import { parseStat } from '../../utils/sabermetrics'
-import type { DataTableRow, SegmentedOption } from '../ui'
+import type { DataTableRow, SegmentedOption, StatTone } from '../ui'
 import { Segmented } from '../ui'
 import {
   deriveBatterLine,
   derivePitcherLine,
   deriveThisGameH2H,
 } from '../LiveAtBat/liveAtBatData'
+import type { GameLine } from '../LiveGame/BatterGameModel'
+import { buildGameLine } from '../LiveGame/BatterGameModel'
+import type { PitchSplit } from '../LiveGame/GameSubTabShared'
+import { fixed, inningsPitched, percent, pitchesOf, rateOf, splitPitches } from '../LiveGame/GameSubTabShared'
+import type { PitcherGame } from '../LiveGame/PitcherGameModel'
+import { derivePitcherGame } from '../LiveGame/PitcherGameModel'
 import {
   buildGameArsenalRows,
   buildSeasonArsenalRows,
   type HandednessFilter,
 } from './ArsenalColorCoding'
+import { benchmarkBatterCells, benchmarkPitcherCells } from './PvbBenchmarks'
+import type { Cell } from './PvbCards'
+import { batterSeasonCells, pitcherSeasonCells } from './PvbCards'
 import type { MatchupSide } from './MatchupPanels'
 import {
   ArsenalFacedPanel,
@@ -29,10 +41,11 @@ import { TablePanel, ZonePanel } from './PvbPanels'
 import { rateText, splitCode } from './PvbShared'
 
 /** The order the face-card arrows step through; wraps at both ends. */
-const SCOPE_CYCLE = ['thisGame', 'season'] as const
+const SCOPE_CYCLE = ['thisGame', 'inGame', 'season'] as const
 
 const SCOPE_LABELS: Record<(typeof SCOPE_CYCLE)[number], string> = {
   thisGame: 'This Game',
+  inGame: '',
   season: 'Season',
 }
 
@@ -50,6 +63,70 @@ function findSplit(splits: readonly StatSplit[], code: string): StatSplit | null
 function effectiveSide(batSide: 'L' | 'R' | 'S', pitchHand: 'L' | 'R'): 'L' | 'R' {
   if (batSide === 'S') return pitchHand === 'L' ? 'R' : 'L'
   return batSide
+}
+
+function resolvePitcherRole(stat: PitcherSeasonStat): PitcherRole {
+  const starts = stat.gamesStarted ?? 0
+  const appearances = stat.gamesPitched ?? stat.gamesPlayed
+  return starts > 0 && starts >= appearances / 2 ? 'starter' : 'reliever'
+}
+
+function buildPitcherGameCells(game: PitcherGame): Cell[] {
+  const perBatter = game.battersFaced === 0 ? null : game.split.total / game.battersFaced
+  return [
+    { label: 'IP', value: inningsPitched(game.outs) },
+    { label: 'P', value: fixed(game.split.total, 0) },
+    { label: 'BF', value: fixed(game.battersFaced, 0) },
+    { label: 'K', value: fixed(game.strikeouts, 0) },
+    { label: 'BB', value: fixed(game.walks, 0) },
+    { label: 'H', value: fixed(game.hits, 0) },
+    { label: 'HR', value: fixed(game.homeRuns, 0) },
+    { label: 'P/BF', value: fixed(perBatter, 1) },
+  ]
+}
+
+function buildPitcherCommandCells(game: PitcherGame): Cell[] {
+  const { split } = game
+  const strikePct = rateOf(split.strikes, split.total)
+  const strikeTone: StatTone = strikePct !== null && strikePct >= 60 ? 'positive' : 'default'
+  return [
+    { label: 'Strike%', value: percent(strikePct), tone: strikeTone },
+    { label: 'CSW%', value: percent(rateOf(split.called + split.whiffs, split.total)) },
+    { label: 'Whiff%', value: percent(rateOf(split.whiffs, split.swings)) },
+    { label: '1st-P Str', value: percent(rateOf(game.firstPitchStrikes, game.startedPlateAppearances)) },
+    { label: 'Zone%', value: percent(rateOf(split.inZone, split.zoned)) },
+    { label: 'Chase%', value: percent(rateOf(split.chases, split.outOfZone)) },
+    { label: 'Called', value: fixed(split.called, 0) },
+    { label: 'SwStr', value: fixed(split.whiffs, 0) },
+    { label: 'In Play', value: fixed(split.inPlay, 0) },
+  ]
+}
+
+function buildBatterGameCells(line: GameLine, pitchCount: number): Cell[] {
+  return [
+    { label: 'PA', value: fixed(line.plateAppearances, 0) },
+    { label: 'AB', value: fixed(line.atBats, 0) },
+    { label: 'H', value: fixed(line.hits, 0) },
+    { label: 'HR', value: fixed(line.homeRuns, 0) },
+    { label: 'RBI', value: fixed(line.rbi, 0) },
+    { label: 'BB', value: fixed(line.walks, 0) },
+    { label: 'K', value: fixed(line.strikeouts, 0) },
+    { label: 'Pitches', value: fixed(pitchCount, 0) },
+  ]
+}
+
+function buildBatterDisciplineCells(split: PitchSplit): Cell[] {
+  return [
+    { label: 'Swing%', value: percent(rateOf(split.swings, split.total)) },
+    { label: 'Whiff%', value: percent(rateOf(split.whiffs, split.swings)) },
+    { label: 'Chase%', value: percent(rateOf(split.chases, split.outOfZone)) },
+    { label: 'Zone%', value: percent(rateOf(split.inZone, split.zoned)) },
+    { label: 'Taken%', value: percent(rateOf(split.called, split.total - split.swings)) },
+    { label: 'Called', value: fixed(split.called, 0) },
+    { label: 'SwStr', value: fixed(split.whiffs, 0) },
+    { label: 'Foul', value: fixed(split.fouls, 0) },
+    { label: 'In Play', value: fixed(split.inPlay, 0) },
+  ]
 }
 
 /**
@@ -121,6 +198,10 @@ export function MatchupSubTab(): ReactElement {
     vsPlayer,
     loading,
   } = usePlayerStats(batterId, pitcherId)
+
+  const { cohorts } = useStatBenchmarks('season')
+
+  const parkFactor = PARK_FACTORS[selectedGame?.teams.home.team.abbreviation ?? ''] ?? 1
 
   const [handedness, setHandedness] = useState<HandednessFilter>('all')
   const [pitcherLog, setPitcherLog] = useState<GameLogEntry[]>([])
@@ -208,10 +289,46 @@ export function MatchupSubTab(): ReactElement {
     return { pitcher: derivePitcherLine(plays, currentPlay).summary, batter: line }
   }, [liveFeed, currentPlay, batterId])
 
-  const isGame = globalScope === 'thisGame'
+  const isGameScope = globalScope === 'thisGame' || globalScope === 'inGame'
+
+  const pitcherCells = useMemo<Cell[]>(() => {
+    if (globalScope === 'season') {
+      if (pitcherSeason === null) return []
+      const cells = pitcherSeasonCells(pitcherSeason, parkFactor)
+      if (cohorts === null) return cells
+      const role = resolvePitcherRole(pitcherSeason)
+      const cohort = role === 'starter' ? cohorts.starters : cohorts.relievers
+      return benchmarkPitcherCells(cells, pitcherSeason, { scope: 'season', role, cohort })
+    }
+    if (liveFeed === null || currentPlay === null) return []
+    const game = derivePitcherGame(liveFeed.liveData.plays.allPlays, currentPlay)
+    return globalScope === 'thisGame'
+      ? buildPitcherGameCells(game)
+      : buildPitcherCommandCells(game)
+  }, [globalScope, pitcherSeason, parkFactor, cohorts, liveFeed, currentPlay])
+
+  const batterCells = useMemo<Cell[]>(() => {
+    if (globalScope === 'season') {
+      if (batterSeason === null) return []
+      const cells = batterSeasonCells(batterSeason)
+      if (cohorts === null) return cells
+      return benchmarkBatterCells(cells, batterSeason, { scope: 'season', cohort: cohorts.batters })
+    }
+    if (liveFeed === null || currentPlay === null || batterId === null) return []
+    const plays = liveFeed.liveData.plays.allPlays
+    const batterPlays = plays.filter((play) => play.matchup.batter.id === batterId)
+    if (globalScope === 'thisGame') {
+      const completed = batterPlays.filter((play) => play.result.event !== '')
+      const line = buildGameLine(completed)
+      const pitchCount = splitPitches(pitchesOf(batterPlays)).total
+      return buildBatterGameCells(line, pitchCount)
+    }
+    const split = splitPitches(pitchesOf(batterPlays))
+    return buildBatterDisciplineCells(split)
+  }, [globalScope, batterSeason, cohorts, liveFeed, currentPlay, batterId])
 
   const arsenalRows = useMemo(() => {
-    if (isGame) {
+    if (isGameScope) {
       if (liveFeed === null || pitcherId === null) {
         return [] as ReturnType<typeof buildGameArsenalRows>
       }
@@ -224,14 +341,14 @@ export function MatchupSubTab(): ReactElement {
       )
     }
     return buildSeasonArsenalRows(pitchArsenal)
-  }, [isGame, gameFeedPitches, liveFeed, pitcherId, handedness, pitchArsenal])
+  }, [isGameScope, gameFeedPitches, liveFeed, pitcherId, handedness, pitchArsenal])
 
   const arsenalTotalPitches = useMemo(() => {
-    if (isGame) return arsenalRows.reduce((sum, row) => sum + row.count, 0)
+    if (isGameScope) return arsenalRows.reduce((sum, row) => sum + row.count, 0)
     return pitchArsenal[0]?.totalPitches ?? 0
-  }, [isGame, arsenalRows, pitchArsenal])
+  }, [isGameScope, arsenalRows, pitchArsenal])
 
-  const pitcherLine = isGame
+  const pitcherLine = isGameScope
     ? gameLines.pitcher === ''
       ? 'No pitches thrown yet'
       : gameLines.pitcher
@@ -239,7 +356,7 @@ export function MatchupSubTab(): ReactElement {
       ? 'No season line published'
       : `${rateText(pitcherSeason.era)} ERA \u00b7 ${rateText(pitcherSeason.whip)} WHIP \u00b7 ${pitcherSeason.inningsPitched} IP`
 
-  const batterLine = isGame
+  const batterLine = isGameScope
     ? gameLines.batter === ''
       ? 'No plate appearances yet'
       : gameLines.batter
@@ -250,15 +367,17 @@ export function MatchupSubTab(): ReactElement {
   const pitcherSide: MatchupSide = {
     personId: pitcherId ?? 0,
     name: pitcher?.fullName ?? 'Pitcher TBD',
-    role: isGame ? `${hand}HP \u00b7 This Game` : `${hand}HP \u00b7 ${SEASON}`,
+    role: isGameScope ? `${hand}HP \u00b7 This Game` : `${hand}HP \u00b7 ${SEASON}`,
     line: pitcherLine,
+    cells: pitcherCells,
   }
 
   const batterSide: MatchupSide = {
     personId: batterId ?? 0,
     name: batter?.fullName ?? 'Batter TBD',
-    role: isGame ? `${side}HB \u00b7 This Game` : `${side}HB \u00b7 ${SEASON}`,
+    role: isGameScope ? `${side}HB \u00b7 This Game` : `${side}HB \u00b7 ${SEASON}`,
     line: batterLine,
+    cells: batterCells,
   }
 
   const cycleScope = (direction: -1 | 1): void => {
@@ -274,10 +393,10 @@ export function MatchupSubTab(): ReactElement {
     return deriveThisGameH2H(liveFeed.liveData.plays.allPlays, batterId, pitcherId)
   }, [liveFeed, batterId, pitcherId])
 
-  const h2hStat = isGame ? thisGameH2H : vsPlayer
-  const h2hTitle = isGame ? 'This Game H2H' : 'Season H2H'
-  const h2hEmpty = isGame ? 'No meetings in this game yet' : 'No meetings this season'
-  const h2hHint = isGame
+  const h2hStat = isGameScope ? thisGameH2H : vsPlayer
+  const h2hTitle = isGameScope ? 'This Game H2H' : 'Season H2H'
+  const h2hEmpty = isGameScope ? 'No meetings in this game yet' : 'No meetings this season'
+  const h2hHint = isGameScope
     ? 'H2H updates as the batter faces this pitcher.'
     : 'Season totals cover every meeting this year.'
 
@@ -335,7 +454,7 @@ export function MatchupSubTab(): ReactElement {
         rows={arsenalRows}
         loading={loading}
         scopeLabel={SCOPE_LABELS[globalScope]}
-        showHandednessToggle={isGame}
+        showHandednessToggle={isGameScope}
         handedness={handedness}
         onHandednessChange={setHandedness}
         totalPitches={arsenalTotalPitches}

@@ -86,7 +86,6 @@ export function pitcherSeasonCells(stat: PitcherSeasonStat, parkFactor: number):
     { label: 'BB%', value: percent(computeBBpct(stat.baseOnBalls, battersFaced)) },
     { label: 'HR/9', value: fixed(computeHR9(stat.homeRuns, innings), 2) },
     { label: 'Opp AVG', value: rateText(stat.avg) },
-    { label: 'SV', value: whole(extraStat(stat, 'saves')) },
   ]
 }
 
@@ -106,7 +105,6 @@ export function batterSeasonCells(stat: SeasonStat): Cell[] {
     { label: 'HR', value: whole(stat.homeRuns) },
     { label: 'K%', value: percent(computeKpct(stat.strikeOuts, stat.plateAppearances)) },
     { label: 'BB%', value: percent(computeBBpct(stat.baseOnBalls, stat.plateAppearances)) },
-    { label: 'BABIP', value: rateText(stat.babip) },
   ]
 }
 
