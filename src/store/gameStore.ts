@@ -4,8 +4,7 @@ import type { CurrentPitcher, CurrentBatter } from '../hooks/useLiveScores'
 
 type ActiveTab = 'ab' | 'matchup' | 'game' | 'logs'
 type GlobalScope = 'thisGame' | 'season'
-type ZonePerspective = 'pitcher' | 'batter'
-type SplitPerspective = 'pitcher' | 'batter'
+type MatchupPerspective = 'pitcher' | 'batter'
 
 interface GameState {
   selectedGame: ScheduledGame | null
@@ -16,8 +15,7 @@ interface GameState {
   isPolling: boolean
   activeTab: ActiveTab
   globalScope: GlobalScope
-  zonePerspective: ZonePerspective
-  splitPerspective: SplitPerspective
+  matchupPerspective: MatchupPerspective
   recentFormGames: number
   gameFeedPitches: SavantGamePitch[]
   error: string | null
@@ -33,8 +31,7 @@ interface GameState {
   setPolling: (polling: boolean) => void
   setActiveTab: (tab: ActiveTab) => void
   setGlobalScope: (scope: GlobalScope) => void
-  setZonePerspective: (perspective: ZonePerspective) => void
-  setSplitPerspective: (perspective: SplitPerspective) => void
+  setMatchupPerspective: (perspective: MatchupPerspective) => void
   setRecentFormGames: (games: number) => void
   setGameFeedPitches: (pitches: SavantGamePitch[]) => void
   setError: (err: string | null) => void
@@ -51,8 +48,7 @@ export const useGameStore = create<GameState>((set) => ({
   isPolling: false,
   activeTab: 'ab',
   globalScope: 'thisGame',
-  zonePerspective: 'pitcher',
-  splitPerspective: 'pitcher',
+  matchupPerspective: 'pitcher',
   recentFormGames: 7,
   gameFeedPitches: [],
   error: null,
@@ -70,12 +66,11 @@ export const useGameStore = create<GameState>((set) => ({
   setPolling: (polling) => set({ isPolling: polling }),
   setActiveTab: (tab) => set({ activeTab: tab }),
   setGlobalScope: (scope) => set({ globalScope: scope }),
-  setZonePerspective: (perspective) => set({ zonePerspective: perspective }),
-  setSplitPerspective: (perspective) => set({ splitPerspective: perspective }),
+  setMatchupPerspective: (perspective) => set({ matchupPerspective: perspective }),
   setRecentFormGames: (games) => set({ recentFormGames: games }),
   setGameFeedPitches: (pitches) => set({ gameFeedPitches: pitches }),
   setError: (err) => set({ error: err }),
   setLiveScoresCache: (scores, pitchers, batters) =>
     set({ scoreCache: scores, pitcherCache: pitchers, batterCache: batters }),
-  reset: () => set({ selectedGame: null, gamePk: null, liveFeed: null, currentPlay: null, lastTimecode: null, isPolling: false, activeTab: 'ab', globalScope: 'thisGame', zonePerspective: 'pitcher', splitPerspective: 'pitcher', gameFeedPitches: [], error: null }),
+  reset: () => set({ selectedGame: null, gamePk: null, liveFeed: null, currentPlay: null, lastTimecode: null, isPolling: false, activeTab: 'ab', globalScope: 'thisGame', matchupPerspective: 'pitcher', gameFeedPitches: [], error: null }),
 }))

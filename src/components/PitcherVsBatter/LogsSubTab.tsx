@@ -108,8 +108,8 @@ export function LogsSubTab(): ReactElement {
   const selectedGame = useGameStore((s) => s.selectedGame)
   const currentPlay = useGameStore((s) => s.currentPlay)
   const liveFeed = useGameStore((s) => s.liveFeed)
-  const splitPerspective = useGameStore((s) => s.splitPerspective)
-  const setSplitPerspective = useGameStore((s) => s.setSplitPerspective)
+  const matchupPerspective = useGameStore((s) => s.matchupPerspective)
+  const setMatchupPerspective = useGameStore((s) => s.setMatchupPerspective)
 
   const matchup = currentPlay?.matchup ?? null
   const batter = matchup?.batter ?? null
@@ -122,7 +122,7 @@ export function LogsSubTab(): ReactElement {
 
   const [expanded, setExpanded] = useState(false)
 
-  const isPitcher = splitPerspective === 'pitcher'
+  const isPitcher = matchupPerspective === 'pitcher'
   const source = isPitcher ? pitcherLog : batterLog
   const person = isPitcher ? pitcher : batter
 
@@ -138,9 +138,9 @@ export function LogsSubTab(): ReactElement {
   const perspective = (
     <Segmented
       options={PERSPECTIVE_OPTIONS}
-      activeId={splitPerspective}
+      activeId={matchupPerspective}
       onSelect={(id) => {
-        setSplitPerspective(id as 'pitcher' | 'batter')
+        setMatchupPerspective(id as 'pitcher' | 'batter')
         setExpanded(false)
       }}
     />

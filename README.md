@@ -322,19 +322,19 @@ src/
                                            liveFeed allPlays, season scope uses pitcherSeason/batterSeason.
                                            This-game H2H derived from liveFeed allPlays via
                                            deriveThisGameH2H; season via vsPlayer from
-                                           usePlayerStats. Zone toggle
-                                            (gameStore.zonePerspective 'pitcher'|'batter') swaps which HotCold
-                                            array feeds ZonePanel/HeatMap (always pitcher-perspective orientation).
-                                            Render order: MatchupHeader, zone Segmented + ZonePanel, H2HPanel,
-                                            split Segmented + Splits table, ArsenalFacedPanel. Splits table is
-                                            one side at a time (gameStore.splitPerspective 'pitcher'|'batter')
+                                            usePlayerStats. Unified perspective toggle
+                                             (gameStore.matchupPerspective 'pitcher'|'batter') swaps which HotCold
+                                             array feeds ZonePanel/HeatMap (always pitcher-perspective orientation)
+                                             and which side's splits render. Render order: MatchupHeader, unified
+                                             Segmented + ZonePanel, H2HPanel, Splits table, ArsenalFacedPanel. Splits
+                                             table is one side at a time (gameStore.matchupPerspective 'pitcher'|'batter')
                                             with rows Season / vs L / vs R / RISP / Home / Away; Home and Away
                                             are aggregated locally from fetchCachedGameLog entries grouped by
                                             isHome, since neither is a published split. Arsenal follows
                                             globalScope via buildGameArsenalRows / buildSeasonArsenalRows.
                                             Imported by GameScreen.
     PitcherVsBatter/LogsSubTab.tsx        The Logs tab. Segmented (Pitcher|Batter) bound to
-                                           gameStore.splitPerspective picks which side's season game log
+                                            gameStore.matchupPerspective picks which side's season game log
                                            renders. Both logs are fetched directly through
                                            fetchCachedGameLog (pitching / hitting) rather than
                                            usePlayerStats, so the untruncated season is available here
@@ -611,9 +611,9 @@ main.tsx
 `src/store/gameStore.ts` exports a single zustand store, `useGameStore`, typed as `GameState`:
 
 ```ts
-type ScrollAnchor = 'ab' | 'matchup' | 'game' | 'pitching' | 'batting'
+type ActiveTab = 'ab' | 'matchup' | 'game' | 'logs'
 type GlobalScope = 'thisGame' | 'season'
-type ZonePerspective = 'pitcher' | 'batter'
+type MatchupPerspective = 'pitcher' | 'batter'
 
 interface GameState {
   selectedGame: ScheduledGame | null
@@ -624,8 +624,7 @@ interface GameState {
   isPolling: boolean
   activeTab: ActiveTab
   globalScope: GlobalScope
-  zonePerspective: ZonePerspective
-  splitPerspective: SplitPerspective
+  matchupPerspective: MatchupPerspective
   recentFormGames: number
   gameFeedPitches: SavantGamePitch[]
   error: string | null
@@ -636,7 +635,7 @@ interface GameState {
 }
 ```
 
-Defaults: `activeTab: 'ab'`, `globalScope: 'thisGame'`, `zonePerspective: 'pitcher'`, `splitPerspective: 'pitcher'`, `recentFormGames: 7`, `scoreCache`/`pitcherCache`/`batterCache` empty `Map`s, everything else `null`/`false`/`[]`.
+Defaults: `activeTab: 'ab'`, `globalScope: 'thisGame'`, `matchupPerspective: 'pitcher'`, `recentFormGames: 7`, `scoreCache`/`pitcherCache`/`batterCache` empty `Map`s, everything else `null`/`false`/`[]`.
 
 Actions and when each is dispatched:
 
@@ -647,13 +646,12 @@ Actions and when each is dispatched:
 - `setPolling(polling)` — called by `useLiveFeed` around its live-feed initialization (`true` at start, `false` in the `finally` block).
 - `setActiveTab(tab)` — called by the `MiniNav` buttons in `GameScreen`. This is a mount switch: exactly one section (`ab`, `matchup`, `game`, or `logs`) is rendered at a time; the others are unmounted.
 - `setGlobalScope(scope)` — the single This Game / Season switch that drives the scoped sections. In `MatchupSubTab` it is written only by the `MatchupHeader` face-card arrows, which step through `SCOPE_CYCLE` (`['thisGame', 'season']`) and wrap at both ends; the scope rewrites both face-card statlines as well as the H2H panel.
-- `setZonePerspective(perspective)` — swaps whether the Matchup zone shows the pitcher's or the batter's hot/cold grid.
-- `setSplitPerspective(perspective)` — shared by the Matchup Splits table and the Logs tab: it swaps whether both show the pitcher's or the batter's data (Season / vs L / vs R / RISP / Home / Away rows in Matchup, the season game log in Logs). Kept separate from `zonePerspective` so switching the heat map does not silently rewrite the table below it.
+- `setMatchupPerspective(perspective)` — shared by the Matchup tab (zone grid + splits table) and the Logs tab: it swaps whether all three show the pitcher's or the batter's data. In Matchup it controls which HotCold array feeds ZonePanel/HeatMap and which side's rows appear in the Splits table (Season / vs L / vs R / RISP / Home / Away). In Logs it controls which side's season game log renders.
 - `setRecentFormGames(games)` — declared but currently unused; the Recent Form panel was removed in the single-scroll redesign. Kept in the store for potential re-introduction.
 - `setGameFeedPitches(pitches)` — called by `App.tsx`'s Savant game-feed effect on every `gamePk` change (success sets the rows, failure sets `[]`).
 - `setError(err)` — called by `App.tsx`'s deep-link handler and by `useLiveFeed` on any fetch/poll failure.
 - `setLiveScoresCache(scores, pitchers, batters)` — called by `useLiveScores` after each successful Cloud Function poll. Persists the three `ReadonlyMap`s so that returning to `GameSelect` from a game detail screen shows cached scores instantly instead of dashes.
-- `reset()` — called from `FloatingGamesButton` (fixed bottom-left, rendered by `App.tsx`). Clears `selectedGame`, `gamePk`, `liveFeed`, `currentPlay`, `lastTimecode`, `isPolling`, `gameFeedPitches`, `error`, and returns `activeTab`, `globalScope`, `zonePerspective` and `splitPerspective` to their defaults, returning the app to `GameSelect`. Does **not** clear `scoreCache`/`pitcherCache`/`batterCache` so the slate repopulates instantly.
+- `reset()` — called from `FloatingGamesButton` (fixed bottom-left, rendered by `App.tsx`). Clears `selectedGame`, `gamePk`, `liveFeed`, `currentPlay`, `lastTimecode`, `isPolling`, `gameFeedPitches`, `error`, and returns `activeTab`, `globalScope`, `matchupPerspective` to their defaults, returning the app to `GameSelect`. Does **not** clear `scoreCache`/`pitcherCache`/`batterCache` so the slate repopulates instantly.
 
 Watchability scores are cached in `gameStore` via `scoreCache`/`pitcherCache`/`batterCache`. `useLiveScores` initializes its local state from these maps on mount and writes back to the store after each successful poll, so navigating between `GameSelect` and a game detail screen preserves scores without a re-fetch dash. `useLiveSlate` similarly owns its own `games`/`loading`/`refresh` state local to `GameSelect`, independent of the store — the store holds `selectedGame` (a snapshot of one game), not the full slate array, so slate refreshes do not clobber the selected game.
 

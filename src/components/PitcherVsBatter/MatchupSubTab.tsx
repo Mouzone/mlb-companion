@@ -36,12 +36,7 @@ const SCOPE_LABELS: Record<(typeof SCOPE_CYCLE)[number], string> = {
   season: 'Season',
 }
 
-const ZONE_OPTIONS: ReadonlyArray<SegmentedOption> = [
-  { id: 'pitcher', label: 'Pitcher' },
-  { id: 'batter', label: 'Batter' },
-]
-
-const SPLIT_OPTIONS: ReadonlyArray<SegmentedOption> = [
+const PERSPECTIVE_OPTIONS: ReadonlyArray<SegmentedOption> = [
   { id: 'pitcher', label: 'Pitcher' },
   { id: 'batter', label: 'Batter' },
 ]
@@ -106,10 +101,8 @@ export function MatchupSubTab(): ReactElement {
   const gameFeedPitches = useGameStore((s) => s.gameFeedPitches)
   const globalScope = useGameStore((s) => s.globalScope)
   const setGlobalScope = useGameStore((s) => s.setGlobalScope)
-  const zonePerspective = useGameStore((s) => s.zonePerspective)
-  const setZonePerspective = useGameStore((s) => s.setZonePerspective)
-  const splitPerspective = useGameStore((s) => s.splitPerspective)
-  const setSplitPerspective = useGameStore((s) => s.setSplitPerspective)
+  const matchupPerspective = useGameStore((s) => s.matchupPerspective)
+  const setMatchupPerspective = useGameStore((s) => s.setMatchupPerspective)
 
   const matchup = currentPlay?.matchup ?? null
   const pitcher = derivePitcher(currentPlay, liveFeed, selectedGame)
@@ -175,7 +168,7 @@ export function MatchupSubTab(): ReactElement {
   const side = effectiveSide(matchup?.batSide.code ?? 'R', hand)
 
   const splitRows = useMemo<DataTableRow[]>(() => {
-    const isPitcherView = splitPerspective === 'pitcher'
+    const isPitcherView = matchupPerspective === 'pitcher'
     const season = isPitcherView ? pitcherSeason : batterSeason
     const splits = isPitcherView ? pitcherSplits : batterSplits
     const log = isPitcherView ? pitcherLog : batterLog
@@ -198,7 +191,7 @@ export function MatchupSubTab(): ReactElement {
     if (away.length > 0) rows.push(splitRow('Away', aggregateLog(away)))
     return rows
   }, [
-    splitPerspective,
+    matchupPerspective,
     pitcherSeason,
     batterSeason,
     pitcherSplits,
@@ -288,10 +281,10 @@ export function MatchupSubTab(): ReactElement {
     ? 'H2H updates as the batter faces this pitcher.'
     : 'Season totals cover every meeting this year.'
 
-  const activeZones = zonePerspective === 'pitcher' ? pitcherHotCold : batterHotCold
-  const zoneTitle = zonePerspective === 'pitcher' ? 'Pitcher Zones' : 'Batter Zones'
+  const activeZones = matchupPerspective === 'pitcher' ? pitcherHotCold : batterHotCold
+  const zoneTitle = matchupPerspective === 'pitcher' ? 'Pitcher Zones' : 'Batter Zones'
   const zoneCaption =
-    zonePerspective === 'pitcher'
+    matchupPerspective === 'pitcher'
       ? 'Average allowed by zone \u00b7 pitcher perspective'
       : 'Batting average by zone \u00b7 pitcher perspective'
 
@@ -305,9 +298,9 @@ export function MatchupSubTab(): ReactElement {
       />
 
       <Segmented
-        options={ZONE_OPTIONS}
-        activeId={zonePerspective}
-        onSelect={(id) => { setZonePerspective(id as typeof zonePerspective) }}
+        options={PERSPECTIVE_OPTIONS}
+        activeId={matchupPerspective}
+        onSelect={(id) => { setMatchupPerspective(id as typeof matchupPerspective) }}
       />
       <ZonePanel
         title={zoneTitle}
@@ -327,11 +320,6 @@ export function MatchupSubTab(): ReactElement {
         emptyHint={h2hHint}
       />
 
-      <Segmented
-        options={SPLIT_OPTIONS}
-        activeId={splitPerspective}
-        onSelect={(id) => { setSplitPerspective(id as typeof splitPerspective) }}
-      />
       <TablePanel
         title="Splits"
         meta={SEASON}
