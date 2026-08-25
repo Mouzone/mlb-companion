@@ -1,33 +1,11 @@
 import type { ReactElement } from 'react'
 import { useGameStore } from '../../store/gameStore'
-import { ZonePlot } from '../Canvas/ZonePlot'
 import { EmptyPanel, Stat, StatGrid } from '../ui'
 import type { DataTableColumn, DataTableRow } from '../ui'
 import type { CurrentPlay } from '../../api/types'
-import {
-  PitchCode,
-  PitchShare,
-  fixed,
-  ordinal,
-  percent,
-  pitchesOf,
-  rateOf,
-  splitPitches,
-  trajectoryLabel,
-} from './GameSubTabShared'
-import { ChartFrame, GameIdentity, GamePanel, GameTablePanel } from './GameSubTabPanels'
-import { batSpeedFor, buildGameLine, buildMix } from './BatterGameModel'
-
-/** ZonePlot draws its legend inside the square once it is at least this wide. */
-const ZONE_SIZE = 172
-
-const MIX_COLUMNS: readonly DataTableColumn[] = [
-  { key: 'code', label: 'Pitch' },
-  { key: 'share', label: 'Seen', align: 'right' },
-  { key: 'count', label: '#', align: 'right' },
-  { key: 'velo', label: 'Velo', align: 'right' },
-  { key: 'whiff', label: 'Whiff', align: 'right' },
-]
+import { ordinal, percent, pitchesOf, rateOf, splitPitches } from './GameSubTabShared'
+import { GameIdentity, GamePanel, GameTablePanel } from './GameSubTabPanels'
+import { buildGameLine } from './BatterGameModel'
 
 const AT_BAT_COLUMNS: readonly DataTableColumn[] = [
   { key: 'inning', label: 'Inn' },
@@ -36,25 +14,9 @@ const AT_BAT_COLUMNS: readonly DataTableColumn[] = [
   { key: 'count', label: 'Count', align: 'right' },
 ]
 
-const CONTACT_COLUMNS: readonly DataTableColumn[] = [
-  { key: 'inning', label: 'Inn' },
-  { key: 'type', label: 'Type' },
-  { key: 'exit', label: 'EV', align: 'right' },
-  { key: 'angle', label: 'LA', align: 'right' },
-  { key: 'distance', label: 'Dist', align: 'right' },
-  { key: 'bat', label: 'Bat', align: 'right' },
-]
-
-/**
- * "Batter Game" section body. Renders as a fragment: GameScreen owns the
- * surrounding `.game-scroll`, the screen's only scroll owner. Every value is
- * derived from `liveFeed.liveData.plays.allPlays` plus the Savant rows already
- * in the store; this component issues no network requests.
- */
 export function BatterGameSubTab(): ReactElement {
   const liveFeed = useGameStore((s) => s.liveFeed)
   const currentPlay = useGameStore((s) => s.currentPlay)
-  const gameFeedPitches = useGameStore((s) => s.gameFeedPitches)
 
   const matchup = currentPlay?.matchup
   if (liveFeed === null || matchup === undefined) {
@@ -73,7 +35,6 @@ export function BatterGameSubTab(): ReactElement {
 
   const split = splitPitches(batterPitches)
   const line = buildGameLine(completedPlays)
-  const mix = buildMix(batterPitches)
 
   const swingPct = rateOf(split.swings, split.total)
   const whiffPct = rateOf(split.whiffs, split.swings)
@@ -81,40 +42,12 @@ export function BatterGameSubTab(): ReactElement {
   const zonePct = rateOf(split.inZone, split.zoned)
   const takenStrikePct = rateOf(split.called, split.total - split.swings)
 
-  const mixRows: readonly DataTableRow[] = mix.map((entry) => ({
-    code: <PitchCode code={entry.code} />,
-    share: <PitchShare code={entry.code} share={entry.share} />,
-    count: String(entry.count),
-    velo: fixed(entry.avgVelo, 1),
-    whiff: entry.swings === 0 ? null : percent(rateOf(entry.whiffs, entry.swings)),
-  }))
-
   const atBatRows: readonly DataTableRow[] = completedPlays.map((play) => ({
     inning: ordinal(play.about.inning),
     result: play.result.event,
     pitches: String(play.playEvents.filter((event) => event.isPitch).length),
     count: `${String(play.count.balls)}-${String(play.count.strikes)}`,
   }))
-
-  const contactRows: readonly DataTableRow[] = batterPlays.flatMap((play) => {
-    const contact = play.playEvents.find((event) => event.isPitch && event.hitData !== undefined)
-    const hit = contact?.hitData
-    if (contact === undefined || hit === undefined) return []
-    return [
-      {
-        inning: ordinal(play.about.inning),
-        type: trajectoryLabel(hit.trajectory),
-        exit: fixed(hit.launchSpeed, 1),
-        angle: fixed(hit.launchAngle, 0, '\u00b0'),
-        distance: fixed(hit.totalDistance, 0),
-        bat: fixed(batSpeedFor(contact, gameFeedPitches), 1),
-      },
-    ]
-  })
-
-  const zoneCaption =
-    `${String(split.called)} called · ${String(split.whiffs)} whiff · ` +
-    `${String(split.fouls)} foul · ${String(split.inPlay)} in play · ${String(split.balls)} ball`
 
   const lineText =
     line.plateAppearances === 0
@@ -165,15 +98,6 @@ export function BatterGameSubTab(): ReactElement {
       </GamePanel>
 
       <GameTablePanel
-        title="Pitch Mix"
-        meta={`${String(split.total)} seen`}
-        columns={MIX_COLUMNS}
-        rows={mixRows}
-        emptyMessage="No pitch types classified yet"
-        emptyHint="Gameday labels each pitch a moment after it is thrown."
-      />
-
-      <GameTablePanel
         title="At Bats"
         meta={`${String(line.hits)}-${String(line.atBats)}`}
         columns={AT_BAT_COLUMNS}
@@ -181,34 +105,6 @@ export function BatterGameSubTab(): ReactElement {
         emptyMessage="First plate appearance in progress"
         emptyHint="Completed at-bats are listed here as the game unfolds."
       />
-
-      <GameTablePanel
-        title="Batted Balls"
-        meta={`${String(contactRows.length)} in play`}
-        columns={CONTACT_COLUMNS}
-        rows={contactRows}
-        emptyMessage="No balls in play yet"
-        emptyHint="Exit velocity, launch angle and bat speed appear on contact."
-      />
-
-      <GamePanel
-        title="Pitches Seen"
-        meta={split.total === 0 ? undefined : `${String(split.total)} pitches`}
-      >
-        {split.total === 0 ? (
-          <EmptyPanel
-            message="No pitch locations yet"
-            hint="The zone fills in from the first pitch."
-          />
-        ) : (
-          <ChartFrame
-            label={`Strike-zone plot of every pitch seen by ${matchup.batter.fullName}, catcher view`}
-            caption={zoneCaption}
-          >
-            <ZonePlot pitches={batterPitches} size={ZONE_SIZE} />
-          </ChartFrame>
-        )}
-      </GamePanel>
     </>
   )
 }

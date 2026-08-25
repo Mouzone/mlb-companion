@@ -259,25 +259,21 @@ src/
     StatsGuide/statGlossary.ts            Typed, alphabetically sorted glossary data for standard, advanced,
                                            live, pitch-tracking, batted-ball, linescore, and Watchability metrics.
                                            Includes formulas where a displayed statistic is calculated.
-     LiveGame/LiveGameTab.tsx              Live Game tab wrapper. Exports LiveGameTab. Owns the `.tab-content`
-                                            flex root directly under the 48px `.tab-bar`; renders the 44px
-                                            `.sub-tab-nav` (At Bat / Pitcher / Batter) as a sibling above
-                                            `.sub-tab-panel`, which is the scroll owner and takes whatever height
-                                            is left over (no fixed budget -- see section 8). Calls useLiveFeed() for
-                                           its polling side effect. Dispatches to LiveAtBat, BatterGameSubTab, or
-                                           PitcherGameSubTab based on gameStore.liveSubTab. Imported by App.tsx.
-    LiveGame/BatterGameSubTab.tsx         "Batter" sub-tab. Derives everything from
-                                           liveFeed.liveData.plays.allPlays and gameStore.gameFeedPitches already
-                                           in the store; issues no network requests itself. Renders a pitch-type
-                                            tally + ZonePlot, a per-plate-appearance game log, and a batted-ball
-                                            list with joined bat speed. Declares no heights. Imported by
-                                           LiveGameTab.
-    LiveGame/PitcherGameSubTab.tsx        "Pitcher" sub-tab. Derives an in-game PitcherGame summary
-                                           (pitches, arsenal, strikes/balls, battersFaced, outs, by-inning pitch
-                                           counts, first-pitch-strike rate) purely from allPlays, bounded to
-                                           plays at or before the current at-bat index. Renders ArsenalBars +
-                                            ZonePlot, a workload stat grid + by-inning strip, and an efficiency
-                                            stat grid. Declares no heights. Imported by LiveGameTab.
+     LiveGame/BatterGameSubTab.tsx         "Batter" subsection of the `game` section in GameScreen.
+                                           Derives a plate-discipline summary and per-PA at-bat log purely
+                                           from liveFeed.liveData.plays.allPlays; issues no network requests.
+                                           Renders GameIdentity (PA/AB/H/HR/RBI/BB/K/Pitches), a Plate
+                                           Discipline StatGrid (Swing%/Whiff%/Chase%/Zone%/Taken%/Called/
+                                           SwStr/Foul/In Play), and an At Bats DataTable. Declares no
+                                           heights. Imported by GameScreen.
+     LiveGame/PitcherGameSubTab.tsx        "Pitcher" subsection of the `game` section in GameScreen.
+                                           Derives an in-game PitcherGame summary (pitches, strikes/balls,
+                                           battersFaced, outs, first-pitch-strike rate) purely from
+                                           allPlays, bounded to plays at or before the current at-bat
+                                           index. Renders GameIdentity (IP/P/BF/K/BB/H/HR/P-BF) and a
+                                           Command StatGrid (Strike%/CSW%/Whiff%/1st-P Str/Zone%/Chase%/
+                                           Called/SwStr/In Play). Declares no heights. Imported by
+                                           GameScreen.
     LiveAtBat/LiveAtBat.tsx               The `ab` section of GameScreen (the top of the single-scroll game
                                            screen). Renders score + baserunner diamond + inning indicator,
                                            per-team linescore rows, batter-vs-pitcher matchup header, the
@@ -309,26 +305,9 @@ src/
                                            callTone() in liveAtBatFormat.ts maps Gameday `details.call.code`
                                            onto five tones (ball / called / swinging / foul / inplay), each
                                            given a distinct shape as well as a hue, and CALL_TONE_LEGEND drives
-                                           the labelled `.atbat__legend` key rendered on its own full-width row
-                                           beneath the grid.
-    PitcherVsBatter/PitcherVsBatter.tsx   Exports PitcherVsBatter (the Pitcher-vs-Batter tab root). Owns
-                                           `.tab-content`; renders the `.pvb-cards-wrap` card strip (pitcher
-                                           season, pitcher career, batter season, batter career -- horizontally
-                                           swipeable below 1024px, a two-column grid at or above it), the 44px
-                                           `.sub-tab-nav` (Matchup / Pitching / Batting), and `.pvb-panel`, which
-                                           is the scroll owner. Resolves the current pitcher via derivePitcher()
-                                           (utils/derivePitcher.ts), which prefers live feed data over scheduled
-                                           probables. Calls usePlayerStats(batterId, pitcherId) and
-                                           fetchCareerStats independently for pitcher and batter career rows.
-                                           Computes park-adjusted sabermetric cells for the swipe cards using
-                                           utils/sabermetrics.ts and utils/leagueConstants.ts. Also calls
-                                           useStatBenchmarks(scope) to load league-wide percentile cohorts,
-                                           passing them to benchmarkBatterCells / benchmarkPitcherCells
-                                           (PvbBenchmarks.ts, which calls percentileBenchmark) so each stat
-                                           card displays its percentile band and heat colour (see DESIGN.md
-                                           §2.3 + §5). Dispatches to
-                                           MatchupSubTab, PitchingSubTab, or BattingSubTab based on
-                                           gameStore.activeSubTab. Imported by App.tsx.
+                                            the labelled `.atbat__legend` key rendered on its own full-width row
+                                            beneath the grid.
+     PitcherVsBatter/PvbCard.tsx            Exports PvbCard (a swipeable stat card). Renders a player identity
      PitcherVsBatter/MatchupSubTab.tsx     H2H scope toggle driven by gameStore.globalScope ('thisGame' |
                                            'season' | 'career', default 'thisGame'). This-game H2H derived from
                                            liveFeed allPlays via deriveThisGameH2H; season via vsPlayer from
@@ -339,10 +318,10 @@ src/
     PitcherVsBatter/PitchingSubTab.tsx    Pitcher arsenal + hot/cold heatmap + situational splits (vs L / vs R /
                                            RISP) + recent-form aggregation (7/15/30-game spans from one cached
                                            season game log, so switching spans never refetches). Renders
-                                           ArsenalBars and HeatMap. Imported by PitcherVsBatter.
-    PitcherVsBatter/BattingSubTab.tsx     Batter hot/cold heatmap + spray chart + situational splits + recent
+                                           ArsenalBars and HeatMap. Imported by GameScreen.
+     PitcherVsBatter/BattingSubTab.tsx     Batter hot/cold heatmap + spray chart + situational splits + recent
                                            form, same span/caching pattern as PitchingSubTab. Renders HeatMap and
-                                           SprayChart. Imported by PitcherVsBatter.
+                                           SprayChart. Imported by GameScreen.
     Canvas/ArsenalBars.tsx                ArsenalBars({ arsenal: PitchArsenalItem[], width = 280 }). Draws a
                                            horizontal bar per pitch type via 2D canvas, colored with
                                            getPitchColor. Renders a bare <canvas> with NO className and NO CSS
@@ -359,8 +338,7 @@ src/
                                            strike zone with either a single pitch marker or every pitch in
                                            `pitches`, colored by call outcome (CALL_COLORS) or pitch type
                                            (PITCH_COLORS). Renders an internal legend once `size >=
-                                           LEGEND_MIN_SIZE` (172). Imported by LiveAtBat, BatterGameSubTab,
-                                           PitcherGameSubTab.
+                                           LEGEND_MIN_SIZE` (172). Imported by LiveAtBat.
 
   App.css                                 The app-shell layout system: app shell, tab bar, sub-tab nav,
                                            panels, the `.h-*` utility classes, PvB card strip, canvas wrappers,
@@ -494,10 +472,10 @@ Baseball Savant (baseballsavant   ──┘                            │
                                                                   │              (fires 10 parallel fetches per
                                                                   │               batter/pitcher pair)
                                                                   │
-                                                                  └─► components (LiveAtBat, BatterGameSubTab,
-                                                                       PitcherGameSubTab, MatchupSubTab,
-                                                                       PitchingSubTab, BattingSubTab,
-                                                                       PitcherVsBatter, GameSelect)
+                                                                   └─► components (LiveAtBat, BatterGameSubTab,
+                                                                        PitcherGameSubTab, MatchupSubTab,
+                                                                        PitchingSubTab, BattingSubTab,
+                                                                        GameSelect)
                                                                             │
                                                                             └─► Canvas renderers (ArsenalBars,
                                                                                  HeatMap, SprayChart, ZonePlot)
@@ -588,8 +566,9 @@ main.tsx
           section#matchup  -> MatchupSubTab -> MatchupHeader, H2HPanel,
                                            Segmented (scope + zone toggle),
                                            ZonePanel -> HeatMap (pitcher view)
-          section#game     -> PitcherGameSubTab -> ZonePlot
-                              BatterGameSubTab  -> ZonePlot
+          section#game     -> PitcherGameSubTab -> GameIdentity, Command panel
+                              BatterGameSubTab  -> GameIdentity, Plate Discipline,
+                                                  At Bats DataTable
           .pb-carousel (horizontal scroll-snap, one card per viewport)
             section#pitching -> PitchingSubTab -> ArsenalBars, HeatMap
             section#batting  -> BattingSubTab  -> HeatMap, SprayChart
@@ -728,11 +707,11 @@ The guard is deliberately **not** wired into `npm run build`: Vercel runs `tsc -
 
 **Updating league constants annually.** Edit `src/utils/leagueConstants.ts` before each new season: `LEAGUE_ERA`, `LEAGUE_WOBA`, `WOBA_SCALE`, `LEAGUE_R_PER_PA` (sourced from FanGraphs league stats) and the 30 `PARK_FACTORS` entries (sourced from ESPN park factors, full-season values — the sabermetrics functions halve them internally, do not pre-halve them here).
 
-**Adding a new stat.** 1) Add the field to the relevant interface in `src/api/types.ts` if the API response includes it but the type doesn't yet declare it. 2) If it needs a fetcher, add it to `src/api/mlb.ts` or `src/api/savant.ts` following the existing `fetch...` pattern (throw on `!res.ok`, return the parsed/narrowed shape). 3) If it needs computation, add a pure function to `src/utils/sabermetrics.ts` following the `isValidStat`/`roundStat` null-safety pattern used by the existing `compute*` functions. 4) Wire it into the consuming component's stat-cell array (e.g. `pitcherSeasonStats` in `PitcherVsBatter.tsx`, or the `StatCell` lists in `LiveAtBat.tsx`/`PitcherGameSubTab.tsx`).
+**Adding a new stat.** 1) Add the field to the relevant interface in `src/api/types.ts` if the API response includes it but the type doesn't yet declare it. 2) If it needs a fetcher, add it to `src/api/mlb.ts` or `src/api/savant.ts` following the existing `fetch...` pattern (throw on `!res.ok`, return the parsed/narrowed shape). 3) If it needs computation, add a pure function to `src/utils/sabermetrics.ts` following the `isValidStat`/`roundStat` null-safety pattern used by the existing `compute*` functions. 4) Wire it into the consuming component's stat-cell array (e.g. the `StatGrid` in `PitcherGameSubTab.tsx`, or the `Stat` cells in `LiveAtBat.tsx`).
 
 **Adding a new canvas component.** Follow the pattern in `src/components/Canvas/*.tsx`: a `useRef<HTMLCanvasElement>` plus a `useEffect` that gets the 2D context, scales for `window.devicePixelRatio`, and draws. Accept a `size`/`width`/`height` prop with a default. If the component does not set an explicit CSS height on its `<canvas>` (as `ArsenalBars` does not), add a descendant clamp in `App.css` following the `.arsenal-canvas > canvas { max-height: 186px }` pattern, or the canvas will render at its raw pixel height. Read colors from the chart theme, never as hex literals — the `no-canvas-hex` guard scans `src/components/Canvas/*.tsx`.
 
-**Adding a new sub-tab.** Add the id to the relevant union type in `gameStore.ts` (`LiveSubTab` or the `ActiveSubTab`/`SubTab` type used by `PitcherVsBatter.tsx`/`LiveGameTab.tsx`), add a descriptor to that file's `SUB_TABS` array, add a `case` to its `renderSubTab` switch, and add a new component file under the matching `src/components/<Tab>/` directory. Do not give the new component a height — the surrounding panel is the scroll owner and content sizes to content (see section 8). Run `npm run check:design` afterwards.
+**Adding a new section.** Add the id to the `scrollAnchor` union type in `gameStore.ts`, add a descriptor to the `NAV_ITEMS` array in `GameScreen.tsx`, add a `<section>` with a ref to the `.game-scroll` container, and add a new component file under `src/components/`. Do not give the new component a height — `.game-scroll` is the scroll owner and content sizes to content (see section 8). Run `npm run check:design` afterwards.
 
 ## 10. Build & Deploy
 
