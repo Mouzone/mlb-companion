@@ -82,11 +82,44 @@ function Side({ side }: { readonly side: MatchupSide }): ReactElement {
 export interface MatchupHeaderProps {
   readonly pitcher: MatchupSide
   readonly batter: MatchupSide
+  /** Label for the scope the statlines currently show, e.g. "This Game". */
+  readonly scopeLabel: string
+  /** Steps the scope one position back or forward through the cycle. */
+  readonly onCycleScope: (direction: -1 | 1) => void
 }
 
-export function MatchupHeader({ pitcher, batter }: MatchupHeaderProps): ReactElement {
+/**
+ * The arrows are the only scope switch on this screen: cycling them rewrites
+ * both statlines and every panel below, so the card states which scope it is
+ * showing rather than leaving the reader to infer it from the numbers.
+ */
+export function MatchupHeader({
+  pitcher,
+  batter,
+  scopeLabel,
+  onCycleScope,
+}: MatchupHeaderProps): ReactElement {
   return (
     <div className="matchup-head">
+      <div className="matchup-head__scope">
+        <button
+          type="button"
+          className="matchup-head__arrow"
+          onClick={() => { onCycleScope(-1) }}
+          aria-label="Previous scope"
+        >
+          &#8249;
+        </button>
+        <span className="matchup-head__scope-label">{scopeLabel}</span>
+        <button
+          type="button"
+          className="matchup-head__arrow"
+          onClick={() => { onCycleScope(1) }}
+          aria-label="Next scope"
+        >
+          &#8250;
+        </button>
+      </div>
       <Side side={pitcher} />
       <span className="matchup-head__vs">vs</span>
       <Side side={batter} />

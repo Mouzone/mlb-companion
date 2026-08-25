@@ -1695,6 +1695,44 @@ button:focus-visible,
   border-radius: var(--radius);
 }
 
+/* The scope switch sits inside the card because it governs the two statlines
+   directly beneath it — a detached control would read as page-level chrome. */
+.matchup-head__scope {
+  display: flex;
+  gap: var(--sp-2);
+  align-items: center;
+  justify-content: space-between;
+}
+
+.matchup-head__scope-label {
+  font-size: var(--fs-label);
+  font-weight: var(--fw-semibold);
+  color: var(--c-ink-secondary);
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+}
+
+.matchup-head__arrow {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  font-size: var(--fs-body);
+  color: var(--c-ink-secondary);
+  background: var(--c-surface-sunken);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.matchup-head__arrow:hover {
+  color: var(--c-ink);
+  background: var(--c-surface-hover);
+}
+
 .matchup-head__side {
   display: flex;
   gap: var(--sp-4);

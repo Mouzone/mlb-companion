@@ -307,6 +307,16 @@ The atom of the entire app.
 - Thumb: `--c-bg`, `--shadow-xs`, `--radius-pill`.
 - Label `--fs-label` 600; selected `--c-ink`, unselected `--c-ink-muted`.
 
+### 5.8b Matchup face-card scope arrows
+- The Matchup tab does **not** use `Segmented` for This Game / Season. The face card
+  (`.matchup-head`) carries its own scope row (`.matchup-head__scope`): a `‹` button, the
+  current scope label, and a `›` button, spread with `justify-content: space-between`.
+- Buttons are 32×32 (touch-safe), `--c-surface-sunken` on `1px solid var(--c-border)`,
+  `--radius-sm`; hover swaps to `--c-surface-hover` and `--c-ink`.
+- Label is `--fs-label` 600, `--c-ink-secondary`, uppercase with `--tracking-caps`.
+- The control lives *inside* the card because it rewrites the two statlines directly
+  beneath it; a detached control would read as page-level chrome.
+
 ### 5.8 `TeamLogo`
 - `<img>` from `teamLogoUrl(teamId, variant)`. White-first ⇒ always the `-on-light` variants.
 - Sizes: `sm` 24px (dense rows) · `md` 32px · `lg` 44px (card headers).

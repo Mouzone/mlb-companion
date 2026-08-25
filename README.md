@@ -316,9 +316,14 @@ src/
                                             the labelled `.atbat__legend` key rendered on its own full-width row
                                             beneath the grid.
      PitcherVsBatter/PvbCard.tsx            Exports PvbCard (a swipeable stat card). Renders a player identity
-     PitcherVsBatter/MatchupSubTab.tsx     H2H scope toggle driven by gameStore.globalScope ('thisGame' |
-                                           'season', default 'thisGame'). This-game H2H derived from
-                                           liveFeed allPlays via deriveThisGameH2H; season via vsPlayer from
+     PitcherVsBatter/MatchupSubTab.tsx     Scope driven by gameStore.globalScope ('thisGame' | 'season',
+                                           default 'thisGame'), switched only by the MatchupHeader face-card
+                                           arrows (SCOPE_CYCLE wraps at both ends); there is no standalone
+                                           scope Segmented. Scope rewrites both face-card statlines -- game
+                                           scope uses derivePitcherLine/deriveBatterLine summaries from
+                                           liveFeed allPlays, season scope uses pitcherSeason/batterSeason.
+                                           This-game H2H derived from liveFeed allPlays via
+                                           deriveThisGameH2H; season via vsPlayer from
                                            usePlayerStats. Zone toggle
                                            (gameStore.zonePerspective 'pitcher'|'batter') swaps which HotCold
                                            array feeds ZonePanel/HeatMap (always pitcher-perspective orientation).
@@ -586,8 +591,10 @@ main.tsx
           section#ab       -> LiveAtBat -> StatusStrip, MatchupCard,
                                            AtBatPanel -> ZonePlot (pitcher view),
                                            LastPitchStrip, ContactStrip
-          section#matchup  -> MatchupSubTab -> MatchupHeader, H2HPanel,
-                                           Segmented (scope + zone toggle),
+          section#matchup  -> MatchupSubTab -> MatchupHeader (scope arrows),
+                                           H2HPanel, TablePanel (Platoon Matchup),
+                                           ArsenalFacedPanel,
+                                           Segmented (zone toggle),
                                            ZonePanel -> HeatMap (pitcher view)
           section#game     -> PitcherGameSubTab -> GameIdentity, Command panel
                               BatterGameSubTab  -> GameIdentity, Plate Discipline,
@@ -640,7 +647,7 @@ Actions and when each is dispatched:
 - `setTimecode(tc)` — called by `useLiveFeed`'s poll loop with the `metaData.timeStamp` of the folded diffPatch result.
 - `setPolling(polling)` — called by `useLiveFeed` around its live-feed initialization (`true` at start, `false` in the `finally` block).
 - `setActiveTab(tab)` — called by the `MiniNav` buttons in `GameScreen`. This is a mount switch: exactly one section (`ab`, `matchup`, `game`, or `logs`) is rendered at a time; the others are unmounted.
-- `setGlobalScope(scope)` — the single This Game / Season switch that drives the scoped sections.
+- `setGlobalScope(scope)` — the single This Game / Season switch that drives the scoped sections. In `MatchupSubTab` it is written only by the `MatchupHeader` face-card arrows, which step through `SCOPE_CYCLE` (`['thisGame', 'season']`) and wrap at both ends; the scope rewrites both face-card statlines as well as the H2H panel.
 - `setZonePerspective(perspective)` — swaps whether the Matchup zone shows the pitcher's or the batter's hot/cold grid.
 - `setRecentFormGames(games)` — declared but currently unused; the Recent Form panel was removed from `PitchingSubTab` and `BattingSubTab` in the single-scroll redesign. Kept in the store for potential re-introduction.
 - `setGameFeedPitches(pitches)` — called by `App.tsx`'s Savant game-feed effect on every `gamePk` change (success sets the rows, failure sets `[]`).

@@ -6,7 +6,11 @@ import { derivePitcher } from '../../utils/derivePitcher'
 import { parseStat } from '../../utils/sabermetrics'
 import type { DataTableRow, SegmentedOption } from '../ui'
 import { Segmented } from '../ui'
-import { deriveThisGameH2H } from '../LiveAtBat/liveAtBatData'
+import {
+  deriveBatterLine,
+  derivePitcherLine,
+  deriveThisGameH2H,
+} from '../LiveAtBat/liveAtBatData'
 import type { MatchupSide } from './MatchupPanels'
 import {
   ArsenalFacedPanel,
@@ -18,10 +22,13 @@ import {
 import { TablePanel, ZonePanel } from './PvbPanels'
 import { rateText, splitCode } from './PvbShared'
 
-const SCOPES: ReadonlyArray<SegmentedOption> = [
-  { id: 'thisGame', label: 'This Game' },
-  { id: 'season', label: 'Season' },
-]
+/** The order the face-card arrows step through; wraps at both ends. */
+const SCOPE_CYCLE = ['thisGame', 'season'] as const
+
+const SCOPE_LABELS: Record<(typeof SCOPE_CYCLE)[number], string> = {
+  thisGame: 'This Game',
+  season: 'Season',
+}
 
 const ZONE_OPTIONS: ReadonlyArray<SegmentedOption> = [
   { id: 'pitcher', label: 'Pitcher' },
@@ -85,24 +92,50 @@ export function MatchupSubTab(): ReactElement {
     return rows
   }, [batterSplits, pitcherSplits, batterSeason, pitcherSeason, hand, side])
 
+  const gameLines = useMemo(() => {
+    if (liveFeed === null || currentPlay === null) return { pitcher: '', batter: '' }
+    const plays = liveFeed.liveData.plays.allPlays
+    const batterLine =
+      batterId === null ? '' : deriveBatterLine(plays, batterId, currentPlay.about.atBatIndex).summary
+    return { pitcher: derivePitcherLine(plays, currentPlay).summary, batter: batterLine }
+  }, [liveFeed, currentPlay, batterId])
+
+  const isGame = globalScope === 'thisGame'
+
+  const pitcherLine = isGame
+    ? gameLines.pitcher === ''
+      ? 'No pitches thrown yet'
+      : gameLines.pitcher
+    : pitcherSeason === null
+      ? 'No season line published'
+      : `${rateText(pitcherSeason.era)} ERA \u00b7 ${rateText(pitcherSeason.whip)} WHIP \u00b7 ${pitcherSeason.inningsPitched} IP`
+
+  const batterLine = isGame
+    ? gameLines.batter === ''
+      ? 'No plate appearances yet'
+      : gameLines.batter
+    : batterSeason === null
+      ? 'No season line published'
+      : `${rateText(batterSeason.avg)} AVG \u00b7 ${rateText(batterSeason.ops)} OPS \u00b7 ${String(batterSeason.homeRuns)} HR`
+
   const pitcherSide: MatchupSide = {
     personId: pitcherId ?? 0,
     name: pitcher?.fullName ?? 'Pitcher TBD',
-    role: `${hand}HP \u00b7 ${SEASON}`,
-    line:
-      pitcherSeason === null
-        ? 'No season line published'
-        : `${rateText(pitcherSeason.era)} ERA \u00b7 ${rateText(pitcherSeason.whip)} WHIP \u00b7 ${pitcherSeason.inningsPitched} IP`,
+    role: isGame ? `${hand}HP \u00b7 This Game` : `${hand}HP \u00b7 ${SEASON}`,
+    line: pitcherLine,
   }
 
   const batterSide: MatchupSide = {
     personId: batterId ?? 0,
     name: batter?.fullName ?? 'Batter TBD',
-    role: `${side}HB \u00b7 ${SEASON}`,
-    line:
-      batterSeason === null
-        ? 'No season line published'
-        : `${rateText(batterSeason.avg)} AVG \u00b7 ${rateText(batterSeason.ops)} OPS \u00b7 ${String(batterSeason.homeRuns)} HR`,
+    role: isGame ? `${side}HB \u00b7 This Game` : `${side}HB \u00b7 ${SEASON}`,
+    line: batterLine,
+  }
+
+  const cycleScope = (direction: -1 | 1): void => {
+    const at = SCOPE_CYCLE.indexOf(globalScope)
+    const next = (at + direction + SCOPE_CYCLE.length) % SCOPE_CYCLE.length
+    setGlobalScope(SCOPE_CYCLE[next])
   }
 
   const benchmarkAvg = parseStat(batterSeason?.avg ?? '')
@@ -131,12 +164,11 @@ export function MatchupSubTab(): ReactElement {
 
   return (
     <div>
-      <MatchupHeader pitcher={pitcherSide} batter={batterSide} />
-
-      <Segmented
-        options={SCOPES}
-        activeId={globalScope}
-        onSelect={(id) => setGlobalScope(id as typeof globalScope)}
+      <MatchupHeader
+        pitcher={pitcherSide}
+        batter={batterSide}
+        scopeLabel={SCOPE_LABELS[globalScope]}
+        onCycleScope={cycleScope}
       />
 
       <H2HPanel
