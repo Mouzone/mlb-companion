@@ -22,9 +22,12 @@ import { fixed, inningsPitched, percent, pitchesOf, rateOf, splitPitches } from 
 import type { PitcherGame } from '../LiveGame/PitcherGameModel'
 import { derivePitcherGame } from '../LiveGame/PitcherGameModel'
 import {
+  buildBatterGameArsenalRows,
+  buildFacedSeasonArsenalRows,
   buildGameArsenalRows,
   buildSeasonArsenalRows,
   buildSeasonBaselines,
+  type ColorCodedArsenalRow,
   type HandednessFilter,
 } from './ArsenalColorCoding'
 import { benchmarkBatterCells, benchmarkPitcherCells } from './PvbBenchmarks'
@@ -196,6 +199,7 @@ export function MatchupSubTab(): ReactElement {
     pitcherHotCold,
     pitchArsenal,
     pitcherSavantPitches,
+    batterSavantPitches,
     vsPlayer,
     loading,
   } = usePlayerStats(batterId, pitcherId)
@@ -334,11 +338,21 @@ export function MatchupSubTab(): ReactElement {
     [pitcherSavantPitches],
   )
 
+  // The batter's own Savant rows double as their arsenal-faced baselines.
+  const facedBaselines = useMemo(() => buildSeasonBaselines(batterSavantPitches), [batterSavantPitches])
+
+  const isBatterView = matchupPerspective === 'batter'
+
   const arsenalRows = useMemo(() => {
-    if (isGameScope) {
-      if (liveFeed === null || pitcherId === null) {
-        return [] as ReturnType<typeof buildGameArsenalRows>
+    if (isBatterView) {
+      if (isGameScope) {
+        if (batterId === null) return [] as ColorCodedArsenalRow[]
+        return buildBatterGameArsenalRows(gameFeedPitches, batterId, facedBaselines)
       }
+      return buildFacedSeasonArsenalRows(batterSavantPitches)
+    }
+    if (isGameScope) {
+      if (liveFeed === null || pitcherId === null) return [] as ColorCodedArsenalRow[]
       return buildGameArsenalRows(
         gameFeedPitches,
         liveFeed.liveData.plays.allPlays,
@@ -349,12 +363,29 @@ export function MatchupSubTab(): ReactElement {
       )
     }
     return buildSeasonArsenalRows(pitchArsenal, pitcherSavantPitches)
-  }, [isGameScope, gameFeedPitches, liveFeed, pitcherId, handedness, pitchArsenal, pitcherSavantPitches, seasonBaselines])
+  }, [
+    isBatterView,
+    isGameScope,
+    gameFeedPitches,
+    liveFeed,
+    pitcherId,
+    batterId,
+    handedness,
+    pitchArsenal,
+    pitcherSavantPitches,
+    batterSavantPitches,
+    seasonBaselines,
+    facedBaselines,
+  ])
 
   const arsenalTotalPitches = useMemo(() => {
-    if (isGameScope) return arsenalRows.reduce((sum, row) => sum + row.count, 0)
+    if (isGameScope || isBatterView) return arsenalRows.reduce((sum, row) => sum + row.count, 0)
     return pitchArsenal[0]?.totalPitches ?? 0
-  }, [isGameScope, arsenalRows, pitchArsenal])
+  }, [isGameScope, isBatterView, arsenalRows, pitchArsenal])
+
+  // Savant's search is capped to a rolling 60-day window in-season, so a
+  // batter's arsenal faced must name that window rather than claim a season.
+  const arsenalScopeLabel = isBatterView && !isGameScope ? 'Last 60 days' : SCOPE_LABELS[globalScope]
 
   const pitcherLine = isGameScope
     ? gameLines.pitcher === ''
@@ -461,8 +492,9 @@ export function MatchupSubTab(): ReactElement {
       <ArsenalFacedPanel
         rows={arsenalRows}
         loading={loading}
-        scopeLabel={SCOPE_LABELS[globalScope]}
-        showHandednessToggle={isGameScope}
+        title={isBatterView ? 'Arsenal Faced' : 'Arsenal'}
+        scopeLabel={arsenalScopeLabel}
+        showHandednessToggle={isGameScope && !isBatterView}
         handedness={handedness}
         onHandednessChange={setHandedness}
         totalPitches={arsenalTotalPitches}

@@ -221,6 +221,8 @@ function metricToneClass(tone: StatTone): string {
 export interface ArsenalFacedPanelProps {
   readonly rows: ReadonlyArray<ColorCodedArsenalRow>
   readonly loading: boolean
+  /** "Arsenal" from the pitcher's side, "Arsenal Faced" from the batter's. */
+  readonly title: string
   /** Names the scope the numbers describe, e.g. "This Game". */
   readonly scopeLabel: string
   /** Handedness only narrows a live game's pitches; a season line has no per-batter detail. */
@@ -238,6 +240,7 @@ export interface ArsenalFacedPanelProps {
 export function ArsenalFacedPanel({
   rows,
   loading,
+  title,
   scopeLabel,
   showHandednessToggle,
   handedness,
@@ -248,7 +251,7 @@ export function ArsenalFacedPanel({
     totalPitches > 0 ? `${scopeLabel} \u00b7 ${String(totalPitches)} pitches` : scopeLabel
 
   return (
-    <Panel title="Arsenal" meta={meta}>
+    <Panel title={title} meta={meta}>
       {showHandednessToggle ? (
         <Segmented
           options={HANDEDNESS_OPTIONS}
@@ -258,7 +261,7 @@ export function ArsenalFacedPanel({
       ) : null}
       {rows.length > 0 ? (
         <div className="arsenal-cc-scroll">
-          <div className="arsenal-cc" role="table" aria-label="Arsenal">
+          <div className="arsenal-cc" role="table" aria-label={title}>
             <div className="arsenal-cc__head" role="row">
               <span role="columnheader">Pitch</span>
               <span role="columnheader">Use</span>
@@ -308,7 +311,7 @@ export function ArsenalFacedPanel({
       ) : (
         <EmptyPanel
           message={`No arsenal data for ${scopeLabel.toLowerCase()}`}
-          hint="Arsenal appears once the pitcher has tracked pitches on record."
+          hint="Rows appear once there are tracked pitches on record."
         />
       )}
     </Panel>

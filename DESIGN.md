@@ -347,6 +347,11 @@ The atom of the entire app.
 - Season scope fills Spin, V-Brk and H-Brk from the pitcher's Savant CSV data (grouped by
   `pitch_type` via `buildSeasonBaselines`); usage and velo still come from the MLB arsenal
   endpoint. No deltas in season scope.
+- The panel is titled "Arsenal" in pitcher view and "Arsenal Faced" in batter view. Batter view
+  in season scope reads "Last 60 days" in the meta rather than "Season", because no MLB endpoint
+  publishes a hitter's pitch mix faced and the Savant fallback is capped to a rolling window.
+  The handedness Segmented appears only in pitcher view + game scope; a hitter faces one hand at
+  a time, so narrowing their faced mix by batter handedness would say nothing.
 
 ### 5.8d `.log-more` — game-log expander
 - Full-width button beneath the Logs tab table, 44px minimum height so it clears §7's

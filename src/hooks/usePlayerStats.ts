@@ -30,6 +30,7 @@ interface PlayerStatsData {
   gameLog: GameLogEntry[]
   vsPlayer: VsPlayerStat | null
   savantData: SavantBattedBall[]
+  batterSavantPitches: SavantBattedBall[]
   pitcherSavantPitches: SavantBattedBall[]
   loading: boolean
   pitcherLoading: boolean
@@ -49,6 +50,7 @@ const EMPTY_PLAYER_STATS: PlayerStatsData = {
   gameLog: [],
   vsPlayer: null,
   savantData: [],
+  batterSavantPitches: [],
   pitcherSavantPitches: [],
   loading: false,
   pitcherLoading: false,
@@ -69,6 +71,7 @@ interface BatterBundle {
   batterSplits: StatSplit[]
   gameLog: GameLogEntry[]
   savantData: SavantBattedBall[]
+  batterSavantPitches: SavantBattedBall[]
 }
 
 const pitcherBundleRequests = new Map<string, Promise<PitcherBundle>>()
@@ -122,7 +125,10 @@ function fetchBatterBundle(batterId: number): Promise<BatterBundle> {
     batterHotCold,
     batterSplits,
     gameLog,
+    // The spray chart needs contact only; the arsenal-faced table needs every
+    // pitch, so both shapes are kept from the one request.
     savantData: savantData.filter((result) => result.hc_x && result.hc_y),
+    batterSavantPitches: savantData,
   }))
 
   batterBundleRequests.set(cacheKey, request)

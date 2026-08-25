@@ -115,7 +115,10 @@ src/
                                            slice locally), pitcherSavantPitches (pitcher's recent Statcast
                                            pitches for season arsenal baselines),
                                            vsPlayer, savantData (filtered to rows with both hc_x and hc_y
-                                           present), loading, plus pitcherLoading and batterLoading so each PVB
+                                           present, for the spray chart), batterSavantPitches (the same
+                                           request unfiltered, so the arsenal-faced table counts every pitch
+                                           seen rather than balls in play), pitcherSavantPitches,
+                                           loading, plus pitcherLoading and batterLoading so each PVB
                                            card resolves on its own. Also exports preloadPlayerStats(batterId,
                                             pitcherId), called from App. Imported by MatchupSubTab.
     useWatchability.ts                    useWatchability(games) => { scores: ReadonlyMap<number,
@@ -343,11 +346,17 @@ src/
                                              as em dashes via emptySplitRow, so flipping perspective never
                                              resizes the card. Home and Away
                                              are aggregated locally from fetchCachedGameLog entries grouped by
-                                             isHome, since neither is a published split. Arsenal follows
-                                             globalScope via buildGameArsenalRows / buildSeasonArsenalRows.
-                                             Game-scope arsenal rows carry tone+delta on all four metrics
-                                             (velo vs szn from avg_pitch_speed; spin/V-Brk/H-Brk vs L60
-                                             from pitcherSavantPitches via buildSeasonBaselines).
+                                             isHome, since neither is a published split. The arsenal panel
+                                              follows BOTH globalScope and matchupPerspective. Pitcher view
+                                              is titled "Arsenal" and uses buildGameArsenalRows /
+                                              buildSeasonArsenalRows; game rows carry tone+delta on all four
+                                              metrics (velo vs szn from avg_pitch_speed; spin/V-Brk/H-Brk vs
+                                              L60 from pitcherSavantPitches via buildSeasonBaselines). Batter
+                                              view is titled "Arsenal Faced" and uses
+                                              buildBatterGameArsenalRows (game) / buildFacedSeasonArsenalRows
+                                              (season, meta labelled "Last 60 days" because Savant's search
+                                              is capped to a rolling window). The handedness Segmented shows
+                                              only in pitcher view + game scope.
                                             Imported by GameScreen.
     PitcherVsBatter/LogsSubTab.tsx        The Logs tab. Segmented (Pitcher|Batter) bound to
                                             gameStore.matchupPerspective picks which side's season game log
@@ -367,9 +376,17 @@ src/
                                            pitcherSavantPitches), buildSeasonArsenalRows (maps
                                            PitchArsenalItem[] + optional SavantBattedBall[] to
                                            ColorCodedArsenalRow[]; Savant data fills spin/breaks that the
-                                           MLB arsenal endpoint omits), and buildSeasonBaselines (groups
-                                           SavantBattedBall[] by pitch_type into mean velo/spin/pfx_z/pfx_x).
-                                           Each row carries velo, spin, breakVertical and breakHorizontal
+                                            MLB arsenal endpoint omits), buildSeasonBaselines (groups
+                                            SavantBattedBall[] by pitch_type into mean velo/spin/pfx_z/pfx_x),
+                                            buildBatterGameArsenalRows (the mix a batter saw this game, from
+                                            SavantGamePitch filtered by p.batter, deltas against the batter's
+                                            own baselines) and buildFacedSeasonArsenalRows (the batter's
+                                            arsenal faced grouped from their own SavantBattedBall rows; no MLB
+                                            endpoint publishes a hitter's pitch mix faced, and the Savant
+                                            search is capped to 60 days in-season, so the caller labels the
+                                            window "Last 60 days"). A private PITCH_NAMES map turns Savant
+                                            pitch codes into display names for every Savant-sourced row.
+                                            Each row carries velo, spin, breakVertical and breakHorizontal
                                            as ArsenalMetric {value, tone, delta}. Dead bands: velo 0.8 mph,
                                            spin 50 rpm, break 1.0 in. Delta labels: velo "vs szn",
                                            spin/breaks "vs L60" (Savant CSV is rolling 60-day window).
