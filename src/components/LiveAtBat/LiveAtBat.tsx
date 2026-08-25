@@ -13,6 +13,7 @@ import {
   deriveBatterLine,
   derivePitchSequence,
   derivePitcherLine,
+  isAdvisoryPlay,
   playIdOf,
   readOffenseExtras,
 } from './liveAtBatData'
@@ -116,7 +117,7 @@ export function LiveAtBat(): ReactElement {
     )
   }
   if (liveFeed === null) return <LoadingState />
-  if (currentPlay === null) return <NoPlayState />
+  if (currentPlay === null || isAdvisoryPlay(currentPlay)) return <NoPlayState />
 
   const { count, matchup, result, about, playEvents } = currentPlay
   const { linescore, plays } = liveFeed.liveData

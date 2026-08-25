@@ -79,6 +79,18 @@ export function batterHasPlatoonEdge(batSide: 'L' | 'R' | 'S', pitchHand: 'L' | 
   return batSide === 'S' || batSide !== pitchHand
 }
 
+const ADVISORY_EVENTS: ReadonlySet<string> = new Set([
+  'Game Advisory',
+  'Pitching Change',
+  'Defensive Switch',
+  'Offensive Sub',
+  'Defensive Sub',
+])
+
+export function isAdvisoryPlay(play: CurrentPlay): boolean {
+  return ADVISORY_EVENTS.has(play.result.event) || ADVISORY_EVENTS.has(play.result.eventType)
+}
+
 const HIT_EVENTS: ReadonlySet<string> = new Set(['single', 'double', 'triple', 'home_run'])
 const WALK_EVENTS: ReadonlySet<string> = new Set(['walk', 'intent_walk'])
 const STRIKEOUT_EVENTS: ReadonlySet<string> = new Set([

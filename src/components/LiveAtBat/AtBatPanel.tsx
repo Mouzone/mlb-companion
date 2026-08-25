@@ -150,7 +150,7 @@ export function AtBatPanel({
         <Sequence sequence={sequence} />
       </div>
 
-      {sequence.length === 0 ? null : <CallLegend />}
+      <CallLegend />
 
       {hasDeck ? (
         <div className="atbat__deck">
