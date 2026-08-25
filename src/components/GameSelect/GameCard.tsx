@@ -2,7 +2,7 @@ import type { ReactElement } from 'react'
 import { Badge, PlayerAvatar, ScoreRing, TeamLogo } from '../ui'
 import type { BadgeTone } from '../ui'
 import type { ScheduledGame } from '../../api/types'
-import type { CurrentPitcher } from '../../hooks/useLiveScores'
+import type { CurrentPitcher, CurrentBatter } from '../../hooks/useLiveScores'
 
 /**
  * GameCard (DESIGN.md §6.5).
@@ -127,9 +127,11 @@ export interface GameCardProps {
   readonly watchability?: number | null
   /** Current pitcher on the mound for live games, from the Cloud Function. */
   readonly currentPitcher?: CurrentPitcher | null
+  /** Current batter at the plate for live games, from the Cloud Function. */
+  readonly currentBatter?: CurrentBatter | null
 }
 
-export function GameCard({ game, onSelect, watchability = null, currentPitcher = null }: GameCardProps): ReactElement {
+export function GameCard({ game, onSelect, watchability = null, currentPitcher = null, currentBatter = null }: GameCardProps): ReactElement {
   const away = game.teams.away
   const home = game.teams.home
   const line = readLinescore(game)
@@ -147,6 +149,8 @@ export function GameCard({ game, onSelect, watchability = null, currentPitcher =
   const isLive = chip.tone === 'live'
   const livePitcherSide: Side | null =
     isLive && currentPitcher !== null ? currentPitcher.fieldingSide : null
+  const liveBatterSide: Side | null =
+    isLive && currentBatter !== null ? currentBatter.battingSide : null
 
   const label = scores
     ? `${away.team.name} ${scores.away}, ${home.team.name} ${scores.home}. ${chip.text}`
@@ -200,18 +204,22 @@ export function GameCard({ game, onSelect, watchability = null, currentPitcher =
         {venue !== null ? <span className="gc-venue">{venue}</span> : null}
       </span>
 
-      {awayProbable !== null || homeProbable !== null || livePitcherSide !== null ? (
+      {awayProbable !== null || homeProbable !== null || livePitcherSide !== null || liveBatterSide !== null ? (
         <span className="gc-probables">
           {livePitcherSide === 'away' && currentPitcher !== null
             ? probable('away', currentPitcher, 'P')
-            : awayProbable !== null
-              ? probable('away', awayProbable)
-              : <span className="gc-probable" />}
+            : liveBatterSide === 'away' && currentBatter !== null
+              ? probable('away', currentBatter, 'H')
+              : awayProbable !== null
+                ? probable('away', awayProbable)
+                : <span className="gc-probable" />}
           {livePitcherSide === 'home' && currentPitcher !== null
             ? probable('home', currentPitcher, 'P')
-            : homeProbable !== null
-              ? probable('home', homeProbable)
-              : <span className="gc-probable" />}
+            : liveBatterSide === 'home' && currentBatter !== null
+              ? probable('home', currentBatter, 'H')
+              : homeProbable !== null
+                ? probable('home', homeProbable)
+                : <span className="gc-probable" />}
         </span>
       ) : null}
     </button>

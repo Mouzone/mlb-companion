@@ -106,7 +106,7 @@ export function GameSelect(): ReactElement {
   const { games, loading } = useLiveSlate(dateStr)
   const [sortMode, setSortMode] = useState<SortMode>(initialSortMode)
   const selectGame = useGameStore((s) => s.selectGame)
-  const { scores, pitchers } = useLiveScores(dateStr)
+  const { scores, pitchers, batters } = useLiveScores(dateStr)
 
   const today = new Date().toLocaleDateString('en-US', {
     weekday: 'long',
@@ -165,6 +165,7 @@ export function GameSelect(): ReactElement {
               onSelect={selectGame}
               watchability={scores.get(game.gamePk) ?? null}
               currentPitcher={pitchers.get(game.gamePk) ?? null}
+              currentBatter={batters.get(game.gamePk) ?? null}
             />
           ))}
         </div>

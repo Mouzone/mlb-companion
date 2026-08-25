@@ -130,15 +130,17 @@ src/
                                            useLiveScores for GameSelect, but retained as a fallback and for
                                            potential future use. Not currently imported by any component.
     useLiveScores.ts                      useLiveScores(dateStr) => { scores: ReadonlyMap<number, number>,
-                                           pitchers: ReadonlyMap<number, CurrentPitcher>, loading }. Polls the
+                                           pitchers: ReadonlyMap<number, CurrentPitcher>,
+                                           batters: ReadonlyMap<number, CurrentBatter>, loading }. Polls the
                                            liveScores Cloud Function HTTP endpoint every 15s
                                            (LIVE_SCORES_INTERVAL), a single call that returns watchability scores
-                                           AND current pitcher info for all games on the slate. Replaces
+                                           AND current pitcher/batter info for all games on the slate. Replaces
                                            useWatchability's per-game winProbability polling (N requests at 30s)
                                            with one server-side call at 15s. Pauses when document.hidden; resumes
                                            on visibilitychange. Graceful failure: keeps prior scores/pitchers if
                                            the Cloud Function is unreachable. CurrentPitcher = { id, fullName,
-                                           fieldingSide: 'away'|'home' }. Imported by GameSelect.
+                                           fieldingSide: 'away'|'home' }. CurrentBatter = { id, fullName,
+                                           battingSide: 'away'|'home' }. Imported by GameSelect.
     useStatBenchmarks.ts                  useStatBenchmarks(scope: BenchmarkScope) => { cohorts, loading }.
                                            Fetches ActiveBenchmarkCohorts for the current year on mount; the
                                            cohort object is null until the first successful resolution. Used
@@ -229,16 +231,21 @@ src/
                                            and scoreless games sort last rather than as zero. Initial sort mode
                                            reads `?sort=watchability` via initialSortMode(), which backs the PWA
                                            manifest shortcut (section 10). Imported by App.tsx.
-    GameSelect/GameCard.tsx               Individual game card, rendered as a <button>. New optional prop
-                                           `watchability?: number | null`, rendered via `<ScoreRing size="lg">`
-                                           in a `.gc-head` row alongside `.gc-teams`. Each team row always
-                                           renders its `.gc-score` span, even when empty, because `.gc-team` is
-                                           `display: contents` and a dropped child would shift the next row's
-                                           logo into the wrong grid column (see DESIGN.md §6.5). shortenName()
-                                           shortens any pitcher name over 15 characters (NAME_MAX) to
-                                           first-initial + full surname, box-score style, keeping all trailing
-                                           tokens so suffixes survive; PlayerAvatar still receives the full name
-                                           for its accessible name. Imported by GameSelect.
+    GameSelect/GameCard.tsx               Individual game card, rendered as a <button>. Optional props
+                                           `watchability?: number | null` (rendered via `<ScoreRing size="lg">`
+                                           in a `.gc-head` row alongside `.gc-teams`), `currentPitcher?:
+                                           CurrentPitcher | null`, and `currentBatter?: CurrentBatter | null`
+                                           (from useLiveScores). For Live games, the fielding side shows the
+                                           current pitcher (role `P`) and the batting side shows the current
+                                           batter (role `H`); for Preview/Final games, probable pitchers
+                                           (role `SP`) are shown. Each team row always renders its `.gc-score`
+                                           span, even when empty, because `.gc-team` is `display: contents`
+                                           and a dropped child would shift the next row's logo into the wrong
+                                           grid column (see DESIGN.md §6.5). shortenName() shortens any
+                                           pitcher/batter name over 15 characters (NAME_MAX) to first-initial
+                                           + full surname, box-score style, keeping all trailing tokens so
+                                           suffixes survive; PlayerAvatar still receives the full name for
+                                           its accessible name. Imported by GameSelect.
     ui/ScoreRing.tsx                      The 14th UI primitive (DESIGN.md §5.14). ScoreRing({ score, size, live
                                            }): renders the 0-100 watchability score as an SVG ring with the
                                            numeral stacked on top, built entirely from <span> and <svg> — never
@@ -545,7 +552,7 @@ Cloud Function endpoints (Firebase, `us-central1-mlb-companion-pwa`):
 
 | Endpoint | Params | Caller | Response shape (summary) |
 |---|---|---|---|
-| `GET liveScores` (`https://us-central1-mlb-companion-pwa.cloudfunctions.net/liveScores`) | `?date=YYYY-MM-DD` (defaults to today ET) | `useLiveScores` (every 15s) | `{ date, games: { [gamePk]: { score, tier, pregame, live, liveWeight, currentPitcher: { id, fullName, fieldingSide } \| null } } }`. Server fetches schedule + watchability.json + winProbability per live/final game + feed/live for current pitcher, computes `computeWatchability` server-side. 60s timeout, 512MiB memory. |
+| `GET liveScores` (`https://us-central1-mlb-companion-pwa.cloudfunctions.net/liveScores`) | `?date=YYYY-MM-DD` (defaults to today ET) | `useLiveScores` (every 15s) | `{ date, games: { [gamePk]: { score, tier, pregame, live, liveWeight, currentPitcher: { id, fullName, fieldingSide } \| null, currentBatter: { id, fullName, battingSide } \| null } } }`. Server fetches schedule + watchability.json + winProbability per live/final game + feed/live for current pitcher and batter, computes `computeWatchability` server-side. 60s timeout, 512MiB memory. |
 
 ## 5. Component Hierarchy
 
@@ -553,7 +560,7 @@ Cloud Function endpoints (Firebase, `us-central1-mlb-companion-pwa`):
 main.tsx
   ErrorBoundary
     App.tsx
-    (no selectedGame) GameSelect (useLiveSlate → useLiveScores) -> GameCard (currentPitcher) -> ScoreRing
+    (no selectedGame) GameSelect (useLiveSlate → useLiveScores) -> GameCard (currentPitcher, currentBatter) -> ScoreRing
     (selectedGame set)
       tab-bar (Live Game | Pitcher vs Batter buttons, with leading "← Games" back button)
       activeTab === 'live'

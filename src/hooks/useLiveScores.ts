@@ -25,6 +25,12 @@ export interface CurrentPitcher {
   readonly fieldingSide: 'away' | 'home'
 }
 
+export interface CurrentBatter {
+  readonly id: number
+  readonly fullName: string
+  readonly battingSide: 'away' | 'home'
+}
+
 interface LiveScoreEntry {
   score: number
   tier: string
@@ -32,6 +38,7 @@ interface LiveScoreEntry {
   live: number | null
   liveWeight: number
   currentPitcher: CurrentPitcher | null
+  currentBatter: CurrentBatter | null
 }
 
 interface LiveScoresResponse {
@@ -42,12 +49,14 @@ interface LiveScoresResponse {
 export interface LiveScoresState {
   readonly scores: ReadonlyMap<number, number>
   readonly pitchers: ReadonlyMap<number, CurrentPitcher>
+  readonly batters: ReadonlyMap<number, CurrentBatter>
   readonly loading: boolean
 }
 
 export function useLiveScores(date: string = gameDateStr()): LiveScoresState {
   const [scores, setScores] = useState<ReadonlyMap<number, number>>(new Map())
   const [pitchers, setPitchers] = useState<ReadonlyMap<number, CurrentPitcher>>(new Map())
+  const [batters, setBatters] = useState<ReadonlyMap<number, CurrentBatter>>(new Map())
   const [loading, setLoading] = useState(true)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const dateRef = useRef(date)
@@ -64,6 +73,7 @@ export function useLiveScores(date: string = gameDateStr()): LiveScoresState {
 
       const scoreMap = new Map<number, number>()
       const pitcherMap = new Map<number, CurrentPitcher>()
+      const batterMap = new Map<number, CurrentBatter>()
 
       for (const [gamePkStr, entry] of Object.entries(data.games)) {
         const gamePk = Number(gamePkStr)
@@ -71,10 +81,14 @@ export function useLiveScores(date: string = gameDateStr()): LiveScoresState {
         if (entry.currentPitcher !== null) {
           pitcherMap.set(gamePk, entry.currentPitcher)
         }
+        if (entry.currentBatter !== null) {
+          batterMap.set(gamePk, entry.currentBatter)
+        }
       }
 
       setScores(scoreMap)
       setPitchers(pitcherMap)
+      setBatters(batterMap)
     } catch {
       // Network error or CF unreachable — keep prior scores, don't crash UI
     } finally {
@@ -102,7 +116,7 @@ export function useLiveScores(date: string = gameDateStr()): LiveScoresState {
     }
   }, [poll])
 
-  return { scores, pitchers, loading }
+  return { scores, pitchers, batters, loading }
 }
 
 export default useLiveScores

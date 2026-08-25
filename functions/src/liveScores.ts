@@ -10,7 +10,8 @@
  *
  * Response:
  *   { date, games: { [gamePk]: { score, tier, pregame, live, liveWeight,
- *     currentPitcher: { id, fullName, fieldingSide } | null } } }
+ *     currentPitcher: { id, fullName, fieldingSide } | null,
+ *     currentBatter: { id, fullName, battingSide } | null } } }
  */
 
 import { onRequest } from 'firebase-functions/v2/https'
@@ -34,6 +35,12 @@ interface CurrentPitcher {
   fieldingSide: 'away' | 'home'
 }
 
+interface CurrentBatter {
+  id: number
+  fullName: string
+  battingSide: 'away' | 'home'
+}
+
 interface GameScoreEntry {
   score: number
   tier: string
@@ -41,6 +48,7 @@ interface GameScoreEntry {
   live: number | null
   liveWeight: number
   currentPitcher: CurrentPitcher | null
+  currentBatter: CurrentBatter | null
 }
 
 async function fetchSchedule(date: string): Promise<ScheduleGame[]> {
@@ -80,24 +88,30 @@ async function fetchWinProbability(gamePk: number): Promise<WinProbabilityPlay[]
   })
 }
 
-async function fetchCurrentPitcher(gamePk: number): Promise<CurrentPitcher | null> {
+async function fetchCurrentPlayers(gamePk: number): Promise<{ pitcher: CurrentPitcher | null; batter: CurrentBatter | null }> {
   const res = await fetch(`${MLB_API}/v1.1/game/${gamePk}/feed/live`)
-  if (!res.ok) return null
+  if (!res.ok) return { pitcher: null, batter: null }
   const data = await res.json() as any
   const linescore = data?.liveData?.linescore
-  if (!linescore) return null
-
-  const pitcher = linescore?.defense?.pitcher
-  if (!pitcher || typeof pitcher.id !== 'number' || typeof pitcher.fullName !== 'string') {
-    return null
-  }
+  if (!linescore) return { pitcher: null, batter: null }
 
   const isTopInning = linescore?.isTopInning ?? true
-  return {
-    id: pitcher.id,
-    fullName: pitcher.fullName,
-    fieldingSide: isTopInning ? 'home' : 'away',
+  const fieldingSide: 'away' | 'home' = isTopInning ? 'home' : 'away'
+  const battingSide: 'away' | 'home' = isTopInning ? 'away' : 'home'
+
+  let pitcher: CurrentPitcher | null = null
+  const p = linescore?.defense?.pitcher
+  if (p && typeof p.id === 'number' && typeof p.fullName === 'string') {
+    pitcher = { id: p.id, fullName: p.fullName, fieldingSide }
   }
+
+  let batter: CurrentBatter | null = null
+  const b = linescore?.offense?.batter
+  if (b && typeof b.id === 'number' && typeof b.fullName === 'string') {
+    batter = { id: b.id, fullName: b.fullName, battingSide }
+  }
+
+  return { pitcher, batter }
 }
 
 function progressFor(state: 'Preview' | 'Live' | 'Final'): 'preview' | 'live' | 'final' {
@@ -165,8 +179,11 @@ export const liveScores = onRequest(
           const result = computeWatchability(fullInputs, payload.baseline, plays, state)
 
           let currentPitcher: CurrentPitcher | null = null
+          let currentBatter: CurrentBatter | null = null
           if (game.abstractGameState === 'Live') {
-            currentPitcher = await fetchCurrentPitcher(game.gamePk)
+            const players = await fetchCurrentPlayers(game.gamePk)
+            currentPitcher = players.pitcher
+            currentBatter = players.batter
           }
 
           return {
@@ -178,6 +195,7 @@ export const liveScores = onRequest(
               live: result.live,
               liveWeight: result.liveWeight,
               currentPitcher,
+              currentBatter,
             } satisfies GameScoreEntry,
           }
         }),
@@ -206,6 +224,7 @@ export const liveScores = onRequest(
           live: result.live,
           liveWeight: result.liveWeight,
           currentPitcher: null,
+          currentBatter: null,
         }
       }
 
