@@ -1733,6 +1733,28 @@ button:focus-visible,
   background: var(--c-surface-hover);
 }
 
+/* --- Logs tab show-more --- */
+.log-more {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  margin-top: var(--sp-2);
+  font-size: var(--fs-label);
+  font-weight: var(--fw-semibold);
+  color: var(--c-ink-secondary);
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  background: var(--c-surface-sunken);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.log-more:hover {
+  color: var(--c-ink);
+  background: var(--c-surface-hover);
+}
+
 .matchup-head__side {
   display: flex;
   gap: var(--sp-4);

@@ -116,7 +116,7 @@ function fetchBatterBundle(batterId: number): Promise<BatterBundle> {
     batterSeason: batterSeason as SeasonStat | null,
     batterHotCold,
     batterSplits,
-    gameLog: gameLog.slice(0, 5),
+    gameLog,
     savantData: savantData.filter((result) => result.hc_x && result.hc_y),
   }))
 

@@ -330,6 +330,16 @@ The atom of the entire app.
 - Season scope leaves Spin, V-Brk and H-Brk empty — the MLB arsenal endpoint publishes only
   usage and average speed, and an absent metric renders as an em dash rather than a zero.
 
+### 5.8d `.log-more` — game-log expander
+- Full-width button beneath the Logs tab table, 44px minimum height so it clears §7's
+  touch target on its own without a transparent expander.
+- Same shell as the face-card scope arrows: `--c-surface-sunken` on `1px solid var(--c-border)`,
+  `--radius-sm`, `--fs-label` 600 uppercase `--c-ink-secondary`, hovering to `--c-ink` on
+  `--c-surface-hover`. It reads as a secondary control rather than a primary action.
+- Label carries the count (`Show all 28` / `Show less`) so the cost of expanding is visible
+  before the tap. The collapsed table shows 7 rows — roughly a week of games — and the panel
+  meta reads `7 of 28 G` while collapsed, `28 G` once expanded.
+
 ### 5.8 `TeamLogo`
 - `<img>` from `teamLogoUrl(teamId, variant)`. White-first ⇒ always the `-on-light` variants.
 - Sizes: `sm` 24px (dense rows) · `md` 32px · `lg` 44px (card headers).

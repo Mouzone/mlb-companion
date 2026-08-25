@@ -6,8 +6,7 @@ import { LiveAtBat } from './LiveAtBat/LiveAtBat'
 import { MatchupSubTab } from './PitcherVsBatter/MatchupSubTab'
 import { PitcherGameSubTab } from './LiveGame/PitcherGameSubTab'
 import { BatterGameSubTab } from './LiveGame/BatterGameSubTab'
-import { PitchingSubTab } from './PitcherVsBatter/PitchingSubTab'
-import { BattingSubTab } from './PitcherVsBatter/BattingSubTab'
+import { LogsSubTab } from './PitcherVsBatter/LogsSubTab'
 
 const NAV_ITEMS: ReadonlyArray<MiniNavItem> = [
   { id: 'ab', label: 'AB' },
@@ -50,12 +49,7 @@ export function GameScreen(): ReactElement {
         ) : null}
         {activeTab === 'logs' ? (
           <section id="logs" className="game-section">
-            <div className="game-subsection">
-              <PitchingSubTab />
-            </div>
-            <div className="game-subsection">
-              <BattingSubTab />
-            </div>
+            <LogsSubTab />
           </section>
         ) : null}
       </div>

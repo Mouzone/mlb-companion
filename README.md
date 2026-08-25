@@ -47,7 +47,7 @@ src/
                                            fetchStatSplits, fetchGameLog, fetchVsPlayer,
                                            fetchSeriesSchedule, fetchPlayByPlay, chunk, fetchPlayByPlayBatch.
                                             Imported by App.tsx, useLiveFeed, usePlayerStats, GameScreen,
-                                           MatchupSubTab, PitchingSubTab, BattingSubTab, GameSelect.
+                                           MatchupSubTab, LogsSubTab, GameSelect.
     savant.ts                             Baseball Savant client. SAVANT_BASE = 'https://baseballsavant.mlb.com'.
                                            Exports fetchSavantGameFeed (GET /gf?game_pk=N) and
                                            fetchSavantBattedBalls (GET /statcast_search/csv?...), plus internal
@@ -65,7 +65,7 @@ src/
                                            person/season/group. A failed
                                            promise is evicted from the cache so a transient error is not
                                            sticky for the session. Imported by App.tsx, MatchupSubTab,
-                                           PitchingSubTab.
+                                           LogsSubTab.
 
   store/
     gameStore.ts                          Single zustand store (useGameStore). See section 6 for full shape.
@@ -110,12 +110,12 @@ src/
                                            evicted from the cache on resolution so a fetch that happened while
                                            offline is not cached as empty for the session. Returns batterSeason,
                                            pitcherSeason, pitchArsenal, batterHotCold, pitcherHotCold,
-                                           batterSplits, pitcherSplits, gameLog (sliced to 5 most recent),
+                                           batterSplits, pitcherSplits, gameLog (full season; consumers
+                                           slice locally),
                                            vsPlayer, savantData (filtered to rows with both hc_x and hc_y
                                            present), loading, plus pitcherLoading and batterLoading so each PVB
                                            card resolves on its own. Also exports preloadPlayerStats(batterId,
-                                            pitcherId), called from App. Imported by PitchingSubTab,
-                                            BattingSubTab, MatchupSubTab.
+                                            pitcherId), called from App. Imported by MatchupSubTab.
     useWatchability.ts                    useWatchability(games) => { scores: ReadonlyMap<number,
                                            WatchabilityResult>, loading, stale }. Legacy client-side watchability
                                            hook. Fetches /watchability.json once on mount; polls
@@ -335,16 +335,17 @@ src/
                                             isHome, since neither is a published split. Arsenal follows
                                             globalScope via buildGameArsenalRows / buildSeasonArsenalRows.
                                             Imported by GameScreen.
-    PitcherVsBatter/PitchingSubTab.tsx    Pitcher season stat card (benchmark percentile coloring via
-                                           PvbCard + benchmarkPitcherCells)
-                                           + color-coded arsenal (globalScope-driven: This Game shows
-                                           in-game velo/spin/break color-coded vs season avg per pitch type,
-                                           with vs All/RHB/LHB handedness filter; Season shows plain
-                                           arsenal from pitchArsenal) + opponent splits DataTable + game log
-                                           DataTable. Imported by GameScreen.
-     PitcherVsBatter/BattingSubTab.tsx     Batter season stat card (benchmark percentile coloring via
-                                           PvbCard + benchmarkBatterCells) + splits
-                                           DataTable + game log DataTable. Imported by GameScreen.
+    PitcherVsBatter/LogsSubTab.tsx        The Logs tab. Segmented (Pitcher|Batter) bound to
+                                           gameStore.splitPerspective picks which side's season game log
+                                           renders. Both logs are fetched directly through
+                                           fetchCachedGameLog (pitching / hitting) rather than
+                                           usePlayerStats, so the untruncated season is available here
+                                           without widening the shared bundle. Rows are reversed
+                                           (most recent first) and capped at 7 until the .log-more
+                                           button expands to the full season; switching perspective
+                                           collapses back to 7. Pitcher columns Date/IP/H/ER/BB/K,
+                                           batter columns Date/AB/H/2B/HR/RBI/K.
+                                           Imported by GameScreen.
      PitcherVsBatter/ArsenalColorCoding.ts Pure functions: buildGameArsenalRows (filters SavantGamePitch
                                            by current pitcher via allPlays matchup cross-ref, groups by
                                            pitch_type, color-codes velo vs avg_pitch_speed season baseline)
@@ -515,8 +516,7 @@ Baseball Savant (baseballsavant   ──┘                            │
                                                                   │
                                                                     └─► components (LiveAtBat, BatterGameSubTab,
                                                                          PitcherGameSubTab, MatchupSubTab,
-                                                                         PitchingSubTab, BattingSubTab,
-                                                                         GameSelect)
+                                                                         LogsSubTab, GameSelect)
                                                                              │
                                                                              └─► Canvas renderers (HeatMap,
                                                                                   ZonePlot)
@@ -524,10 +524,10 @@ Baseball Savant (baseballsavant   ──┘                            │
 
 - `App.tsx` is the only place that writes `selectedGame`/`gamePk` from a URL (`?gamePk=`) or from `GameSelect`'s picker, and the only place that populates `gameFeedPitches` from `fetchSavantGameFeed`.
 - `useLiveFeed` is the only source of live-feed polling; it is invoked exactly once, inside `App`, so the 4s interval is tied to the selected game rather than to which tab happens to be mounted. Switching tabs no longer tears down and refetches the feed.
-- `usePlayerStats` is called independently by `PitchingSubTab`, `BattingSubTab`, and `MatchupSubTab` with the same `(batterId, pitcherId)` pair. Module-level promise caches keyed per player mean only the first caller fetches; the rest await the same promise. `App` warms these caches (`preloadPlayerStats`, `fetchCachedGameLog`, `fetchActiveBenchmarkCohorts`) as soon as the live feed yields a matchup, so opening any section is generally instant.
+- `usePlayerStats` is called by `MatchupSubTab` with the same `(batterId, pitcherId)` pair. Module-level promise caches keyed per player mean only the first caller fetches; the rest await the same promise. `App` warms these caches (`preloadPlayerStats`, `fetchCachedGameLog`, `fetchActiveBenchmarkCohorts`) as soon as the live feed yields a matchup, so opening any section is generally instant.
 - **Pitcher selection** in the Pitcher vs Batter tab and the `App` preload uses a shared `derivePitcher(currentPlay, liveFeed, selectedGame)` helper (`src/utils/derivePitcher.ts`) with a 4-step fallback: (1) `currentPlay.matchup.pitcher` — the pitcher in the current at-bat, (2) `liveFeed.linescore.defense.pitcher` — the MLB API's linescore defense field, always populated once the feed loads (even in Preview state or between at-bats when `currentPlay` is transiently null), (3) home probable pitcher, (4) away probable pitcher, (5) null. This ensures the PVB tab shows the actual pitcher on the mound — including relievers after a pitching change — rather than defaulting to the scheduled starter. The Live Game tab (At Bat / Pitcher / Batter sub-tabs) already used `currentPlay.matchup.pitcher` directly with no fallback; only the PVB tab had the copy-pasted probable fallback.
 - Because the caches are keyed per player rather than per matchup, a pitching change refetches only the pitcher bundle and a new batter refetches only the batter bundle.
-- Sabermetric derivations (FIP, ERA+, wRC+, ISO, K%, BB%, HR/9, GB%) happen in the consuming components (`PitchingSubTab`/`BattingSubTab` via `PvbCards` cell builders), not inside the store or the fetchers — raw stat objects are stored/passed as-is and computed on render.
+- Sabermetric derivations (FIP, ERA+, wRC+, ISO, K%, BB%, HR/9, GB%) happen in the consuming components (via `PvbCards` cell builders), not inside the store or the fetchers — raw stat objects are stored/passed as-is and computed on render.
 - No data ever flows backward from components into the API layer; all fetchers are one-directional reads.
 - **Watchability is a separate, parallel data flow that never touches gameStore.** `scripts/build-watchability.mjs`
   runs nightly (outside the app, via GitHub Actions), computes league baselines and per-game inputs, and writes
@@ -614,11 +614,9 @@ main.tsx
           section#game     -> PitcherGameSubTab -> GameIdentity, Command panel
                               BatterGameSubTab  -> GameIdentity, Plate Discipline,
                                                   At Bats DataTable
-          section#logs     -> PitchingSubTab -> PvbCard,
-                                             ColorCodedArsenal (Segmented All/RHB/LHB),
-                                             TablePanel (splits), TablePanel (game log)
-                              BattingSubTab  -> PvbCard,
-                                             TablePanel (splits), TablePanel (game log)
+          section#logs     -> LogsSubTab -> Segmented (Pitcher|Batter),
+                                            TablePanel (game log, 7 rows by default),
+                                            .log-more toggle (Show all N / Show less)
       FloatingGamesButton (fixed bottom-left, calls store.reset())
       StatsGuide          (fixed bottom-right FAB)
 ```
@@ -665,8 +663,8 @@ Actions and when each is dispatched:
 - `setActiveTab(tab)` — called by the `MiniNav` buttons in `GameScreen`. This is a mount switch: exactly one section (`ab`, `matchup`, `game`, or `logs`) is rendered at a time; the others are unmounted.
 - `setGlobalScope(scope)` — the single This Game / Season switch that drives the scoped sections. In `MatchupSubTab` it is written only by the `MatchupHeader` face-card arrows, which step through `SCOPE_CYCLE` (`['thisGame', 'season']`) and wrap at both ends; the scope rewrites both face-card statlines as well as the H2H panel.
 - `setZonePerspective(perspective)` — swaps whether the Matchup zone shows the pitcher's or the batter's hot/cold grid.
-- `setSplitPerspective(perspective)` — swaps whether the Matchup Splits table shows the pitcher's or the batter's Season / vs L / vs R / RISP / Home / Away rows. Kept separate from `zonePerspective` so switching the heat map does not silently rewrite the table below it.
-- `setRecentFormGames(games)` — declared but currently unused; the Recent Form panel was removed from `PitchingSubTab` and `BattingSubTab` in the single-scroll redesign. Kept in the store for potential re-introduction.
+- `setSplitPerspective(perspective)` — shared by the Matchup Splits table and the Logs tab: it swaps whether both show the pitcher's or the batter's data (Season / vs L / vs R / RISP / Home / Away rows in Matchup, the season game log in Logs). Kept separate from `zonePerspective` so switching the heat map does not silently rewrite the table below it.
+- `setRecentFormGames(games)` — declared but currently unused; the Recent Form panel was removed in the single-scroll redesign. Kept in the store for potential re-introduction.
 - `setGameFeedPitches(pitches)` — called by `App.tsx`'s Savant game-feed effect on every `gamePk` change (success sets the rows, failure sets `[]`).
 - `setError(err)` — called by `App.tsx`'s deep-link handler and by `useLiveFeed` on any fetch/poll failure.
 - `setLiveScoresCache(scores, pitchers, batters)` — called by `useLiveScores` after each successful Cloud Function poll. Persists the three `ReadonlyMap`s so that returning to `GameSelect` from a game detail screen shows cached scores instantly instead of dashes.
