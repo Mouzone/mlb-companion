@@ -587,11 +587,10 @@ main.tsx
           section#ab       -> LiveAtBat -> StatusStrip, MatchupCard,
                                            AtBatPanel -> ZonePlot (pitcher view),
                                            LastPitchStrip, ContactStrip
-          section#matchup  -> MatchupSubTab -> MatchupHeader (scope arrows),
-                                           Segmented (zone toggle),
-                                           ZonePanel -> HeatMap (pitcher view),
+           section#matchup  -> MatchupSubTab -> MatchupHeader (scope arrows),
                                            H2HPanel,
-                                           Segmented (split perspective),
+                                           Segmented (unified Pitcher|Batter),
+                                           ZonePanel -> HeatMap,
                                            TablePanel (Splits: Season/vs L/vs R/
                                              RISP/Home/Away for one side),
                                            ArsenalFacedPanel (Segmented All/RHB/LHB

@@ -297,6 +297,15 @@ export function MatchupSubTab(): ReactElement {
         onCycleScope={cycleScope}
       />
 
+      <H2HPanel
+        title={h2hTitle}
+        stat={h2hStat}
+        benchmarkAvg={benchmarkAvg}
+        loading={loading}
+        emptyMessage={h2hEmpty}
+        emptyHint={h2hHint}
+      />
+
       <Segmented
         options={PERSPECTIVE_OPTIONS}
         activeId={matchupPerspective}
@@ -309,15 +318,6 @@ export function MatchupSubTab(): ReactElement {
         loading={loading}
         emptyMessage="No zone data for this season"
         perspective="pitcher"
-      />
-
-      <H2HPanel
-        title={h2hTitle}
-        stat={h2hStat}
-        benchmarkAvg={benchmarkAvg}
-        loading={loading}
-        emptyMessage={h2hEmpty}
-        emptyHint={h2hHint}
       />
 
       <TablePanel
