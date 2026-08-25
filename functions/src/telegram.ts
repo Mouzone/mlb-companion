@@ -172,6 +172,32 @@ function buildDigestMessage(date: string, entries: DigestEntry[]): string {
   return lines.join('\n')
 }
 
+export async function sendTelegramNotification(
+  botToken: string,
+  chatId: string,
+  payload: NotificationPayload,
+): Promise<void> {
+  const text = buildMessage(payload)
+  const replyMarkup = buildInlineKeyboard(payload.gamePk)
+
+  const url = `https://api.telegram.org/bot${botToken}/sendMessage`
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      chat_id: chatId,
+      text,
+      parse_mode: 'HTML',
+      reply_markup: replyMarkup,
+    }),
+  })
+
+  if (!res.ok) {
+    const body = await res.text().catch(() => '')
+    throw new Error(`Telegram sendMessage failed: ${res.status} ${body}`)
+  }
+}
+
 export async function sendTelegramDigest(
   botToken: string,
   chatId: string,
