@@ -1,22 +1,19 @@
-import { useMemo, type ReactElement } from 'react'
-import type { GameLogEntry, StatSplit } from '../../api/types'
+import { useMemo, useState, type ReactElement } from 'react'
+import type { CareerBatterStat, SeasonStat, StatSplit } from '../../api/types'
 import { usePlayerStats } from '../../hooks/usePlayerStats'
+import { useStatBenchmarks } from '../../hooks/useStatBenchmarks'
+import { useCareerMatchupStats } from '../../hooks/useCareerMatchupStats'
 import { useGameStore } from '../../store/gameStore'
 import { derivePitcher } from '../../utils/derivePitcher'
-import { computeBBpct, computeKpct, parseStat } from '../../utils/sabermetrics'
 import type { DataTableColumn, DataTableRow } from '../ui'
-import { EmptyPanel, Segmented, Stat, StatGrid } from '../ui'
-import { SprayPanel } from './BattingPanels'
-import { Panel, SkeletonRows, TablePanel, ZonePanel } from './PvbPanels'
+import { EmptyPanel, Segmented } from '../ui'
+import { PvbCard } from './PvbCard'
+import { batterCareerCells, batterSeasonCells, type Cell } from './PvbCards'
+import { benchmarkBatterCells, type BatterBenchmarkContext } from './PvbBenchmarks'
+import { Panel, TablePanel } from './PvbPanels'
 import {
-  PlayerIdentity,
-  compareTo,
   monthDay,
-  percent,
-  rate3,
   rateText,
-  ratio,
-  signedRate3,
   splitCode,
   sumOptional,
   whole,
@@ -24,10 +21,9 @@ import {
 
 const SEASON = new Date().getFullYear().toString()
 
-const SPAN_OPTIONS = [
-  { id: '7', label: '7 G' },
-  { id: '15', label: '15 G' },
-  { id: '30', label: '30 G' },
+const STAT_SCOPE_OPTIONS = [
+  { id: 'season', label: 'Season' },
+  { id: 'career', label: 'Career' },
 ]
 
 const SITUATIONS: ReadonlyArray<{ code: string; label: string }> = [
@@ -55,7 +51,6 @@ const LOG_COLUMNS: ReadonlyArray<DataTableColumn> = [
   { key: 'k', label: 'K', align: 'right' },
 ]
 
-/** The shape every split source shares: situational, season, and head-to-head. */
 interface SplitSource {
   readonly avg: string
   readonly ops: string
@@ -76,58 +71,38 @@ function splitRow(label: string, stat: SplitSource | null): DataTableRow | null 
   }
 }
 
-interface FormLine {
-  games: number
-  hits: number
-  atBats: number | null
-  doubles: number
-  homeRuns: number
-  rbi: number
-  strikeOuts: number
-  baseOnBalls: number
-  plateAppearances: number
-}
-
-function aggregate(entries: readonly GameLogEntry[]): FormLine {
-  const line: FormLine = {
-    games: entries.length,
-    hits: 0,
-    atBats: sumOptional(entries, 'atBats'),
-    doubles: 0,
-    homeRuns: 0,
-    rbi: 0,
-    strikeOuts: 0,
-    baseOnBalls: 0,
-    plateAppearances: 0,
-  }
-  for (const entry of entries) {
-    line.hits += entry.stat.hits
-    line.doubles += entry.stat.doubles
-    line.homeRuns += entry.stat.homeRuns
-    line.rbi += entry.stat.rbi
-    line.strikeOuts += entry.stat.strikeOuts
-    line.baseOnBalls += entry.stat.baseOnBalls ?? 0
-    line.plateAppearances += entry.stat.plateAppearances
-  }
-  return line
-}
-
 const HANDEDNESS: Record<string, string> = { L: 'LH batter', R: 'RH batter', S: 'Switch hitter' }
 
 export function BattingSubTab(): ReactElement {
   const selectedGame = useGameStore((s) => s.selectedGame)
   const currentPlay = useGameStore((s) => s.currentPlay)
   const liveFeed = useGameStore((s) => s.liveFeed)
-  const recentFormGames = useGameStore((s) => s.recentFormGames)
-  const setRecentFormGames = useGameStore((s) => s.setRecentFormGames)
 
   const matchup = currentPlay?.matchup ?? null
   const batter = matchup?.batter ?? null
   const batterId = batter?.id ?? null
   const pitcherId = derivePitcher(currentPlay, liveFeed, selectedGame)?.id ?? null
 
-  const { batterSeason, batterHotCold, batterSplits, gameLog, vsPlayer, savantData, loading } =
-    usePlayerStats(batterId, pitcherId)
+  const { batterSeason, batterSplits, gameLog, vsPlayer, loading } = usePlayerStats(batterId, pitcherId)
+  const { batter: careerBatter } = useCareerMatchupStats(pitcherId, batterId)
+
+  const [statScope, setStatScope] = useState<'season' | 'career'>('season')
+  const { cohorts, loading: benchmarkLoading } = useStatBenchmarks(statScope)
+
+  const statCard = useMemo(() => {
+    if (statScope === 'career') {
+      if (careerBatter === null) return { cells: [] as Cell[], loading: true }
+      const cells = batterCareerCells(careerBatter)
+      if (cohorts === null || cohorts.scope !== 'career') return { cells, loading: benchmarkLoading }
+      const ctx: BatterBenchmarkContext<CareerBatterStat> = { scope: 'career', cohort: cohorts.batters }
+      return { cells: benchmarkBatterCells(cells, careerBatter, ctx), loading: false }
+    }
+    if (batterSeason === null) return { cells: [] as Cell[], loading: true }
+    const cells = batterSeasonCells(batterSeason)
+    if (cohorts === null || cohorts.scope !== 'season') return { cells, loading: benchmarkLoading }
+    const ctx: BatterBenchmarkContext<SeasonStat> = { scope: 'season', cohort: cohorts.batters }
+    return { cells: benchmarkBatterCells(cells, batterSeason, ctx), loading: false }
+  }, [statScope, careerBatter, batterSeason, cohorts, benchmarkLoading])
 
   const splitRows = useMemo<DataTableRow[]>(() => {
     const byCode = new Map<string, StatSplit>()
@@ -139,12 +114,6 @@ export function BattingSubTab(): ReactElement {
     ]
     return candidates.filter((row): row is DataTableRow => row !== null)
   }, [batterSplits, batterSeason, vsPlayer])
-
-  // Date-ascending log: the newest entries are at the tail, so slice from the end.
-  const form = useMemo(
-    () => aggregate(gameLog.slice(-recentFormGames)),
-    [gameLog, recentFormGames],
-  )
 
   const logRows = useMemo<DataTableRow[]>(
     () =>
@@ -173,10 +142,6 @@ export function BattingSubTab(): ReactElement {
     )
   }
 
-  const seasonAvg = parseStat(batterSeason?.avg ?? '')
-  const spanAvg = ratio(form.hits, form.atBats)
-  const delta = spanAvg !== null && seasonAvg !== null ? spanAvg - seasonAvg : null
-  const verdict = compareTo(spanAvg, seasonAvg, false)
   const side = matchup?.batSide.code
   const logSpan =
     gameLog.length > 0
@@ -185,52 +150,20 @@ export function BattingSubTab(): ReactElement {
 
   return (
     <div>
-      <PlayerIdentity
+      <Segmented
+        options={STAT_SCOPE_OPTIONS}
+        activeId={statScope}
+        onSelect={(id) => setStatScope(id as 'season' | 'career')}
+      />
+      <PvbCard
         personId={batter.id}
         name={batter.fullName}
-        role={`${(side === undefined ? undefined : HANDEDNESS[side]) ?? 'Batter'} · ${SEASON} season`}
-      >
-        <StatGrid>
-          <Stat label="AVG" value={rateText(batterSeason?.avg)} />
-          <Stat label="OBP" value={rateText(batterSeason?.obp)} />
-          <Stat label="SLG" value={rateText(batterSeason?.slg)} />
-          <Stat label="OPS" value={rateText(batterSeason?.ops)} />
-        </StatGrid>
-      </PlayerIdentity>
-
-      <Panel title="Recent Form" meta={`${String(form.games)} of ${String(gameLog.length)} G`}>
-        <Segmented
-          options={SPAN_OPTIONS}
-          activeId={String(recentFormGames)}
-          onSelect={(id) => setRecentFormGames(Number(id))}
-        />
-        {form.games > 0 ? (
-          <StatGrid>
-            <Stat label="AVG" value={`${rate3(spanAvg)}${verdict.mark}`} tone={verdict.tone} />
-            <Stat label="Szn AVG" value={rateText(batterSeason?.avg)} />
-            <Stat label="vs Szn" value={signedRate3(delta)} tone={verdict.tone} />
-            <Stat label="H / AB" value={`${String(form.hits)}-${whole(form.atBats)}`} />
-            <Stat label="PA" value={String(form.plateAppearances)} />
-            <Stat label="2B" value={String(form.doubles)} />
-            <Stat label="HR" value={String(form.homeRuns)} />
-            <Stat label="K%" value={percent(computeKpct(form.strikeOuts, form.plateAppearances), 0)} />
-            <Stat label="BB%" value={percent(computeBBpct(form.baseOnBalls, form.plateAppearances), 0)} />
-          </StatGrid>
-        ) : loading ? (
-          <SkeletonRows rows={4} />
-        ) : (
-          <EmptyPanel message="No games logged this season" />
-        )}
-      </Panel>
-
-      <SprayPanel data={savantData} loading={loading} />
-
-      <ZonePanel
-        title="Hot / Cold"
-        caption="Batting average by strike-zone cell"
-        zones={batterHotCold}
-        loading={loading}
-        emptyMessage="No zone data for this season"
+        strap={`${(side === undefined ? undefined : HANDEDNESS[side]) ?? 'Batter'} \u00b7 ${SEASON}`}
+        scopeLabel={statScope === 'season' ? 'Season' : 'Career'}
+        role="batter"
+        cells={statCard.cells}
+        platoon={null}
+        loading={statCard.loading}
       />
 
       <TablePanel

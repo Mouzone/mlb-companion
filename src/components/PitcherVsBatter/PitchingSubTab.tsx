@@ -1,70 +1,78 @@
 import { useEffect, useMemo, useState, type ReactElement } from 'react'
 import { fetchCachedGameLog } from '../../api/playerStatsCache'
-import type { GameLogEntry, StatSplit } from '../../api/types'
+import type { CareerPitcherStat, GameLogEntry, PitcherSeasonStat, StatSplit } from '../../api/types'
+import type { PitcherRole } from '../../api/benchmarks'
 import { usePlayerStats } from '../../hooks/usePlayerStats'
+import { useStatBenchmarks } from '../../hooks/useStatBenchmarks'
+import { useCareerMatchupStats } from '../../hooks/useCareerMatchupStats'
 import { useGameStore } from '../../store/gameStore'
 import { derivePitcher } from '../../utils/derivePitcher'
-import { parseStat } from '../../utils/sabermetrics'
+import { PARK_FACTORS } from '../../utils/leagueConstants'
 import type { DataTableRow } from '../ui'
-import { EmptyPanel, Segmented, Stat, StatGrid } from '../ui'
+import { EmptyPanel, Segmented } from '../ui'
 import {
-  ArsenalPanel,
+  buildGameArsenalRows,
+  buildSeasonArsenalRows,
+  type HandednessFilter,
+} from './ArsenalColorCoding'
+import { ColorCodedArsenal } from './ColorCodedArsenal'
+import { PvbCard } from './PvbCard'
+import {
+  pitcherCareerCells,
+  pitcherSeasonCells,
+  type Cell,
+} from './PvbCards'
+import { benchmarkPitcherCells, type PitcherBenchmarkContext } from './PvbBenchmarks'
+import { Panel, TablePanel } from './PvbPanels'
+import {
   LOG_COLUMNS,
   SPLIT_COLUMNS,
   aggregate,
   lineRow,
   situationRow,
 } from './PitchingPanels'
-import { Panel, SkeletonRows, TablePanel, ZonePanel } from './PvbPanels'
-import {
-  PlayerIdentity,
-  compareTo,
-  fixed,
-  monthDay,
-  rate3,
-  rateText,
-  splitCode,
-  whole,
-} from './PvbShared'
+import { monthDay, splitCode, whole } from './PvbShared'
 
 const SEASON = new Date().getFullYear().toString()
 
-/** Spans served from the one cached season log, so switching never refetches. */
-const SPAN_OPTIONS = [
-  { id: '7', label: '7 G' },
-  { id: '15', label: '15 G' },
-  { id: '30', label: '30 G' },
+const STAT_SCOPE_OPTIONS = [
+  { id: 'season', label: 'Season' },
+  { id: 'career', label: 'Career' },
 ]
 
-/** `vl,vr,risp` is fetchStatSplits' default, which usePlayerStats relies on. */
 const SITUATIONS: ReadonlyArray<{ code: string; label: string }> = [
   { code: 'vl', label: 'vs L' },
   { code: 'vr', label: 'vs R' },
   { code: 'risp', label: 'RISP' },
 ]
 
+function resolvePitcherRole(stat: PitcherSeasonStat | null): PitcherRole {
+  if (stat === null) return 'starter'
+  const starts = stat.gamesStarted ?? 0
+  const appearances = stat.gamesPitched ?? stat.gamesPlayed
+  return starts > 0 && starts >= appearances / 2 ? 'starter' : 'reliever'
+}
+
 export function PitchingSubTab(): ReactElement {
   const selectedGame = useGameStore((s) => s.selectedGame)
   const currentPlay = useGameStore((s) => s.currentPlay)
   const liveFeed = useGameStore((s) => s.liveFeed)
-  const recentFormGames = useGameStore((s) => s.recentFormGames)
-  const setRecentFormGames = useGameStore((s) => s.setRecentFormGames)
+  const gameFeedPitches = useGameStore((s) => s.gameFeedPitches)
+  const globalScope = useGameStore((s) => s.globalScope)
 
   const matchup = currentPlay?.matchup ?? null
   const batterId = matchup?.batter.id ?? null
   const pitcher = derivePitcher(currentPlay, liveFeed, selectedGame)
   const pitcherId = pitcher?.id ?? null
 
-  const { pitchArsenal, pitcherHotCold, pitcherSplits, pitcherSeason, loading } = usePlayerStats(
-    batterId,
-    pitcherId,
-  )
+  const { pitchArsenal, pitcherSplits, pitcherSeason, loading } = usePlayerStats(batterId, pitcherId)
+  const { pitcher: careerPitcher } = useCareerMatchupStats(pitcherId, batterId)
 
+  const [statScope, setStatScope] = useState<'season' | 'career'>('season')
+  const [handedness, setHandedness] = useState<HandednessFilter>('all')
   const [log, setLog] = useState<GameLogEntry[]>([])
   const [logLoading, setLogLoading] = useState(false)
 
-  // usePlayerStats' gameLog is the BATTER's and is pre-truncated, so the full
-  // pitching log is fetched once per pitcher. The span is never a dependency.
   useEffect((): (() => void) | undefined => {
     if (pitcherId === null) {
       setLog([])
@@ -87,6 +95,47 @@ export function PitchingSubTab(): ReactElement {
     }
   }, [pitcherId])
 
+  const { cohorts, loading: benchmarkLoading } = useStatBenchmarks(statScope)
+
+  const statCard = useMemo(() => {
+    if (statScope === 'career') {
+      if (careerPitcher === null) return { cells: [] as Cell[], loading: true }
+      const cells = pitcherCareerCells(careerPitcher)
+      if (cohorts === null || cohorts.scope !== 'career') return { cells, loading: benchmarkLoading }
+      const role = resolvePitcherRole(pitcherSeason)
+      const cohort = role === 'starter' ? cohorts.starters : cohorts.relievers
+      const ctx: PitcherBenchmarkContext<CareerPitcherStat> = { scope: 'career', role, cohort }
+      return { cells: benchmarkPitcherCells(cells, careerPitcher, ctx), loading: false }
+    }
+    if (pitcherSeason === null) return { cells: [] as Cell[], loading: true }
+    const parkFactor = PARK_FACTORS[selectedGame?.venue?.name ?? ''] ?? 1.0
+    const cells = pitcherSeasonCells(pitcherSeason, parkFactor)
+    if (cohorts === null || cohorts.scope !== 'season') return { cells, loading: benchmarkLoading }
+    const role = resolvePitcherRole(pitcherSeason)
+    const cohort = role === 'starter' ? cohorts.starters : cohorts.relievers
+    const ctx: PitcherBenchmarkContext<PitcherSeasonStat> = { scope: 'season', role, cohort }
+    return { cells: benchmarkPitcherCells(cells, pitcherSeason, ctx), loading: false }
+  }, [statScope, careerPitcher, pitcherSeason, cohorts, benchmarkLoading, selectedGame])
+
+  const arsenalRows = useMemo(() => {
+    if (globalScope === 'thisGame') {
+      if (liveFeed === null || pitcherId === null) return [] as ReturnType<typeof buildGameArsenalRows>
+      return buildGameArsenalRows(
+        gameFeedPitches,
+        liveFeed.liveData.plays.allPlays,
+        liveFeed,
+        pitcherId,
+        handedness,
+      )
+    }
+    return buildSeasonArsenalRows(pitchArsenal)
+  }, [globalScope, gameFeedPitches, liveFeed, pitcherId, handedness, pitchArsenal])
+
+  const arsenalTotalPitches = useMemo(() => {
+    if (globalScope === 'thisGame') return arsenalRows.reduce((sum, r) => sum + r.count, 0)
+    return pitchArsenal[0]?.totalPitches ?? 0
+  }, [globalScope, arsenalRows, pitchArsenal])
+
   const splitRows = useMemo<DataTableRow[]>(() => {
     const byCode = new Map<string, StatSplit>()
     for (const entry of pitcherSplits) byCode.set(splitCode(entry), entry)
@@ -107,9 +156,6 @@ export function PitchingSubTab(): ReactElement {
     }
     return rows
   }, [pitcherSplits, log])
-
-  // The log is date-ascending, so the tail is the most recent span.
-  const form = useMemo(() => aggregate(log.slice(-recentFormGames)), [log, recentFormGames])
 
   const logRows = useMemo<DataTableRow[]>(
     () =>
@@ -137,62 +183,36 @@ export function PitchingSubTab(): ReactElement {
     )
   }
 
-  const seasonEra = parseStat(pitcherSeason?.era ?? '')
-  const eraVerdict = compareTo(form.era, seasonEra, true)
   const hand = matchup?.pitchHand.code
+  const scopeLabel =
+    globalScope === 'thisGame' ? 'This Game' : globalScope === 'season' ? 'Season' : 'Career'
 
   return (
     <div>
-      <PlayerIdentity
+      <Segmented
+        options={STAT_SCOPE_OPTIONS}
+        activeId={statScope}
+        onSelect={(id) => setStatScope(id as 'season' | 'career')}
+      />
+      <PvbCard
         personId={pitcher.id}
         name={pitcher.fullName}
-        role={`${hand === undefined ? 'Pitcher' : `${hand}HP`} · ${SEASON} season`}
-      >
-        <StatGrid>
-          <Stat label="ERA" value={rateText(pitcherSeason?.era)} />
-          <Stat label="WHIP" value={rateText(pitcherSeason?.whip)} />
-          <Stat label="IP" value={pitcherSeason?.inningsPitched ?? ''} />
-          <Stat label="SO" value={whole(pitcherSeason?.strikeOuts ?? null)} />
-        </StatGrid>
-      </PlayerIdentity>
+        strap={`${hand === undefined ? 'Pitcher' : `${hand}HP`} \u00b7 ${SEASON}`}
+        scopeLabel={statScope === 'season' ? 'Season' : 'Career'}
+        role="pitcher"
+        cells={statCard.cells}
+        platoon={null}
+        loading={statCard.loading}
+      />
 
-      <Panel title="Recent Form" meta={`${String(form.games)} of ${String(log.length)} G`}>
-        <Segmented
-          options={SPAN_OPTIONS}
-          activeId={String(recentFormGames)}
-          onSelect={(id) => setRecentFormGames(Number(id))}
-        />
-        {form.games > 0 ? (
-          <StatGrid>
-            <Stat
-              label="ERA"
-              value={`${fixed(form.era, 2)}${eraVerdict.mark}`}
-              tone={eraVerdict.tone}
-            />
-            <Stat label="Szn ERA" value={rateText(pitcherSeason?.era)} />
-            <Stat label="WHIP" value={fixed(form.whip, 2)} />
-            <Stat label="IP" value={fixed(form.innings, 1)} />
-            <Stat label="Opp AVG" value={rate3(form.avg)} />
-            <Stat label="K" value={String(form.strikeOuts)} />
-            <Stat label="BB" value={String(form.baseOnBalls)} />
-            <Stat label="H" value={String(form.hits)} />
-            <Stat label="HR" value={String(form.homeRuns)} />
-          </StatGrid>
-        ) : logLoading ? (
-          <SkeletonRows rows={4} />
-        ) : (
-          <EmptyPanel message="No games logged this season" />
-        )}
-      </Panel>
-
-      <ArsenalPanel arsenal={pitchArsenal} loading={loading} />
-
-      <ZonePanel
-        title="Zone Profile"
-        caption="Opponent batting average by strike-zone cell"
-        zones={pitcherHotCold}
+      <ColorCodedArsenal
+        rows={arsenalRows}
         loading={loading}
-        emptyMessage="No zone data for this season"
+        scopeLabel={scopeLabel}
+        showHandednessToggle={globalScope === 'thisGame'}
+        handedness={handedness}
+        onHandednessChange={setHandedness}
+        totalPitches={arsenalTotalPitches}
       />
 
       <TablePanel

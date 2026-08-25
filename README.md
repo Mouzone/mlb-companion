@@ -315,13 +315,28 @@ src/
                                            (gameStore.zonePerspective 'pitcher'|'batter') swaps which HotCold
                                            array feeds ZonePanel/HeatMap (always pitcher-perspective orientation).
                                            Platoon matchup table, arsenal faced. Imported by GameScreen.
-    PitcherVsBatter/PitchingSubTab.tsx    Pitcher arsenal + hot/cold heatmap + situational splits (vs L / vs R /
-                                           RISP) + recent-form aggregation (7/15/30-game spans from one cached
-                                           season game log, so switching spans never refetches). Renders
-                                           ArsenalBars and HeatMap. Imported by GameScreen.
-     PitcherVsBatter/BattingSubTab.tsx     Batter hot/cold heatmap + spray chart + situational splits + recent
-                                           form, same span/caching pattern as PitchingSubTab. Renders HeatMap and
-                                           SprayChart. Imported by GameScreen.
+    PitcherVsBatter/PitchingSubTab.tsx    Pitcher stat card (local Season/Career toggle with
+                                           benchmark percentile coloring via PvbCard + benchmarkPitcherCells)
+                                           + color-coded arsenal (globalScope-driven: This Game shows
+                                           in-game velo/spin/break color-coded vs season avg per pitch type,
+                                           with vs All/RHB/LHB handedness filter; Season/Career shows plain
+                                           arsenal from pitchArsenal) + opponent splits DataTable + game log
+                                           DataTable. Imported by GameScreen.
+     PitcherVsBatter/BattingSubTab.tsx     Batter stat card (local Season/Career toggle with benchmark
+                                           percentile coloring via PvbCard + benchmarkBatterCells) + splits
+                                           DataTable + game log DataTable. Imported by GameScreen.
+     PitcherVsBatter/ArsenalColorCoding.ts Pure functions: buildGameArsenalRows (filters SavantGamePitch
+                                           by current pitcher via allPlays matchup cross-ref, groups by
+                                           pitch_type, color-codes velo vs avg_pitch_speed season baseline)
+                                           and buildSeasonArsenalRows (maps PitchArsenalItem[] to
+                                           ColorCodedArsenalRow[]). Export types: HandednessFilter,
+                                           ArsenalMetric, ColorCodedArsenalRow. Imported by PitchingSubTab.
+     PitcherVsBatter/ColorCodedArsenal.tsx ColorCodedArsenal({ rows, loading, scopeLabel,
+                                           showHandednessToggle, handedness, onHandednessChange,
+                                           totalPitches }). Renders a CSS-grid arsenal table with colored
+                                           velo/spin/break values + delta labels. Optional Segmented for
+                                           All/RHB/LHB handedness filter (shown only for This Game scope).
+                                           Imported by PitchingSubTab.
     Canvas/ArsenalBars.tsx                ArsenalBars({ arsenal: PitchArsenalItem[], width = 280 }). Draws a
                                            horizontal bar per pitch type via 2D canvas, colored with
                                            getPitchColor. Renders a bare <canvas> with NO className and NO CSS
@@ -570,8 +585,11 @@ main.tsx
                               BatterGameSubTab  -> GameIdentity, Plate Discipline,
                                                   At Bats DataTable
           .pb-carousel (horizontal scroll-snap, one card per viewport)
-            section#pitching -> PitchingSubTab -> ArsenalBars, HeatMap
-            section#batting  -> BattingSubTab  -> HeatMap, SprayChart
+            section#pitching -> PitchingSubTab -> Segmented (Season/Career), PvbCard,
+                                             ColorCodedArsenal (Segended All/RHB/LHB),
+                                             TablePanel (splits), TablePanel (game log)
+            section#batting  -> BattingSubTab  -> Segmented (Season/Career), PvbCard,
+                                             TablePanel (splits), TablePanel (game log)
       FloatingGamesButton (fixed bottom-left, calls store.reset())
       StatsGuide          (fixed bottom-right FAB)
 ```
