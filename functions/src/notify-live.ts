@@ -16,8 +16,9 @@ import { initializeApp } from 'firebase-admin/app'
 
 import { computeWatchability, PARK_FACTORS, tierFor } from './scoring.js'
 import { sendTelegramNotification, type NotificationPayload } from './telegram.js'
+import { ensureFresh, getPayload } from './watchability-store.js'
 
-import type { WatchabilityPayload, WinProbabilityPlay } from '../../shared/scoring-types.js'
+import type { WinProbabilityPlay } from '../../shared/scoring-types.js'
 
 const POLL_INTERVAL_MS = 15_000
 const MAX_RUNTIME_MS = 55_000
@@ -93,16 +94,15 @@ export const notifyLive = onSchedule(
   {
     schedule: 'every 1 minutes',
     timeZone: 'America/New_York',
-    secrets: ['TELEGRAM_BOT_TOKEN', 'TELEGRAM_CHAT_ID', 'WATCHABILITY_JSON_URL'],
-    memory: '256MiB' as const,
-    timeoutSeconds: 60,
+    secrets: ['TELEGRAM_BOT_TOKEN', 'TELEGRAM_CHAT_ID'],
+    memory: '512MiB' as const,
+    timeoutSeconds: 540,
   },
   async () => {
     const botToken = process.env.TELEGRAM_BOT_TOKEN
     const chatId = process.env.TELEGRAM_CHAT_ID
-    const payloadUrl = process.env.WATCHABILITY_JSON_URL
 
-    if (!botToken || !chatId || !payloadUrl) {
+    if (!botToken || !chatId) {
       console.warn('[notify-live] Missing secrets, skipping')
       return
     }
@@ -123,11 +123,17 @@ export const notifyLive = onSchedule(
       return
     }
 
-    const payloadRes = await fetch(payloadUrl, { cache: 'no-cache' })
-    if (!payloadRes.ok) throw new Error(`watchability.json fetch failed: ${payloadRes.status}`)
-    const payload = (await payloadRes.json()) as WatchabilityPayload
+    // Live games can belong to either slate date, so both payloads are needed to
+    // resolve inputs. Yesterday's is read opportunistically — if it was never
+    // built, only its handful of carryover games go unscored.
+    const [payload, yesterdayPayload] = await Promise.all([
+      ensureFresh(today),
+      getPayload(yesterday),
+    ])
 
-    const inputsByGame = new Map(payload.games.map((g) => [g.gamePk, g]))
+    const inputsByGame = new Map(
+      [...(yesterdayPayload?.games ?? []), ...payload.games].map((g) => [g.gamePk, g]),
+    )
     const db = getFirestore()
 
     const startTime = Date.now()

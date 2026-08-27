@@ -2,8 +2,11 @@
  * Watchability scores for a day's slate.
  *
  * Two data sources feed one number:
- *   1. `/watchability.json` — the nightly pipeline's pregame inputs (team
- *      ratings, probable-starter ratings, league baseline). Fetched once.
+ *   1. The `watchabilityPayload` Cloud Function — the pipeline's pregame inputs
+ *      (team ratings, probable-starter ratings, league baseline). Fetched once.
+ *      This was a static `/watchability.json` until the pipeline moved off
+ *      GitHub Actions; the function rebuilds on demand if a scheduled run is
+ *      missing, which the committed file could not do.
  *   2. `/game/{pk}/winProbability` — live leverage and win-probability swings,
  *      polled only for games actually in progress.
  *
@@ -31,7 +34,8 @@ import {
   type WinProbabilityPlay,
 } from '../utils/watchability';
 
-const PAYLOAD_URL = '/watchability.json';
+const PAYLOAD_URL =
+  'https://us-central1-mlb-companion-pwa.cloudfunctions.net/watchabilityPayload';
 const LIVE_POLL_INTERVAL = 30_000;
 const PLAYS_STORAGE_KEY = 'mlb-watchability-plays';
 /** Bump when the persisted shape changes so old entries are dropped, not misread. */

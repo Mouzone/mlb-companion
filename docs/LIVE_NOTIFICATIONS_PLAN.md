@@ -4,14 +4,24 @@
 >
 > - Firebase project: `mlb-companion-pwa` (Blaze plan)
 > - Functions: `notifyMorningDigest` (daily 9 AM ET), `notifyPregame`
->   (every 10 min), and `notifyLive` (every 1 min), all Node.js 22 gen-2
->   in `us-central1`, 256 MiB
-> - Secrets in Secret Manager: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`,
->   `WATCHABILITY_JSON_URL`
+>   (every 10 min), `notifyLive` (every 1 min), `buildWatchability`
+>   (06:00/09:00/12:00 ET), `watchabilityPayload` (HTTP), and `liveScores`
+>   (HTTP), all Node.js 22 gen-2 in `us-central1`
+> - Secrets in Secret Manager: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`
 > - Telegram delivers to a private DM chat (not a channel), so no bot admin
 >   setup is required
-> - Firestore rules deployed: `notifications/{date}/games/{gamePk}` is
->   Admin-SDK-only (`allow read, write: if false`)
+> - Firestore rules deployed: `notifications/{date}/games/{gamePk}` and
+>   `watchability/{document}` are Admin-SDK-only (`allow read, write: if false`)
+>
+> **2026-08-27 pipeline migration:** the watchability payload is no longer
+> built by GitHub Actions and committed as `public/watchability.json`. GitHub's
+> `schedule` trigger is best-effort — it silently dropped a run with no retry
+> and no alert, and every consumer failed closed on a stale payload date, so
+> one missed cron produced zero scores and zero notifications. The pipeline now
+> runs inside the `buildWatchability` Cloud Function and writes Firestore
+> `watchability/{YYYY-MM-DD}` plus `watchability/elo-state`. `ensureFresh`
+> builds on demand when a date's document is missing, so a missed run repairs
+> itself on the next consumer call.
 >
 > **Build note:** `functions/tsconfig.json` sets `rootDir: ".."` and includes
 > `../shared` so the shared scoring module is emitted into `functions/lib`.
@@ -56,28 +66,29 @@ Two related improvements bundled as one refactor:
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│ EXISTING (unchanged)                                             │
+│ DATA PIPELINE (Cloud Functions)                                  │
 │                                                                  │
-│  GitHub Actions ──cron 07:00/12:00 ET──▶ build-watchability.mjs │
-│         │                                       │                │
-│         │ git commit                            ▼                │
-│         └────────────▶ public/watchability.json ◀── served by    │
-│                         public/elo-state.json     Vercel (static) │
-│                                                  │               │
-│  Browser ──fetch /watchability.json──────────────┘               │
-│         ──computeWatchability() in browser (UI display only)     │
+│  Cloud Scheduler ──cron 06/09/12 ET──▶ buildWatchability         │
+│                                          │ shared/build-         │
+│                                          │ watchability.mjs      │
+│                                          ▼ (statsapi.mlb.com)    │
+│                        Firestore watchability/{YYYY-MM-DD}       │
+│                                  watchability/elo-state          │
+│                                          │                       │
+│  Browser ──GET watchabilityPayload───────┘ (ensureFresh: builds  │
+│         ──computeWatchability() in browser  on demand if absent) │
 └──────────────────────────────────────────────────────────────────┘
 
 ┌──────────────────────────────────────────────────────────────────┐
 │ NEW — Backend (Firebase Cloud Functions, free tier)              │
 │                                                                  │
-│  ├── notify-morning-digest ──cron 9AM ET──▶ fetch /watchability  │
-│  │    + MLB schedule (for start times)        .json               │
+│  ├── notify-morning-digest ──cron 9AM ET──▶ ensureFresh(today)   │
+│  │    + MLB schedule (for start times)     (Firestore)            │
 │  │    compute pregame scores, filter ≥ 65      │                  │
 │  │    sort by score desc, single Telegram msg  ▼                  │
 │  │    set digestNotified per game in Firestore                    │
 │  │                                                               │
-│  ├── notify-pregame  ──cron 10min──▶ fetch /watchability.json   │
+│  ├── notify-pregame  ──cron 10min──▶ ensureFresh(today)         │
 │  │  │  + MLB schedule (for start times)     compute pregame      │
 │  │  │  scores, filter ≥ 65, check if game    scores              │
 │  │  │  starts within 30 min → send            │                  │
@@ -89,7 +100,7 @@ Two related improvements bundled as one refactor:
 │  │                                    if no live games → exit    │
 │  │                                    poll loop (every 15s):     │
 │  │                                      fetch winProbability     │
-│  │                                      fetch /watchability.json │
+│  │                                      ensureFresh(today)      │
 │  │                                      computeWatchability()    │
 │  │                                      query Firestore dedup    │
 │  │                                      POST Telegram sendMessage│
@@ -152,11 +163,12 @@ that deep-link to the PWA.
 | Document store | Would need Firestore anyway | Firestore 50K reads / 20K writes per day |
 | Cold starts | Yes | Yes, but 1-min cadence keeps warm during games |
 
-GitHub Actions stays for the nightly build — git commit is native, batch job
-is purpose-built for CI, and the free tier has no issue with the 60+ API calls
-the build makes.
+GitHub Actions is no longer used for the data pipeline (see the 2026-08-27
+migration note at the top). The pipeline runs in `buildWatchability` alongside
+the notification functions, so there is exactly one scheduler and one storage
+layer to reason about.
 
-### Why not just GitHub Actions cron for notifications too?
+### Why not GitHub Actions cron at all?
 
 GitHub Actions free tier: 2,000 minutes/month. A 1-minute cron running
 ~12 hours/day = 720 runs/day × ~30 days = ~21,600 runs/month. Each run
@@ -256,7 +268,7 @@ Re-export `PARK_FACTORS` and league constants from `shared/scoring.mjs`. This
 eliminates the drift risk with `build-watchability.mjs`'s hardcoded
 `WOBA_SCALE` and `LEAGUE_R_PER_PA`.
 
-### Modify: `scripts/build-watchability.mjs`
+### Modify: `shared/build-watchability.mjs`
 
 Replace the hardcoded `WOBA_SCALE = 1.24` and `LEAGUE_R_PER_PA = 0.12`
 (lines 48-49) with imports from `../shared/scoring.mjs`. This closes the
@@ -323,8 +335,6 @@ firebase functions:secrets:set TELEGRAM_BOT_TOKEN
 firebase functions:secrets:set TELEGRAM_CHAT_ID
 # Paste the channel chat_id (negative number, e.g. -1001234567890)
 
-firebase functions:secrets:set WATCHABILITY_JSON_URL
-# Paste the Vercel URL: https://mlb-companion.vercel.app/watchability.json
 ```
 
 ## Part 3 — Telegram Bot Setup
@@ -487,7 +497,7 @@ export const notifyMorningDigest = onSchedule(
   {
     schedule: 'every day 09:00',
     timeZone: 'America/New_York',
-    secrets: ['TELEGRAM_BOT_TOKEN', 'TELEGRAM_CHAT_ID', 'WATCHABILITY_JSON_URL'],
+    secrets: ['TELEGRAM_BOT_TOKEN', 'TELEGRAM_CHAT_ID'],
     memory: '256MiB',
     timeoutSeconds: 30,
   },
@@ -496,7 +506,7 @@ export const notifyMorningDigest = onSchedule(
 ```
 
 Logic:
-1. Fetch `watchability.json` from Vercel (the `WATCHABILITY_JSON_URL` secret)
+1. Load the payload via `ensureFresh(today)` from Firestore
 2. Fetch MLB schedule for today (`statsapi.mlb.com/api/v1/schedule?sportId=1&date={today}`)
    to get each game's `gameDate` (ISO timestamp for start time)
 3. For each game in `payload.games`:
@@ -522,7 +532,7 @@ export const notifyPregame = onSchedule(
   {
     schedule: 'every 10 minutes',
     timeZone: 'America/New_York',
-    secrets: ['TELEGRAM_BOT_TOKEN', 'TELEGRAM_CHAT_ID', 'WATCHABILITY_JSON_URL'],
+    secrets: ['TELEGRAM_BOT_TOKEN', 'TELEGRAM_CHAT_ID'],
     memory: '256MiB',
     timeoutSeconds: 30,
   },
@@ -531,7 +541,7 @@ export const notifyPregame = onSchedule(
 ```
 
 Logic:
-1. Fetch `watchability.json` from Vercel (the `WATCHABILITY_JSON_URL` secret)
+1. Load the payload via `ensureFresh(today)` from Firestore
 2. Fetch MLB schedule for today to get each game's `gameDate` (start time)
 3. For each game in `payload.games`:
    - Compute pregame score using `shared/scoring.mjs` (park factor from
@@ -563,7 +573,7 @@ export const notifyLive = onSchedule(
   {
     schedule: 'every 1 minutes',
     timeZone: 'America/New_York',
-    secrets: ['TELEGRAM_BOT_TOKEN', 'TELEGRAM_CHAT_ID', 'WATCHABILITY_JSON_URL'],
+    secrets: ['TELEGRAM_BOT_TOKEN', 'TELEGRAM_CHAT_ID'],
     memory: '256MiB',
     timeoutSeconds: 60,
   },
@@ -578,7 +588,7 @@ Logic:
    in progress after midnight ET)
 2. Filter to games with `abstractGameState === 'Live'`
 3. If no live games → exit immediately (sub-second, negligible cost)
-4. Fetch `watchability.json` for inputs (once, not per poll iteration)
+4. Load the payload via `ensureFresh(today)` for inputs (once, not per poll iteration)
 5. **Polling loop** (every 15s for 55s, ~3-4 iterations per invocation):
    - For each live game:
      - Fetch `winProbability` from
@@ -887,7 +897,7 @@ until the volume matters.
 |---|---|
 | `src/utils/watchability.ts` | Re-export from `shared/scoring.mjs` instead of defining inline |
 | `src/utils/leagueConstants.ts` | Re-export `PARK_FACTORS` + league constants from `shared/scoring.mjs` |
-| `scripts/build-watchability.mjs` | Import `WOBA_SCALE`, `LEAGUE_R_PER_PA` from `shared/scoring.mjs` |
+| `shared/build-watchability.mjs` | Import `WOBA_SCALE`, `LEAGUE_R_PER_PA` from `./scoring.mjs`; exports `buildWatchability(date, priorState)` |
 | `src/components/GameSelect/GameSelect.tsx` | Replace one-shot `fetchSchedule` with `useLiveSlate` hook for adaptive polling |
 
 ### Unchanged (key files)
@@ -896,7 +906,7 @@ until the volume matters.
 |---|---|
 | `vite.config.ts` | Relative imports from `shared/` resolve natively |
 | `vercel.json` | Still pure static SPA — Firebase handles the backend |
-| `.github/workflows/watchability.yml` | Nightly build unchanged |
+| `functions/src/build-watchability.ts` | `buildWatchability` (onSchedule) + `watchabilityPayload` (onRequest) |
 | `package.json` (root) | No new frontend deps |
 | `src/hooks/useWatchability.ts` | Scores for UI display; receives fresher `games` prop automatically |
 | `src/components/GameSelect/GameCard.tsx` | Already renders scores/status/linescore from props — receives fresh data |
@@ -921,7 +931,7 @@ until the volume matters.
    - `firebase init` in repo root
    - Select Functions (TypeScript) + Firestore
    - Set secrets via CLI (`TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`,
-     `WATCHABILITY_JSON_URL`)
+     )
 
 3. **Implement `functions/src/telegram.ts`**
    - HTML message builder for pregame / crossing / jump triggers
@@ -930,7 +940,7 @@ until the volume matters.
    - Test with a hardcoded payload locally
 
 4. **Implement `functions/src/notify-pregame.ts`**
-   - Fetch `watchability.json`
+   - Load the payload via `ensureFresh`
    - Compute pregame scores (using shared scoring module)
    - Firestore dedup
    - Deploy and test
@@ -1032,10 +1042,11 @@ quota, but only on days with many live games. Most days will be far less.
 games are live, so the 1-min cron is nearly free during off-hours. The
 15s polling loop only runs during live games (~3-4 hours/day typically).
 
-### GitHub Actions
+### buildWatchability
 
-The nightly build workflow is unchanged. 2 runs/day × ~60s = ~60 minutes/month.
-Well within the 2,000 free minutes.
+3 runs/day at ~30-60s each, 512MiB. Roughly 90 GB-seconds/month against the
+400,000 GB-second free tier. On-demand `ensureFresh` builds add at most a
+handful more per day.
 
 ### Telegram
 

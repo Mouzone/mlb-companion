@@ -17,8 +17,9 @@
 import { onRequest } from 'firebase-functions/v2/https'
 
 import { computeWatchability, PARK_FACTORS, tierFor } from './scoring.js'
+import { ensureFresh, todayET } from './watchability-store.js'
 
-import type { WatchabilityPayload, WinProbabilityPlay } from '../../shared/scoring-types.js'
+import type { WinProbabilityPlay } from '../../shared/scoring-types.js'
 
 const MLB_API = 'https://statsapi.mlb.com/api/v1'
 
@@ -127,33 +128,19 @@ function progressFor(state: 'Preview' | 'Live' | 'Final'): 'preview' | 'live' | 
 
 export const liveScores = onRequest(
   {
-    secrets: ['WATCHABILITY_JSON_URL'],
     memory: '512MiB' as const,
-    timeoutSeconds: 60,
+    timeoutSeconds: 540,
     cors: true,
   },
   async (req, res) => {
-    const payloadUrl = process.env.WATCHABILITY_JSON_URL
-    if (!payloadUrl) {
-      res.status(500).json({ error: 'WATCHABILITY_JSON_URL secret not configured' })
-      return
-    }
-
-    const date =
-      (req.query.date as string) ||
-      new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' })
+    const date = (req.query.date as string) || todayET()
 
     try {
-      const [scheduleGames, payloadRes] = await Promise.all([
+      const [scheduleGames, payload] = await Promise.all([
         fetchSchedule(date),
-        fetch(payloadUrl, { cache: 'no-cache' }),
+        ensureFresh(date),
       ])
 
-      if (!payloadRes.ok) {
-        res.status(502).json({ error: `watchability.json fetch failed: ${payloadRes.status}` })
-        return
-      }
-      const payload = (await payloadRes.json()) as WatchabilityPayload
       const inputsByGame = new Map(payload.games.map((g) => [g.gamePk, g]))
 
       const games: Record<string, GameScoreEntry> = {}

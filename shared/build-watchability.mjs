@@ -1,10 +1,9 @@
 /**
- * Nightly watchability pipeline.
+ * Watchability pipeline.
  *
- * Emits `public/watchability.json`: the *inputs* to the watchability score, not
- * the score itself. Scoring lives in `src/utils/watchability.ts` so the formula
- * can be retuned in a normal deploy without re-running this job or invalidating
- * a cached payload.
+ * Produces the *inputs* to the watchability score, not the score itself.
+ * Scoring lives in `src/utils/watchability.ts` so the formula can be retuned in
+ * a normal deploy without re-running this job or invalidating a cached payload.
  *
  * Everything here comes from statsapi.mlb.com. FanGraphs forbids automated
  * access, so SIERA/wRC+/projections are computed from raw components instead of
@@ -12,17 +11,11 @@
  * rather than hardcoded from literature. That makes the z-scores self-calibrate
  * as run environment drifts year to year.
  *
- * Usage: node scripts/build-watchability.mjs [YYYY-MM-DD]
+ * This module is storage-agnostic: it returns the payload and the Elo state and
+ * lets the caller persist them. The `buildWatchability` Cloud Function writes
+ * both to Firestore. Keeping I/O out of here is what lets the same code run
+ * unchanged inside a function runtime with no filesystem to commit to.
  */
-
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
-
-const HERE = dirname(fileURLToPath(import.meta.url));
-const ROOT = resolve(HERE, '..');
-const OUT_FILE = resolve(ROOT, 'public/watchability.json');
-const ELO_STATE_FILE = resolve(ROOT, 'public/elo-state.json');
 
 const API = 'https://statsapi.mlb.com/api/v1';
 
@@ -44,7 +37,7 @@ const WOBA_2B = 1.27;
 const WOBA_3B = 1.62;
 const WOBA_HR = 2.1;
 
-import { WOBA_SCALE, LEAGUE_R_PER_PA } from '../shared/scoring.mjs'
+import { WOBA_SCALE, LEAGUE_R_PER_PA } from './scoring.mjs'
 
 // ---------------------------------------------------------------------------
 // fetch helpers
@@ -460,14 +453,21 @@ async function fetchPitcherRating(personId, fullName, season) {
 // main
 // ---------------------------------------------------------------------------
 
-async function main() {
-  const date = process.argv[2] ?? new Date().toISOString().slice(0, 10);
+/**
+ * Builds the payload for one slate date.
+ *
+ * `priorState` is only consulted for cross-season Elo carryover; within a season
+ * every rating is recomputed from the completed games, so a missing state
+ * document costs nothing except carryover on opening day.
+ *
+ * @param {string} date YYYY-MM-DD
+ * @param {{ season: number, ratings: Record<string, number> } | null} priorState
+ * @returns {Promise<{ payload: object, eloState: object }>}
+ */
+export async function buildWatchability(date, priorState = null) {
   const season = Number(date.slice(0, 4));
   console.log(`[watchability] building for ${date} (season ${season})`);
 
-  const priorState = await readFile(ELO_STATE_FILE, 'utf8')
-    .then((raw) => JSON.parse(raw))
-    .catch(() => null);
   const priorRatings = priorState?.season === season - 1 ? priorState.ratings : null;
 
   const teams = await fetchTeams(season);
@@ -609,26 +609,15 @@ async function main() {
     games,
   };
 
-  await mkdir(dirname(OUT_FILE), { recursive: true });
-  await writeFile(OUT_FILE, `${JSON.stringify(payload)}\n`, 'utf8');
-  await writeFile(
-    ELO_STATE_FILE,
-    `${JSON.stringify(
-      {
-        season,
-        updatedAt: payload.generatedAt,
-        ratings: Object.fromEntries([...eloRatings].map(([id, elo]) => [id, elo])),
-      },
-      null,
-      2,
-    )}\n`,
-    'utf8',
-  );
+  const eloState = {
+    season,
+    updatedAt: payload.generatedAt,
+    ratings: Object.fromEntries([...eloRatings].map(([id, elo]) => [String(id), elo])),
+  };
 
-  console.log(`[watchability] wrote ${games.length} games to public/watchability.json`);
+  console.log(`[watchability] built ${games.length} games for ${date}`);
+
+  return { payload, eloState };
 }
 
-main().catch((error) => {
-  console.error('[watchability] failed:', error);
-  process.exit(1);
-});
+export default buildWatchability;

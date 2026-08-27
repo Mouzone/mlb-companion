@@ -16,8 +16,7 @@ import { initializeApp } from 'firebase-admin/app'
 
 import { computePregameScore, PARK_FACTORS } from './scoring.js'
 import { sendTelegramNotification, type NotificationPayload } from './telegram.js'
-
-import type { WatchabilityPayload } from '../../shared/scoring-types.js'
+import { ensureFresh } from './watchability-store.js'
 
 const MLB_API = 'https://statsapi.mlb.com/api/v1'
 const REMINDER_WINDOW_MS = 30 * 60 * 1000
@@ -56,16 +55,16 @@ export const notifyPregame = onSchedule(
   {
     schedule: 'every 10 minutes',
     timeZone: 'America/New_York',
-    secrets: ['TELEGRAM_BOT_TOKEN', 'TELEGRAM_CHAT_ID', 'WATCHABILITY_JSON_URL'],
-    memory: '256MiB' as const,
-    timeoutSeconds: 30,
+    secrets: ['TELEGRAM_BOT_TOKEN', 'TELEGRAM_CHAT_ID'],
+    // Building the payload on demand is far heavier than the notify path.
+    memory: '512MiB' as const,
+    timeoutSeconds: 540,
   },
   async () => {
     const botToken = process.env.TELEGRAM_BOT_TOKEN
     const chatId = process.env.TELEGRAM_CHAT_ID
-    const payloadUrl = process.env.WATCHABILITY_JSON_URL
 
-    if (!botToken || !chatId || !payloadUrl) {
+    if (!botToken || !chatId) {
       console.warn('[notify-pregame] Missing secrets, skipping')
       return
     }
@@ -73,14 +72,9 @@ export const notifyPregame = onSchedule(
     const nowET = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }))
     const today = nowET.toLocaleDateString('en-CA')
 
-    const res = await fetch(payloadUrl, { cache: 'no-cache' })
-    if (!res.ok) throw new Error(`watchability.json fetch failed: ${res.status}`)
-    const payload = (await res.json()) as WatchabilityPayload
-
-    if (payload.date !== today) {
-      console.log(`[notify-pregame] Payload date ${payload.date} ≠ today ${today}, skipping`)
-      return
-    }
+    // Builds today's payload if the scheduled run has not landed yet, so a
+    // missed build costs at most one 10-minute tick instead of the whole day.
+    const payload = await ensureFresh(today)
 
     const schedule = await fetchSchedule(today)
 

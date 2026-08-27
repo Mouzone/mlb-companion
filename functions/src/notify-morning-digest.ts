@@ -1,7 +1,7 @@
 /**
  * notify-morning-digest — scheduled Cloud Function (daily at 9 AM ET).
  *
- * Fetches today's watchability.json + MLB schedule, computes pregame scores
+ * Loads today's watchability payload + MLB schedule, computes pregame scores
  * for every game, filters to score ≥ 65, sorts by score descending, and
  * sends a single Telegram message listing all qualifying games with their
  * ET start times.
@@ -13,8 +13,7 @@ import { initializeApp } from 'firebase-admin/app'
 
 import { computePregameScore, PARK_FACTORS, tierFor } from './scoring.js'
 import { sendTelegramDigest, type DigestEntry } from './telegram.js'
-
-import type { WatchabilityPayload } from '../../shared/scoring-types.js'
+import { ensureFresh } from './watchability-store.js'
 
 const MLB_API = 'https://statsapi.mlb.com/api/v1'
 
@@ -52,30 +51,24 @@ export const notifyMorningDigest = onSchedule(
   {
     schedule: 'every day 09:00',
     timeZone: 'America/New_York',
-    secrets: ['TELEGRAM_BOT_TOKEN', 'TELEGRAM_CHAT_ID', 'WATCHABILITY_JSON_URL'],
-    memory: '256MiB' as const,
-    timeoutSeconds: 30,
+    secrets: ['TELEGRAM_BOT_TOKEN', 'TELEGRAM_CHAT_ID'],
+    // Building the payload on demand is far heavier than the digest itself.
+    memory: '512MiB' as const,
+    timeoutSeconds: 540,
   },
   async () => {
     const botToken = process.env.TELEGRAM_BOT_TOKEN
     const chatId = process.env.TELEGRAM_CHAT_ID
-    const payloadUrl = process.env.WATCHABILITY_JSON_URL
 
-    if (!botToken || !chatId || !payloadUrl) {
+    if (!botToken || !chatId) {
       console.warn('[notify-morning-digest] Missing secrets, skipping')
       return
     }
 
     const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' })
 
-    const res = await fetch(payloadUrl, { cache: 'no-cache' })
-    if (!res.ok) throw new Error(`watchability.json fetch failed: ${res.status}`)
-    const payload = (await res.json()) as WatchabilityPayload
-
-    if (payload.date !== today) {
-      console.log(`[notify-morning-digest] Payload date ${payload.date} ≠ today ${today}, skipping`)
-      return
-    }
+    // The 6 AM build should have landed by now; build inline if it did not.
+    const payload = await ensureFresh(today)
 
     const schedule = await fetchSchedule(today)
     const db = getFirestore()

@@ -123,7 +123,7 @@ src/
                                             pitcherId), called from App. Imported by MatchupSubTab.
     useWatchability.ts                    useWatchability(games) => { scores: ReadonlyMap<number,
                                            WatchabilityResult>, loading, stale }. Legacy client-side watchability
-                                           hook. Fetches /watchability.json once on mount; polls
+                                           hook. Fetches the watchabilityPayload Cloud Function once on mount; polls
                                            fetchWinProbability every 30s for live games. Now superseded by
                                            useLiveScores for GameSelect, but retained as a fallback and for
                                            potential future use. Not currently imported by any component.
@@ -426,7 +426,7 @@ vercel.json                               Vercel deploy config: framework "vite"
 vite.config.ts                            Vite config: @vitejs/plugin-react, vite-plugin-pwa (autoUpdate,
                                            manifest with standalone display orientation, NetworkFirst runtime
                                            caching for statsapi.mlb.com (5 min TTL) and baseballsavant.mlb.com
-                                           (10 min TTL), a StaleWhileRevalidate rule for /watchability.json, a
+                                           (10 min TTL), a NetworkFirst rule for the watchabilityPayload function, a
                                            NetworkOnly rule excluding diffPatch, a StaleWhileRevalidate bucket
                                            for the benchmark cohort queries, and a CacheFirst rule for
                                            mlbstatic.com imagery. See section 10.
@@ -438,8 +438,8 @@ shared/
   scoring.mjs                             Pure watchability scoring math (~290 lines, zero deps, zero imports).
                                           JSDoc-typed plain ESM JavaScript, importable by the frontend
                                           (via src/utils/watchability.ts re-export), the Cloud Functions
-                                          (via functions/src/scoring.ts re-export), and the nightly build
-                                          script (scripts/build-watchability.mjs). Exports constants
+                                          (via functions/src/scoring.ts re-export), and the data pipeline
+                                          (shared/build-watchability.mjs). Exports constants
                                           (LEAGUE_ERA, LEAGUE_WOBA, WOBA_SCALE, LEAGUE_R_PER_PA,
                                           PARK_FACTORS, WEIGHTS, HOME_FIELD_ELO) and functions
                                           (computePregameScore, computeExcitementIndex, computeLiveScore,
@@ -452,6 +452,11 @@ shared/
                                           WatchabilityResult, WatchabilityTier, GameProgressState). Imported
                                           by src/utils/watchability.ts and functions/src/scoring.ts to type
                                           the untyped .mjs runtime imports.
+  build-watchability.mjs                  Watchability data pipeline (~600 lines, Node ESM, zero deps).
+                                          Storage-agnostic: exports buildWatchability(date, priorState) =>
+                                          { payload, eloState }; it reads only statsapi.mlb.com and returns
+                                          the result rather than touching the filesystem. Imported by
+                                          functions/src/watchability-store.ts. See section 12.
 
 functions/
   package.json                            Functions package (firebase-admin ^13, firebase-functions ^6).
@@ -478,14 +483,25 @@ functions/
                                           Messages include inline keyboard button deep-linking to the
                                           PWA. NotificationPayload trigger types: pregame, crossing,
                                           jump. Digest sends a single message with all qualifying games.
-  src/notify-morning-digest.ts            Scheduled Cloud Function (daily 9 AM ET). Fetches
-                                          watchability.json + MLB schedule, computes pregame scores,
+  src/build-watchability.ts               Two Cloud Functions. buildWatchability (onSchedule, 06:00/09:00/
+                                          12:00 ET, 512MiB, 540s, retryCount 3) calls buildAndStore(todayET()).
+                                          watchabilityPayload (onRequest, cors, 256MiB, 60s) serves the stored
+                                          payload to the browser via ensureFresh, with Cache-Control
+                                          public, max-age=300.
+  src/watchability-store.ts               Firestore-backed store for the payload. Exports todayET(),
+                                          getPayload(date), buildAndStore(date), ensureFresh(date).
+                                          Writes watchability/{YYYY-MM-DD} and watchability/elo-state.
+                                          ensureFresh builds on demand when the doc is missing, so a
+                                          skipped scheduled run self-heals on the next consumer call.
+  src/notify-morning-digest.ts            Scheduled Cloud Function (daily 9 AM ET). Loads the watchability
+                                          payload via ensureFresh + MLB schedule, computes pregame scores,
                                           filters to ≥ 65, sorts by score descending, sends a single
                                           Telegram message listing all qualifying games with ET start
                                           times. Sets digestNotified flag per game in Firestore
                                           notifications/{date}/games/{gamePk}.
   src/notify-pregame.ts                   Scheduled Cloud Function (every 10 min, America/New_York).
-                                          Fetches watchability.json + MLB schedule for start times.
+                                          Loads the watchability payload via ensureFresh + MLB schedule
+                                          for start times.
                                           Sends "Starting Soon" Telegram reminders for games scoring
                                           ≥ 65 that start within the next 30 minutes and haven't been
                                           notified yet. Deduplicates via Firestore
@@ -506,19 +522,16 @@ firebase.json                             Firebase config: functions source "fun
                                           read properties of undefined (reading 'stdin')" when spawned by
                                           the Firebase CLI.
 .firebaserc                               Firebase project alias: default -> mlb-companion-pwa.
-firestore.rules                           Firestore security rules: notifications/{date}/games/{gamePk} allows
-                                          read/write only from Cloud Functions (Admin SDK), no client access.
+firestore.rules                           Firestore security rules: notifications/{date}/games/{gamePk} and
+                                          watchability/{document} both allow read/write only from Cloud
+                                          Functions (Admin SDK), no client access. The browser reads the
+                                          watchability payload through the watchabilityPayload HTTP function.
 firestore.indexes.json                    Empty — all queries are direct document lookups by {date}/{gamePk}.
 
 scripts/
-  build-watchability.mjs                  Nightly watchability data pipeline (~480 lines, Node ESM, zero deps).
-                                           See section 12. Run as `node scripts/build-watchability.mjs
-                                           [YYYY-MM-DD]` (defaults to today). Writes public/watchability.json
-                                           and public/elo-state.json.
-
-.github/workflows/
-  watchability.yml                        Runs the pipeline on a schedule and commits its output. See section
-                                           10.
+  design-checks.mjs                       Design-system lint guard. See section 8.
+  gen-icons.mjs                           Generates the PWA icon set.
+  qa-gamepk.mjs                           Local QA helper: dumps a single gamePk's feed for inspection.
 ```
 
 ## 3. Data Flow
@@ -551,13 +564,16 @@ Baseball Savant (baseballsavant   ──┘                            │
 - Because the caches are keyed per player rather than per matchup, a pitching change refetches only the pitcher bundle and a new batter refetches only the batter bundle.
 - Sabermetric derivations (FIP, ERA+, wRC+, ISO, K%, BB%, HR/9, GB%) happen in the consuming components, not inside the store or the fetchers — raw stat objects are stored/passed as-is and computed on render.
 - No data ever flows backward from components into the API layer; all fetchers are one-directional reads.
-- **Watchability is a separate, parallel data flow that never touches gameStore.** `scripts/build-watchability.mjs`
-  runs nightly (outside the app, via GitHub Actions), computes league baselines and per-game inputs, and writes
-  `public/watchability.json`. The pure scoring math lives in `shared/scoring.mjs` (shared between frontend,
-  Cloud Functions, and build script). `useLiveScores`, called from `GameSelect`, polls the `liveScores` Cloud
+- **Watchability is a separate, parallel data flow that never touches gameStore.** `shared/build-watchability.mjs`
+  runs inside the `buildWatchability` Cloud Function (06:00 / 09:00 / 12:00 ET), computes league baselines and
+  per-game inputs, and writes the payload to Firestore at `watchability/{YYYY-MM-DD}` (plus carry-over Elo at
+  `watchability/elo-state`). Consumers call `ensureFresh(date)`, which builds on demand if the doc is missing —
+  so a skipped scheduled run repairs itself rather than starving every downstream consumer.
+  The pure scoring math lives in `shared/scoring.mjs` (shared between frontend,
+  Cloud Functions, and the pipeline). `useLiveScores`, called from `GameSelect`, polls the `liveScores` Cloud
   Function HTTP endpoint every 15s — a single server-side call that fetches winProbability + feed/live for all
   games, computes `computeWatchability` server-side, and returns scores plus current pitcher info. This replaces
-  the previous client-side `useWatchability` which polled `fetchWinProbability` per-game at 30s. The nightly
+  the previous client-side `useWatchability` which polled `fetchWinProbability` per-game at 30s. The
   pipeline emits inputs only; it never computes a score. See section 12 for why that split matters.
 - **Live slate polling** is handled by `useLiveSlate`, called from `GameSelect`. It replaces the previous one-shot
   `fetchSchedule` on mount with adaptive `setTimeout` polling: 15s when any game is Live, 30s when all Preview,
@@ -566,7 +582,7 @@ Baseball Savant (baseballsavant   ──┘                            │
   `useLiveScores` (15s Cloud Function poll). Pauses when the tab is hidden; resumes with immediate refresh on
   visibilitychange.
 - **Telegram notifications** run entirely server-side via Firebase Cloud Functions, separate from the browser.
-  `notify-morning-digest` (daily 9 AM ET cron) fetches watchability.json + the MLB schedule, computes pregame
+  `notify-morning-digest` (daily 9 AM ET cron) loads the watchability payload from Firestore + the MLB schedule, computes pregame
   scores, filters to ≥ 65, sorts by score descending, and sends a single Telegram message listing all qualifying
   games with their ET start times. `notify-pregame` (10-min cron) sends a per-game "Starting Soon" reminder when
   a game scoring ≥ 65 is within 30 minutes of first pitch. `notify-live` (1-min cron with 15s in-function
@@ -608,7 +624,8 @@ Cloud Function endpoints (Firebase, `us-central1-mlb-companion-pwa`):
 
 | Endpoint | Params | Caller | Response shape (summary) |
 |---|---|---|---|
-| `GET liveScores` (`https://us-central1-mlb-companion-pwa.cloudfunctions.net/liveScores`) | `?date=YYYY-MM-DD` (defaults to today ET) | `useLiveScores` (every 15s) | `{ date, games: { [gamePk]: { score, tier, pregame, live, liveWeight, currentPitcher: { id, fullName, fieldingSide } \| null, currentBatter: { id, fullName, battingSide } \| null } } }`. Server fetches schedule + watchability.json + winProbability per live/final game + feed/live for current pitcher and batter, computes `computeWatchability` server-side. 60s timeout, 512MiB memory. |
+| `GET liveScores` (`https://us-central1-mlb-companion-pwa.cloudfunctions.net/liveScores`) | `?date=YYYY-MM-DD` (defaults to today ET) | `useLiveScores` (every 15s) | `{ date, games: { [gamePk]: { score, tier, pregame, live, liveWeight, currentPitcher: { id, fullName, fieldingSide } \| null, currentBatter: { id, fullName, battingSide } \| null } } }`. Server fetches schedule + the Firestore watchability payload (via `ensureFresh`) + winProbability per live/final game + feed/live for current pitcher and batter, computes `computeWatchability` server-side. 540s timeout, 512MiB memory. |
+| `GET watchabilityPayload` (`https://us-central1-mlb-companion-pwa.cloudfunctions.net/watchabilityPayload`) | `?date=YYYY-MM-DD` (defaults to today ET) | `useWatchability` (once on mount) | The `WatchabilityPayload` document: `{ date, generatedAt, season, baseline, games[] }`. Served from Firestore via `ensureFresh`, building on demand if absent. `Cache-Control: public, max-age=300`. CORS enabled, 60s timeout, 256MiB memory. |
 
 ## 5. Component Hierarchy
 
@@ -805,7 +822,7 @@ Layout-only QA entry point: `?gamePk=746352` — a completed 2024 Astros/Royals 
 
 Deployment is Vercel, configured entirely by `vercel.json`: `framework: "vite"`, `buildCommand: "tsc -b && vite build"`, `outputDirectory: "dist"`, and a catch-all SPA rewrite of `/(.*)` to `/index.html` (required since there is no client-side router — the app is a single route with `?gamePk=` as its only query-string input).
 
-PWA behavior is configured in `vite.config.ts` via `vite-plugin-pwa`: `registerType: 'autoUpdate'`, manifest with `display: 'standalone'`, `id: '/'`, `scope: '/'`, `categories: ['sports']`, and a `shortcuts` entry ("Most watchable games" → `/?sort=watchability`); `orientation: 'portrait'` was removed because the app now has desktop layouts. Workbox gained `navigateFallback: 'index.html'` and `cleanupOutdatedCaches: true`, and a new **first** runtime-caching rule gives `/watchability.json` a `StaleWhileRevalidate` strategy (cacheName `mlb-watchability`, 4 entries, 86400s TTL) so ratings render instantly and survive offline. The two pre-existing `NetworkFirst` rules for `statsapi.mlb.com` (50 entries, 300s TTL) and `baseballsavant.mlb.com` (20 entries, 600s TTL) both gained `networkTimeoutSeconds: 4`, so they fall back to cache instead of hanging on dead-air mobile connections.
+PWA behavior is configured in `vite.config.ts` via `vite-plugin-pwa`: `registerType: 'autoUpdate'`, manifest with `display: 'standalone'`, `id: '/'`, `scope: '/'`, `categories: ['sports']`, and a `shortcuts` entry ("Most watchable games" → `/?sort=watchability`); `orientation: 'portrait'` was removed because the app now has desktop layouts. Workbox gained `navigateFallback: 'index.html'` and `cleanupOutdatedCaches: true`, and a **first** runtime-caching rule gives the `watchabilityPayload` Cloud Function a `NetworkFirst` strategy (cacheName `mlb-watchability`, `networkTimeoutSeconds: 4`, 4 entries, 86400s TTL) so ratings render instantly and survive offline. The two pre-existing `NetworkFirst` rules for `statsapi.mlb.com` (50 entries, 300s TTL) and `baseballsavant.mlb.com` (20 entries, 600s TTL) both gained `networkTimeoutSeconds: 4`, so they fall back to cache instead of hanging on dead-air mobile connections.
 
 Three further runtime rules exist, and rule order matters — Workbox takes the first match:
 
@@ -813,7 +830,11 @@ Three further runtime rules exist, and rule order matters — Workbox takes the 
 2. `/api/v1/stats?...limit=2000` (the league-wide benchmark cohorts) gets its own `StaleWhileRevalidate` bucket, `mlb-cohorts` (6 entries, 86400s). These responses are multi-megabyte and shared by every game, so they should not compete for slots with per-game requests.
 3. `*.mlbstatic.com` (team logos, player headshots) is `CacheFirst`, `mlb-images` (200 entries, 7d, `cacheableResponse.statuses: [0, 200]` to permit opaque cross-origin responses). Previously uncached, so every logo fell back to its placeholder the moment signal dropped.
 
-**Watchability data pipeline.** `.github/workflows/watchability.yml` runs `scripts/build-watchability.mjs` on ubuntu-latest with Node 24, on two crons — `0 11 * * *` (07:00 ET, picks up the finished slate and updated Elo) and `0 16 * * *` (12:00 ET, picks up late-announced probable pitchers) — plus `workflow_dispatch` for manual runs. `permissions: contents: write`; `concurrency: { group: watchability, cancel-in-progress: false }` so overlapping runs queue instead of racing. It commits `public/watchability.json` and `public/elo-state.json` as `chore(data): refresh watchability ratings`, skipping the commit when nothing changed. Because the app-side formula lives entirely in `src/utils/watchability.ts`, retuning weights is a normal `git push` deploy — it never requires re-running this pipeline.
+**Watchability data pipeline.** The `buildWatchability` Cloud Function (`functions/src/build-watchability.ts`) runs `shared/build-watchability.mjs` on a `0 6,9,12 * * *` America/New_York schedule — 06:00 ET picks up the finished slate and updated Elo, 09:00 ET feeds the morning digest, 12:00 ET picks up late-announced probable pitchers. 512MiB, 540s timeout, `retryCount: 3`. It writes the payload to Firestore at `watchability/{YYYY-MM-DD}` and carry-over Elo at `watchability/elo-state`; nothing is committed to git.
+
+This replaced a GitHub Actions cron that committed `public/watchability.json`. That design had a silent single point of failure: GitHub's `schedule` trigger is best-effort and drops runs under load with no retry and no alert, and every consumer (browser, all three notify functions, `liveScores`) failed closed on a stale payload date — one missed cron produced zero scores and zero notifications with no error anywhere. The replacement removes the dependency entirely and adds `ensureFresh`, which builds the payload on demand when the Firestore doc for the requested date is absent, so any consumer call repairs a missed run.
+
+Because the app-side formula lives entirely in `src/utils/watchability.ts` and `shared/scoring.mjs`, retuning weights is a normal deploy — it never requires re-running this pipeline.
 
 ## 11. Known Limitations
 
@@ -837,16 +858,16 @@ Three further runtime rules exist, and rule order matters — Workbox takes the 
 17. **No test framework, no client-side router, and no backend exist in this project**, by design; do not introduce any of the three without updating this document and `vercel.json`'s SPA rewrite assumption.
 18. **Manifest `screenshots` are still missing.** The repo-root `memo-desktop.png` (1280x4044) and `memo-mobile.png` (397x5288) are full-page captures whose aspect ratios exceed Chrome's 2.3 limit for install-prompt screenshots; properly-sized viewport captures are still needed to unlock the rich install prompt.
 19. **`registerType: 'autoUpdate'` still reloads silently mid-session.** An update toast, so the user knows a reload just happened, would be an improvement.
-20. **FanGraphs cannot be used as a watchability data source.** Their terms prohibit scraping and automated export, so SIERA, official wRC+, and Depth Charts projections are unavailable to the pipeline; every watchability input is derived from the MLB Stats API or computed locally in `scripts/build-watchability.mjs`.
+20. **FanGraphs cannot be used as a watchability data source.** Their terms prohibit scraping and automated export, so SIERA, official wRC+, and Depth Charts projections are unavailable to the pipeline; every watchability input is derived from the MLB Stats API or computed locally in `shared/build-watchability.mjs`.
 21. **The watchability formula is calibrated by construction, not yet validated against realised outcomes.** Weights were chosen deliberately, not fit to data. Backtesting pregame scores against actual Excitement Index for completed games is the natural next step, and has not been done.
-22. **The Elo constants in `build-watchability.mjs` are not a reproduction of FiveThirtyEight's MLB Elo.** FiveThirtyEight's MLB Elo is archived and its methodology page now redirects away; the constants here are informed by their published CSV columns but are this project's own choices.
+22. **The Elo constants in `shared/build-watchability.mjs` are not a reproduction of FiveThirtyEight's MLB Elo.** FiveThirtyEight's MLB Elo is archived and its methodology page now redirects away; the constants here are informed by their published CSV columns but are this project's own choices.
 23. **Pitcher selection previously defaulted to the scheduled probable starter.** Before the `derivePitcher` refactor, all PVB consumers (App, MatchupSubTab, LogsSubTab) used the same copy-pasted fallback `currentPlay?.matchup.pitcher ?? selectedGame.teams.home.probablePitcher ?? selectedGame.teams.away.probablePitcher ?? null`. When `currentPlay` was null — in Preview state, briefly after `selectGame` cleared it before the feed resolved, or for Final games whose feed omitted `currentPlay` — the sections showed the probable starter instead of the actual pitcher. The `derivePitcher` helper now inserts `liveFeed.linescore.defense.pitcher` as a second-priority fallback (after `currentPlay.matchup.pitcher` but before probables), which is populated as soon as the feed loads regardless of game state. The home-first probable ordering (`home ?? away`) is retained because the home pitcher is on the mound first (top of the 1st).
 
 ## 12. Watchability Score
 
 Every game card on `GameSelect` shows a 0-100 watchability score in a `ScoreRing` (DESIGN.md §5.14) at the right of the card. It answers one question: is this game worth watching? Before first pitch the score is predictive, built from team and pitcher quality; once the game starts it crossfades into a measure of actual, in-progress excitement. Users can sort the slate by Time or Watchability.
 
-**Architecture rule.** The nightly pipeline (`scripts/build-watchability.mjs`) emits inputs only — team ratings, pitcher ratings, Elo, stakes context. All scoring math lives in `shared/scoring.mjs`, shared between the frontend and Cloud Functions. For live and final games, the `liveScores` Cloud Function computes scores server-side (fetching winProbability + feed/live per game) and returns them to the frontend via `useLiveScores` every 15s. For preview games, the Cloud Function uses the pregame inputs from `watchability.json` with `plays=null`, returning the pure pregame score. This split means the formula can be retuned in a normal deploy; it never requires re-running the pipeline. Every league baseline (means and standard deviations for wRC+, FIP, ISO, and the rest) is computed nightly across all 30 teams — never hardcoded from outside literature — so the score is always calibrated against the current season, not a fixed historical bar.
+**Architecture rule.** The pipeline (`shared/build-watchability.mjs`, run by the `buildWatchability` Cloud Function) emits inputs only — team ratings, pitcher ratings, Elo, stakes context. All scoring math lives in `shared/scoring.mjs`, shared between the frontend and Cloud Functions. For live and final games, the `liveScores` Cloud Function computes scores server-side (fetching winProbability + feed/live per game) and returns them to the frontend via `useLiveScores` every 15s. For preview games, the Cloud Function uses the pregame inputs from the Firestore watchability payload with `plays=null`, returning the pure pregame score. This split means the formula can be retuned in a normal deploy; it never requires re-running the pipeline. Every league baseline (means and standard deviations for wRC+, FIP, ISO, and the rest) is computed on every pipeline run across all 30 teams — never hardcoded from outside literature — so the score is always calibrated against the current season, not a fixed historical bar.
 
 ### 12.1 Pregame score
 
@@ -884,7 +905,7 @@ The pregame and live scores never switch abruptly — they crossfade via `GamePr
 
 ### 12.4 Where the numbers come from
 
-`scripts/build-watchability.mjs` runs nightly (section 10) against the MLB Stats API (`https://statsapi.mlb.com/api/v1`):
+`shared/build-watchability.mjs` runs three times a day inside the `buildWatchability` Cloud Function (section 10) against the MLB Stats API (`https://statsapi.mlb.com/api/v1`):
 
 - `/teams?sportId=1` for the 30-team roster.
 - `/teams/stats?stats=season&group=hitting|pitching&sportId=1&season={yr}` — all 30 teams' hitting and pitching lines in one call each.
@@ -904,6 +925,8 @@ All of it runs through a bounded-concurrency `mapLimit` helper (5 concurrent req
 
 ### 12.5 Regenerating the data
 
-Run `node scripts/build-watchability.mjs [YYYY-MM-DD]` (date defaults to today) to write `public/watchability.json` and `public/elo-state.json` locally. In production this happens automatically via `.github/workflows/watchability.yml` (section 10); there is normally no need to run it by hand except for local QA of a specific date's slate.
+The pipeline runs automatically in the `buildWatchability` Cloud Function at 06:00, 09:00, and 12:00 ET (section 10), writing to Firestore `watchability/{YYYY-MM-DD}`. A missed run repairs itself: `ensureFresh` builds the payload on demand the next time any consumer asks for a date that has no document.
+
+To force a rebuild by hand, hit the HTTP function: `curl 'https://us-central1-mlb-companion-pwa.cloudfunctions.net/watchabilityPayload?date=YYYY-MM-DD'`. For local QA of a specific slate, import `buildWatchability(date, priorState)` from `shared/build-watchability.mjs` — it returns `{ payload, eloState }` and writes nothing.
 
 **This score has not been validated against realised outcomes.** The weights above are a calibrated-by-construction starting point, not a fit to historical Excitement Index data. See Known Limitations, items 21-22.

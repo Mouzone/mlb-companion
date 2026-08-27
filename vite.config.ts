@@ -47,12 +47,13 @@ export default defineConfig({
         navigateFallback: 'index.html',
         cleanupOutdatedCaches: true,
         runtimeCaching: [
-          // Ratings are a whole-slate snapshot rebuilt twice daily (07:00 and
-          // 12:00 ET). NetworkFirst ensures the morning reload picks up the
-          // fresh payload without a hard refresh, while the 4s timeout falls
-          // back to cache on dead-air connections so scores still render offline.
+          // Ratings are a whole-slate snapshot rebuilt three times daily (06:00,
+          // 09:00 and 12:00 ET) by the buildWatchability Cloud Function and served
+          // by the watchabilityPayload HTTP function. NetworkFirst ensures a reload
+          // picks up the fresh payload without a hard refresh, while the 4s timeout
+          // falls back to cache on dead-air connections so scores still render offline.
           {
-            urlPattern: ({ url }) => url.pathname === '/watchability.json',
+            urlPattern: ({ url }) => url.pathname.endsWith('/watchabilityPayload'),
             handler: 'NetworkFirst',
             options: {
               cacheName: 'mlb-watchability',

@@ -6,5 +6,12 @@ service cloud.firestore {
       // No client access — the browser never touches Firestore directly.
       allow read, write: if false;
     }
+
+    match /watchability/{document} {
+      // Written by buildWatchability, read by the notify-* functions and
+      // liveScores. The browser reads this data through the
+      // watchabilityPayload HTTP function, never directly.
+      allow read, write: if false;
+    }
   }
 }
