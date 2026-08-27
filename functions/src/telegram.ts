@@ -27,6 +27,7 @@ export interface NotificationPayload {
   trigger: 'pregame' | 'crossing' | 'jump'
   previousScore?: number
   inning?: number | null
+  inningState?: string | null
   awayScore?: number | null
   homeScore?: number | null
   startTimeET?: string | null
@@ -57,8 +58,12 @@ function tierEmoji(tier: string): string {
 
 function inningLabel(payload: NotificationPayload): string {
   if (payload.inning === null || payload.inning === undefined) return ''
-  const half = payload.state === 'live' ? 'Bot' : ''
-  return `${half} ${payload.inning}${ordinalSuffix(payload.inning)}`
+  const half = payload.inningState === 'Top' ? 'Top'
+    : payload.inningState === 'Bottom' ? 'Bot'
+    : payload.inningState === 'Middle' ? 'Mid'
+    : payload.inningState === 'End' ? 'End'
+    : ''
+  return `${half} ${payload.inning}${ordinalSuffix(payload.inning)}`.trim()
 }
 
 function ordinalSuffix(n: number): string {

@@ -472,6 +472,11 @@ LAD 3 - SF 2
 MLB Companion · 2024-08-22
 ```
 
+> **Note:** The half-inning label (`Top`/`Bot`/`Mid`/`End`) is derived from
+> the MLB Stats API `linescore.inningState` field. Previously this was
+> hardcoded to `Bot` for all live alerts — now it reflects the actual
+> half-inning.
+
 **Live jump:**
 ```
 ⚾ <b>Live Alert</b> ⚡
@@ -942,14 +947,15 @@ until the volume matters.
 4. **Implement `functions/src/notify-pregame.ts`**
    - Load the payload via `ensureFresh`
    - Compute pregame scores (using shared scoring module)
-   - Firestore dedup
+   - Firestore dedup (atomic via `runTransaction`)
    - Deploy and test
 
 5. **Implement `functions/src/notify-live.ts`**
-   - Fetch schedule, filter live games
+   - Fetch schedule, filter live games (exclude `Warmup`/`Pre-Game` detailedState)
    - 15-second polling loop (fetch winProbability, compute live watchability)
-    - Crossing + jump triggers with dedup
+    - Crossing + jump triggers with atomic dedup via `runTransaction`
     - Re-crossing reset when score drops below 65
+    - Capture `inningState` from linescore for accurate half-inning labels
    - Deploy and test
 
 6. **Implement `src/hooks/useLiveSlate.ts`**
@@ -1073,3 +1079,28 @@ well within limits.
 - **Date rollover:** If the app stays open across the 6 AM boundary,
   `useLiveSlate` could re-evaluate `gameDateStr()` to auto-advance to the
   new day's slate.
+
+## Changelog
+
+### 2025-08-27 — False inning notification fix
+
+**Problem:** A "Bot 1st" live alert fired for LAD vs ATL before the game
+had started. The pregame notification arrived immediately after.
+
+**Root causes fixed:**
+
+1. **Warmup/Pre-Game guard** (`notify-live.ts`): MLB Stats API maps
+   `detailedState: "Warmup"` to `abstractGameState: "Live"`. Added a filter
+   to exclude `Warmup` and `Pre-Game` from the live games list so
+   pre-first-pitch games never enter the live notification loop.
+
+2. **Real half-inning labels** (`telegram.ts`, `notify-live.ts`): The
+   `inningLabel` function hardcoded `Bot` for all live alerts. Now captures
+   `linescore.inningState` (`Top`/`Bottom`/`Middle`/`End`) from the
+   schedule API and passes it through `NotificationPayload.inningState` to
+   render the correct half-inning label.
+
+3. **Atomic dedup writes** (`notify-live.ts`, `notify-pregame.ts`): The
+   read-then-write dedup pattern was non-transactional, allowing overlapping
+   cron invocations to both observe `crossingNotified === false` and both
+   send. Wrapped all dedup read-modify-write cycles in `db.runTransaction()`.

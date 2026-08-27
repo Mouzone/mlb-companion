@@ -482,7 +482,9 @@ functions/
                                           NotificationPayload interface, and DigestEntry interface.
                                           Messages include inline keyboard button deep-linking to the
                                           PWA. NotificationPayload trigger types: pregame, crossing,
-                                          jump. Digest sends a single message with all qualifying games.
+                                          jump. inningState field carries the real half-inning label
+                                          (Top/Bot/Mid/End) from linescore. Digest sends a single
+                                          message with all qualifying games.
   src/build-watchability.ts               Two Cloud Functions. buildWatchability (onSchedule, 06:00/09:00/
                                           12:00 ET, 512MiB, 540s, retryCount 3) calls buildAndStore(todayET()).
                                           watchabilityPayload (onRequest, cors, 256MiB, 60s) serves the stored
@@ -504,17 +506,21 @@ functions/
                                           for start times.
                                           Sends "Starting Soon" Telegram reminders for games scoring
                                           ≥ 65 that start within the next 30 minutes and haven't been
-                                          notified yet. Deduplicates via Firestore
-                                          notifications/{date}/games/{gamePk}.
+                                          notified yet. Deduplicates atomically via Firestore
+                                          runTransaction on notifications/{date}/games/{gamePk}.
   src/notify-live.ts                      Scheduled Cloud Function (every 1 min, America/New_York).
                                           Fetches MLB schedule for both today and yesterday (to catch
                                           late West Coast games that span midnight ET), filters to live
-                                          games, runs a 15-second polling loop (max 55s) fetching
-                                          winProbability and computing live watchability. Sends crossing
-                                          (first score >= 65, re-fires if score drops below 65 and
-                                          recovers) and jump (+10 from last notified score) alerts,
-                                          deduplicates via Firestore notifications/{scheduleDate}/games/{gamePk}
-                                          keyed by the game's original schedule date (not current ET date).
+                                          games (excluding Warmup/Pre-Game detailedState), runs a
+                                          15-second polling loop (max 55s) fetching winProbability
+                                          and computing live watchability. Sends crossing (first score
+                                          >= 65, re-fires if score drops below 65 and recovers) and
+                                          jump (+10 from last notified score) alerts, deduplicates
+                                          atomically via Firestore runTransaction on
+                                          notifications/{scheduleDate}/games/{gamePk} keyed by the
+                                          game's original schedule date (not current ET date). Captures
+                                          linescore.inningState for accurate half-inning labels in
+                                          Telegram messages.
 
 firebase.json                             Firebase config: functions source "functions", runtime nodejs22,
                                           Firestore rules and indexes paths. The predeploy hook invokes tsc
@@ -587,11 +593,13 @@ Baseball Savant (baseballsavant   ──┘                            │
   games with their ET start times. `notify-pregame` (10-min cron) sends a per-game "Starting Soon" reminder when
   a game scoring ≥ 65 is within 30 minutes of first pitch. `notify-live` (1-min cron with 15s in-function
   polling loop) fetches both today's and yesterday's MLB schedule (to catch late West Coast games that span
-  midnight ET), sends crossing alerts (live score crosses 65, re-fires after dropping below 65) and jump alerts
-  (+10 from last notified score). `liveScores` (HTTP onRequest) serves the frontend's `useLiveScores` hook with
-  per-game watchability scores and current pitcher info. All notification functions deduplicate via Firestore
-  `notifications/{scheduleDate}/games/{gamePk}` documents, keyed by the game's original schedule date. No
-  notification logic runs in the browser. See `docs/LIVE_NOTIFICATIONS_PLAN.md` for the full design.
+  midnight ET), filters out Warmup/Pre-Game states, sends crossing alerts (live score crosses 65, re-fires
+  after dropping below 65) and jump alerts (+10 from last notified score). Half-inning labels (Top/Bot/Mid/End)
+  are derived from `linescore.inningState` for accurate Telegram messages. `liveScores` (HTTP onRequest) serves
+  the frontend's `useLiveScores` hook with per-game watchability scores and current pitcher info. All notification
+  functions deduplicate atomically via Firestore `runTransaction` on `notifications/{scheduleDate}/games/{gamePk}`
+  documents, keyed by the game's original schedule date. No notification logic runs in the browser. See
+  `docs/LIVE_NOTIFICATIONS_PLAN.md` for the full design.
 
 ## 4. API Endpoints Reference
 

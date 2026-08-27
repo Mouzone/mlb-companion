@@ -11,7 +11,7 @@
  */
 
 import { onSchedule } from 'firebase-functions/v2/scheduler'
-import { getFirestore } from 'firebase-admin/firestore'
+import { getFirestore, type Transaction } from 'firebase-admin/firestore'
 import { initializeApp } from 'firebase-admin/app'
 
 import { computeWatchability, PARK_FACTORS, tierFor } from './scoring.js'
@@ -43,6 +43,10 @@ async function fetchLiveGames(date: string): Promise<LiveGame[]> {
   return data.dates
     .flatMap((d) => (d.games ?? []).map((g) => ({ ...g, _scheduleDate: d.date })))
     .filter((g) => g.status?.abstractGameState === 'Live')
+    .filter((g) => {
+      const detailed = g.status?.detailedState
+      return detailed !== 'Warmup' && detailed !== 'Pre-Game' && detailed !== 'Pre-game'
+    })
     .map((g) => ({
       gamePk: g.gamePk,
       awayAbbr: g.teams?.away?.team?.abbreviation ?? '',
@@ -71,20 +75,21 @@ async function fetchWinProbability(gamePk: number): Promise<WinProbabilityPlay[]
   })
 }
 
-async function fetchScheduleScores(date: string): Promise<Map<number, { awayScore: number; homeScore: number; inning: number | null }>> {
+async function fetchScheduleScores(date: string): Promise<Map<number, { awayScore: number; homeScore: number; inning: number | null; inningState: string | null }>> {
   const res = await fetch(
     `${MLB_API}/schedule?sportId=1&date=${date}&hydrate=linescore,team`,
   )
   if (!res.ok) return new Map()
   const data = await res.json() as { dates: { games: any[] }[] }
 
-  const map = new Map<number, { awayScore: number; homeScore: number; inning: number | null }>()
+  const map = new Map<number, { awayScore: number; homeScore: number; inning: number | null; inningState: string | null }>()
   for (const game of data.dates?.flatMap((d) => d.games ?? []) ?? []) {
     const linescore = game.linescore
     map.set(game.gamePk, {
       awayScore: game.teams?.away?.score ?? 0,
       homeScore: game.teams?.home?.score ?? 0,
       inning: linescore?.currentInning ?? null,
+      inningState: linescore?.inningState ?? null,
     })
   }
   return map
@@ -164,93 +169,97 @@ export const notifyLive = onSchedule(
         const scoreInfo = scores.get(game.gamePk)
 
         const docRef = db.collection('notifications').doc(game.scheduleDate).collection('games').doc(String(game.gamePk))
-        const docSnap = await docRef.get()
-        const data = docSnap.exists ? docSnap.data() : null
 
-        const crossingNotified = data?.crossingNotified ?? false
-        const lastNotifiedScore = data?.lastNotifiedScore ?? null
+        await db.runTransaction(async (tx: Transaction) => {
+          const docSnap = await tx.get(docRef)
+          const data = docSnap.exists ? docSnap.data() : null
 
-        // Crossing trigger: score >= 65, not yet notified for this crossing
-        if (score >= 65 && !crossingNotified) {
-          const notification: NotificationPayload = {
-            gamePk: game.gamePk,
-            date: game.scheduleDate,
-            awayTeam: game.awayAbbr,
-            homeTeam: game.homeAbbr,
-            awayAbbr: game.awayAbbr,
-            homeAbbr: game.homeAbbr,
-            score,
-            tier,
-            pregame: result.pregame,
-            live: result.live,
-            liveWeight: result.liveWeight,
-            state: 'live',
-            trigger: 'crossing',
-            inning: scoreInfo?.inning ?? null,
-            awayScore: scoreInfo?.awayScore ?? null,
-            homeScore: scoreInfo?.homeScore ?? null,
-          }
+          const crossingNotified = data?.crossingNotified ?? false
+          const lastNotifiedScore = data?.lastNotifiedScore ?? null
 
-          await sendTelegramNotification(botToken, chatId, notification)
-          console.log(`[notify-live] Crossing alert for ${game.gamePk}: score ${score}`)
-
-          await docRef.set(
-            {
-              crossingNotified: true,
-              lastNotifiedScore: score,
-              lastNotifiedAt: new Date(),
+          // Crossing trigger: score >= 65, not yet notified for this crossing
+          if (score >= 65 && !crossingNotified) {
+            const notification: NotificationPayload = {
               gamePk: game.gamePk,
+              date: game.scheduleDate,
+              awayTeam: game.awayAbbr,
+              homeTeam: game.homeAbbr,
               awayAbbr: game.awayAbbr,
               homeAbbr: game.homeAbbr,
-              createdAt: docSnap.exists ? data?.createdAt : new Date(),
-            },
-            { merge: true },
-          )
-          continue
-        }
+              score,
+              tier,
+              pregame: result.pregame,
+              live: result.live,
+              liveWeight: result.liveWeight,
+              state: 'live',
+              trigger: 'crossing',
+              inning: scoreInfo?.inning ?? null,
+              inningState: scoreInfo?.inningState ?? null,
+              awayScore: scoreInfo?.awayScore ?? null,
+              homeScore: scoreInfo?.homeScore ?? null,
+            }
 
-        // Jump trigger: score >= 65 and jumped +10 from last notified score
-        if (score >= 65 && lastNotifiedScore !== null && score - lastNotifiedScore >= 10 && lastNotifiedScore >= 65) {
-          const notification: NotificationPayload = {
-            gamePk: game.gamePk,
-            date: game.scheduleDate,
-            awayTeam: game.awayAbbr,
-            homeTeam: game.homeAbbr,
-            awayAbbr: game.awayAbbr,
-            homeAbbr: game.homeAbbr,
-            score,
-            tier,
-            pregame: result.pregame,
-            live: result.live,
-            liveWeight: result.liveWeight,
-            state: 'live',
-            trigger: 'jump',
-            previousScore: lastNotifiedScore,
-            inning: scoreInfo?.inning ?? null,
-            awayScore: scoreInfo?.awayScore ?? null,
-            homeScore: scoreInfo?.homeScore ?? null,
+            await sendTelegramNotification(botToken, chatId, notification)
+            console.log(`[notify-live] Crossing alert for ${game.gamePk}: score ${score}`)
+
+            tx.set(
+              docRef,
+              {
+                crossingNotified: true,
+                lastNotifiedScore: score,
+                lastNotifiedAt: new Date(),
+                gamePk: game.gamePk,
+                awayAbbr: game.awayAbbr,
+                homeAbbr: game.homeAbbr,
+                createdAt: docSnap.exists ? data?.createdAt : new Date(),
+              },
+              { merge: true },
+            )
+            return
           }
 
-          await sendTelegramNotification(botToken, chatId, notification)
-          console.log(`[notify-live] Jump alert for ${game.gamePk}: ${lastNotifiedScore} → ${score}`)
+          // Jump trigger: score >= 65 and jumped +10 from last notified score
+          if (score >= 65 && lastNotifiedScore !== null && score - lastNotifiedScore >= 10 && lastNotifiedScore >= 65) {
+            const notification: NotificationPayload = {
+              gamePk: game.gamePk,
+              date: game.scheduleDate,
+              awayTeam: game.awayAbbr,
+              homeTeam: game.homeAbbr,
+              awayAbbr: game.awayAbbr,
+              homeAbbr: game.homeAbbr,
+              score,
+              tier,
+              pregame: result.pregame,
+              live: result.live,
+              liveWeight: result.liveWeight,
+              state: 'live',
+              trigger: 'jump',
+              previousScore: lastNotifiedScore,
+              inning: scoreInfo?.inning ?? null,
+              inningState: scoreInfo?.inningState ?? null,
+              awayScore: scoreInfo?.awayScore ?? null,
+              homeScore: scoreInfo?.homeScore ?? null,
+            }
 
-          await docRef.set(
-            {
-              lastNotifiedScore: score,
-              lastNotifiedAt: new Date(),
-            },
-            { merge: true },
-          )
-          continue
-        }
+            await sendTelegramNotification(botToken, chatId, notification)
+            console.log(`[notify-live] Jump alert for ${game.gamePk}: ${lastNotifiedScore} → ${score}`)
 
-        // Reset crossing flag when score drops below 65, allowing re-crossing alerts
-        if (score < 65 && crossingNotified) {
-          await docRef.set(
-            { crossingNotified: false },
-            { merge: true },
-          )
-        }
+            tx.set(
+              docRef,
+              {
+                lastNotifiedScore: score,
+                lastNotifiedAt: new Date(),
+              },
+              { merge: true },
+            )
+            return
+          }
+
+          // Reset crossing flag when score drops below 65, allowing re-crossing alerts
+          if (score < 65 && crossingNotified) {
+            tx.set(docRef, { crossingNotified: false }, { merge: true })
+          }
+        })
       }
 
       if (Date.now() - startTime >= MAX_RUNTIME_MS) break
